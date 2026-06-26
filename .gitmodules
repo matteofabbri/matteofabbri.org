@@ -1,0 +1,3 @@
+[submodule "external/SPERONE"]
+	path = external/SPERONE
+	url = https://github.com/matteofabbri/SPERONE.git

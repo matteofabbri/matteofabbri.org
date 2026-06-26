@@ -1,0 +1,89 @@
+# Caddyfile — la "portineria" davanti a tutto (Strada B: "lascia passare").
+#
+# LOGICA: Caddy riconosce solo i SITI (lista corta e stabile) e li termina lui
+# (TLS + certificati Let's Encrypt). TUTTO IL RESTO passa sigillato a mailcow,
+# che gestisce i suoi nomi e i suoi certificati da solo.
+#
+# Conseguenza pratica: aggiungere un nome alla POSTA (il nome generico OVH per
+# la transizione, mail.theqult.org, ...) NON richiede di toccare questo file.
+# Si fa tutto lato mailcow (ADDITIONAL_SAN in mailcow.conf + DNS).
+# Questo file si tocca solo per aggiungere un SITO WEB.
+#
+# Variabili (impostate dall'AppHost Aspire / file .env del compose):
+#   SITE_DOMAIN           -> dominio del sito personale   (es. matteofabbri.org)
+#   WEBMAIL_HOST          -> dove vive la webmail, usato dal redirect /mail
+#                            (es. mail.matteofabbri.org; durante la transizione
+#                             puo' essere il nome generico OVH)
+#   SITE_UPSTREAM         -> il sito personale             (es. site:8080)
+#   MAILCOW_TLS_UPSTREAM  -> nginx di mailcow, HTTPS       (es. nginx-mailcow:8443)
+#   MAILCOW_HTTP_UPSTREAM -> nginx di mailcow, HTTP        (es. nginx-mailcow:8080)
+{
+	# Porte INTERNE del server HTTP/HTTPS di Caddy. Le porte pubbliche reali
+	# (80/443) le tiene il livello "layer4" qui sotto.
+	http_port 8080
+	https_port 8443
+
+	# Account ACME per Let's Encrypt (solo per i siti che Caddy termina).
+	email {$ACME_EMAIL}
+
+	# --- Smistamento a livello TCP, prima del TLS -------------------------
+	layer4 {
+		# HTTPS pubblico (443)
+		:443 {
+			# Siti: riconosco il nome nell'handshake (SNI) e li termino io.
+			# Per un nuovo sito: aggiungi il dominio a questa riga e crea
+			# il suo blocco in fondo al file.
+			@site tls sni {$SITE_DOMAIN}
+			route @site {
+				proxy {
+					upstream 127.0.0.1:8443
+				}
+			}
+			# Tutto il resto (posta: mail.*, autodiscover, autoconfig,
+			# nome OVH di transizione, ...): TLS sigillato a mailcow.
+			route {
+				proxy {
+					upstream {$MAILCOW_TLS_UPSTREAM}
+				}
+			}
+		}
+
+		# HTTP pubblico (80)
+		:80 {
+			# Siti: al server HTTP interno di Caddy (fara' il redirect a https).
+			@site http host {$SITE_DOMAIN}
+			route @site {
+				proxy {
+					upstream 127.0.0.1:8080
+				}
+			}
+			# Tutto il resto a mailcow: cosi' le sfide Let's Encrypt dei
+			# nomi di posta (qualunque essi siano) gli arrivano da sole.
+			route {
+				proxy {
+					upstream {$MAILCOW_HTTP_UPSTREAM}
+				}
+			}
+		}
+	}
+}
+
+# --- Sito personale (TLS terminato da Caddy) ---------------------------------
+{$SITE_DOMAIN} {
+	# /mail -> redirect alla webmail, ovunque essa viva in questo momento.
+	redir /mail /mail/
+	handle_path /mail/* {
+		redir https://{$WEBMAIL_HOST}/ permanent
+	}
+
+	# Tutto il resto -> il sito personale.
+	handle {
+		reverse_proxy {$SITE_UPSTREAM}
+	}
+}
+
+# --- Altri siti futuri: copia il blocco sopra e aggiungi il dominio anche al
+# --- matcher @site nelle sezioni :443 e :80 qui sopra. Esempio:
+# theqult.org {
+#	reverse_proxy theqult-site:8080
+# }

@@ -1,0 +1,15 @@
+# --- Output di build .NET ---
+[Bb]in/
+[Oo]bj/
+
+# --- Output di pubblicazione (publish.ps1 genera ./out con .env e immagini) ---
+# Contiene segreti (ACME_EMAIL, ecc.) e l'immagine docker: NON va su git.
+[Oo]ut/
+*.tar
+
+# --- Visual Studio / utente ---
+.vs/
+*.user
+
+# --- Test ---
+[Tt]est[Rr]esults/
