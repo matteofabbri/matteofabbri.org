@@ -1,0 +1,6 @@
+[submodule "external/SPERONE"]
+	path = external/SPERONE
+	url = https://github.com/matteofabbri/SPERONE.git
+[submodule "external/PredicitiveCoding"]
+	path = external/PredicitiveCoding
+	url = https://github.com/matteofabbri/PredicitiveCoding.git

@@ -1,0 +1,144 @@
+@page "/visualmcp/guides/runtime"
+@{
+    ViewData["Title"] = "Build, test and modernization — VisualMCP";
+    ViewData["Description"] = "Closing the loop with VisualMCP: build with structured diagnostics, run the app, test with coverage, benchmark, manage NuGet packages, publish, and upgrade the framework with a build gate that rolls back on failure.";
+    ViewData["DocsKey"] = "runtime";
+    ViewData["DocsGitHub"] = "https://github.com/matteofabbri/VisualMCP/blob/master/docs/guides/runtime.md";
+}
+
+<partial name="_VisualMcpDocsNav" />
+
+<header class="page-head docs-head">
+    <div>
+        <h1>Build, test and modernization</h1>
+        <p class="lede">
+            The tools that close the loop after an edit: compile, run, test,
+            measure, upgrade — all returning structured results the agent can
+            reason about, not log tails it has to re-read.
+        </p>
+    </div>
+</header>
+
+<div class="docs-body prose">
+    <h2>Build</h2>
+    <pre><code>build_project  projectName=MyApp.Api</code></pre>
+    <p>
+        Runs <code>dotnet build</code> and returns <strong>structured</strong>
+        errors and warnings — id, severity, file, line, message. It also runs
+        the configured analyzers by default, and compiles without copying
+        output so a running app does not lock the DLL. Around it:
+        <code>get_diagnostics</code> for the compiler's current view without a
+        build, <code>analyze_binlog</code> for the real per-project and
+        per-target durations of a build, and <code>project_properties</code>
+        for the <em>evaluated</em> value of an MSBuild property — what
+        <code>Directory.Build.props</code>, imports and conditions contribute,
+        which is the value the compiler actually sees.
+    </p>
+
+    <h2>Run</h2>
+    <pre><code>run_project  projectName=MyApp.Api timeoutSeconds=15</code></pre>
+    <p>
+        Launches <code>dotnet run</code>, captures output and returns when the
+        timeout expires. For a web app the startup output includes the
+        listening URL — exactly what you need before calling
+        <code>http_invoke</code> against it. The arguments an app needs are
+        written once, not on every call: <code>run_config</code> saves named
+        launch shapes (project, arguments, configuration, environment) in a
+        file that can be committed, and <code>run_project configName=…</code>
+        applies them. <code>launch_settings</code> edits the profiles the IDE
+        uses, without reformatting the rest of the document.
+    </p>
+
+    <h2>Test</h2>
+    <pre><code>run_tests
+get_test_coverage_map  minCoverage=60</code></pre>
+    <p>
+        <code>run_tests</code> parses every TRX file produced and returns the
+        totals, a per-project breakdown and each failure with its message and
+        stack trace. <code>get_test_coverage_map</code> runs the suite with
+        coverage and returns per-class and per-method <strong>line
+        coverage</strong>. <code>run_affected_tests</code> narrows a run to
+        the tests that reach the changed code, and <code>verify_change</code>
+        runs the suite on the working tree and on a git revision, then diffs
+        the outcome test by test — a verdict on whether behaviour was
+        preserved, not just a pass count.
+    </p>
+
+    <h2>Benchmarks</h2>
+    <p>
+        <code>run_benchmarks</code> builds and runs an existing
+        BenchmarkDotNet project; <code>quick_benchmark</code> benchmarks an
+        ad-hoc snippet without writing a <code>[Benchmark]</code> class — it
+        generates a temporary project, optionally references your solution's
+        project and returns time and allocations.
+    </p>
+
+    <h2>NuGet packages</h2>
+    <table>
+        <thead>
+            <tr><th>Goal</th><th>Tool</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>What is installed, per target framework, with version conflicts</td><td><code>list_nuget_packages</code></td></tr>
+            <tr><td>Available upgrades</td><td><code>check_nuget_updates</code></td></tr>
+            <tr><td>Known vulnerabilities</td><td><code>check_nuget_vulnerabilities</code></td></tr>
+            <tr><td>Fix vulnerable top-level packages</td><td><code>fix_nuget_vulnerabilities</code></td></tr>
+            <tr><td>Read a package's public API, or decompile one type</td><td><code>inspect_package</code>, <code>decompile_package_type</code></td></tr>
+            <tr><td>Add, remove, update, unify one version across projects</td><td><code>add_nuget_package</code>, <code>update_nuget_package</code>, <code>unify_nuget_version</code></td></tr>
+        </tbody>
+    </table>
+    <p>
+        <code>package_facts</code> is the NuGet graph the build already
+        resolved — from <code>obj/project.assets.json</code>, no restore, no
+        network — with the versions the compiler actually sees.
+    </p>
+
+    <h2>Publish</h2>
+    <p>
+        <code>dotnet_publish</code> runs the publish — runtime identifier,
+        self-contained, single-file, output folder — and returns it as data.
+        <code>publish_profile</code> authors the <code>*.pubxml</code> the
+        same publish reads, so a filesystem target is defined without an IDE;
+        <code>nuget_pack</code> and <code>nuget_push</code> cover the package
+        half.
+    </p>
+
+    <h2>Modernization</h2>
+    <p>Three tools, all preview-first and all with a <strong>build gate that rolls back on failure</strong>.</p>
+    <ul>
+        <li>
+            <code>aspire</code> — reports the SDK band and what is installed,
+            installs the templates, and scaffolds the AppHost and
+            ServiceDefaults with the wiring written and verified by a build;
+            if the wiring does not compile, the edits are reverted.
+        </li>
+        <li>
+            <code>update_framework</code> — moves the projects to a newer
+            target framework, keeping platform suffixes and leaving
+            <code>netstandard</code>/<code>net4x</code> alone. The preview
+            returns the plan; the write builds the whole solution and, on
+            failure, restores every edited file byte for byte.
+        </li>
+        <li>
+            <code>update_solution</code> — the framework bump plus every
+            outdated top-level package, in the right order (Central Package
+            Management included). Deliberately does not run tests: a slow
+            suite should not turn an upgrade into a timeout — run them after.
+        </li>
+    </ul>
+
+    <h2>A typical loop</h2>
+    <pre><code>build_project     → structured errors
+apply_code_fix    → fix one finding
+build_project     → verify
+run_tests         → verify behaviour
+inspect_code      → catch what the compiler does not
+quick_benchmark   → check a hot path did not regress</code></pre>
+    <p>
+        For a mechanical fan-out — the same <code>simplify_code</code> over
+        ten documents, then a build — <code>run_plan</code> executes the whole
+        graph in one round trip. See the Workflow guide.
+    </p>
+</div>
+
+<partial name="_VisualMcpDocsFooter" />

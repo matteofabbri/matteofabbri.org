@@ -1,0 +1,50 @@
+@page "/blog/tag/{tag}"
+@model MainSite.Pages.Blog.TagModel
+@{
+    ViewData["Title"] = $"Tag: {Model.TagName}";
+    ViewData["Description"] = $"Blog posts tagged {Model.TagName}.";
+    bool isAuthor = Model.IsAuthor;
+    var now = DateTimeOffset.UtcNow;
+}
+
+<div class="page-head">
+    <div>
+        <p class="eyebrow"><a asp-page="/Blog/Index">Blog</a> / Tag</p>
+        <h1>@Model.TagName</h1>
+        <p class="lede">
+            @if (Model.Posts.Count == 1)
+            {
+                <span>One post with this tag.</span>
+            }
+            else
+            {
+                <span>@Model.Posts.Count posts with this tag.</span>
+            }
+        </p>
+    </div>
+</div>
+
+<div class="post-list">
+    @foreach (var post in Model.Posts)
+    {
+        bool visible = post.IsVisibleAt(now);
+        <article class="post-card">
+            <div class="post-meta">
+                <time datetime="@post.Published.UtcDateTime.ToString("yyyy-MM-dd")">@Model.Clock.Format(post.Published)</time>
+                @if (!visible)
+                {
+                    <span class="badge @(post.Draft ? "badge-draft" : "badge-scheduled")">
+                        @(post.Draft ? "draft" : "scheduled")
+                    </span>
+                }
+            </div>
+            <h2 class="post-title">
+                <a asp-page="/Blog/Post" asp-route-slug="@post.Slug">@post.Title</a>
+            </h2>
+            @if (!string.IsNullOrWhiteSpace(post.Summary))
+            {
+                <p class="post-summary">@post.Summary</p>
+            }
+        </article>
+    }
+</div>

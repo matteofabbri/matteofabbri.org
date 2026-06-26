@@ -1,0 +1,126 @@
+@page "/visualmcp/guides/profiling"
+@{
+    ViewData["Title"] = "Profiling — VisualMCP";
+    ViewData["Description"] = "Profiling a live .NET process with VisualMCP: native EventPipe traces and counters, heap snapshots and dumps, exact await durations, database command shapes, root-cause analysis joined with the AST, and one-verdict tools.";
+    ViewData["DocsKey"] = "profiling";
+    ViewData["DocsGitHub"] = "https://github.com/matteofabbri/VisualMCP/blob/master/docs/guides/profiling.md";
+}
+
+<partial name="_VisualMcpDocsNav" />
+
+<header class="page-head docs-head">
+    <div>
+        <h1>Profiling</h1>
+        <p class="lede">
+            VisualMCP profiles a <strong>running</strong> .NET process with
+            the runtime's own diagnostics channel — EventPipe for traces and
+            counters, ClrMD for heaps and dumps. The tools are native: none of
+            them spawns an external diagnostics CLI.
+        </p>
+    </div>
+</header>
+
+<div class="docs-body prose">
+    <h2>The shape of a session</h2>
+    <pre><code>profile_processes   → find the pid
+profile_counters    → is it CPU, GC or memory? (cheap, 5–10 s)
+profile_collect     → capture a trace (cpu / gc / exceptions / threading / async / database / …)
+profile_analyze     → hotspots, allocation sites, GC, exceptions, contention, timeline
+profile_root_cause  → WHY that code costs: the loop chain, the LINQ per iteration, the allocation
+profile_slowdown    → or skip straight to a verdict on why it is slow</code></pre>
+
+    <h2>Measuring</h2>
+    <table>
+        <thead>
+            <tr><th>Tool</th><th>What it produces</th></tr>
+        </thead>
+        <tbody>
+            <tr><td><code>profile_counters</code></td><td>EventCounter time series: CPU, GC heap, allocation rate, thread-pool queue, exceptions, contention — with min/max/mean and the raw points.</td></tr>
+            <tr><td><code>profile_collect</code></td><td>A real <code>.nettrace</code> through EventPipe, with presets that set the right providers and stack walks.</td></tr>
+            <tr><td><code>profile_analyze</code></td><td>CPU hotspots with CPU ms and <code>file:line</code>, top stacks, allocation sites, GC pauses, exceptions with throw sites, lock contention, findings and next steps.</td></tr>
+            <tr><td><code>profile_hotpaths</code></td><td>The fix list: ranked user methods, root-to-leaf hot paths, and the branch points where optimising a caller is the better move.</td></tr>
+            <tr><td><code>profile_root_cause</code></td><td>Each measured site joined with the solution's AST: “two nested loops, a <code>List&lt;Order&gt;</code> per element, <code>ToList()</code> materialising the inner query every iteration”.</td></tr>
+            <tr><td><code>profile_async</code></td><td>The async story: exact await durations (send/stop pairs, not samples), and the state machines still alive when the trace ended.</td></tr>
+            <tr><td><code>profile_database</code></td><td>Commands with text and duration from the data-access EventSources, grouped by normalised shape — which is how the N+1 signature appears.</td></tr>
+            <tr><td><code>profile_heap</code>, <code>profile_allocations</code></td><td>What is on the heap now, and who allocated it, with full stacks.</td></tr>
+            <tr><td><code>profile_stacks</code>, <code>profile_dump</code></td><td>Every thread's stack with contended monitors named; a dump you can analyse repeatedly.</td></tr>
+            <tr><td><code>profile_io</code>, <code>profile_file_io</code></td><td>Where threads block in I/O by category and call site; and who reads and writes which file, how much and how often.</td></tr>
+            <tr><td><code>profile_instrumentation</code></td><td>Exact call counts and inclusive/exclusive times, no sampling: the assembly's IL is rewritten with an injected probe.</td></tr>
+        </tbody>
+    </table>
+
+    <h2>Answering</h2>
+    <p>
+        The verdict tools return <strong>one answer</strong>, not a data dump.
+        Each names its evidence, the share of the measured window it can
+        explain, and the runners-up that lost.
+    </p>
+    <table>
+        <thead>
+            <tr><th>Question</th><th>Tool</th><th>Possible answers</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>Why is this process slow?</td><td><code>profile_slowdown</code></td><td><code>cpu</code>, <code>gc</code>, <code>io-wait</code>, <code>sync-over-async</code>, <code>lock-wait</code>, <code>not-slow</code></td></tr>
+            <tr><td>Why is memory growing?</td><td><code>profile_memory_growth</code></td><td><code>growth</code>, <code>shrink</code>, <code>stable</code>, <code>single-snapshot</code></td></tr>
+            <tr><td>Is the thread pool starved?</td><td><code>profile_threadpool</code></td><td><code>starved</code>, <code>at-risk</code>, <code>burst</code>, <code>healthy</code>, <code>inconclusive</code></td></tr>
+            <tr><td>Is this change a regression?</td><td><code>profile_review_change</code></td><td><code>regression</code>, <code>improvement</code>, <code>unchanged</code>, <code>inconclusive</code></td></tr>
+        </tbody>
+    </table>
+    <p>
+        The refusals are a feature: <code>profile_review_change</code> will
+        not judge windows under 500 ms, and a long thread-pool queue alone is
+        a burst, not starvation. A confident wrong answer is worse than a
+        refusal.
+    </p>
+
+    <h2>Recipes</h2>
+    <p><strong>“It is slow.”</strong></p>
+    <pre><code>profile_slowdown  processName=MyApp.Api durationSeconds=15</code></pre>
+    <p>
+        Then follow the verdict: <code>profile_hotpaths</code> for CPU,
+        <code>profile_io</code> for blocking call sites,
+        <code>profile_allocations</code> for GC.
+    </p>
+    <p><strong>“Which code creates the problem?”</strong></p>
+    <pre><code>profile_collect     processName=MyApp.Api profile=cpu durationSeconds=20
+profile_hotlines    tracePath=…
+profile_root_cause  tracePath=… userCodeRoot=C:\src\MyApp</code></pre>
+    <p>
+        <code>profile_hotlines</code> answers <em>where</em> the CPU goes, one
+        line; <code>profile_root_cause</code> answers <em>why</em>, naming the
+        construct that owns the cost.
+    </p>
+    <p><strong>“What is the async code doing?”</strong></p>
+    <pre><code>profile_collect profile=async processName=MyApp.Api durationSeconds=30
+profile_async   tracePath=…</code></pre>
+    <p>
+        The most valuable line is usually the state machines still alive when
+        the trace ended: a fire-and-forget task, a deadlock, work that
+        outlives the request.
+    </p>
+    <p><strong>“Which database queries cost the time?”</strong></p>
+    <pre><code>profile_collect  profile=database processName=MyApp.Api durationSeconds=30
+profile_database tracePath=… top=20</code></pre>
+    <p><strong>“Memory keeps growing.”</strong></p>
+    <pre><code>profile_heap           processName=MyApp.Api writeJson=true
+# … exercise the workload …
+profile_heap           processName=MyApp.Api writeJson=true
+profile_memory_growth  baselinePath=first.json currentPath=second.json</code></pre>
+
+    <h2>Artifacts and limits</h2>
+    <p>
+        Traces, dumps and reports land under the solution's
+        <code>.visualMCP/profiling/</code> folder; reports are Markdown, so
+        they can be attached to a review. Method names resolve to
+        <code>file:line</code> when a portable PDB is available —
+        <code>profile_symbols</code> can download them from a symbol server
+        first. Worth knowing: the target process must expose a diagnostics
+        endpoint; sampling is statistical, so measure in seconds and compare
+        two windows; allocation attribution needs stack walks, which the
+        <code>gc</code> and <code>diagnose</code> presets request; and
+        <code>profile_file_io</code> needs Windows and an elevated server,
+        because a kernel ETW session is privileged.
+    </p>
+</div>
+
+<partial name="_VisualMcpDocsFooter" />

@@ -1,0 +1,88 @@
+@page "/info-bot"
+@model MainSite.Pages.InfoBotModel
+@{
+    ViewData["Title"] = "Bot info";
+}
+
+@section Head {
+    <link rel="stylesheet" href="~/css/request-map.css" asp-append-version="true" />
+}
+
+<div class="page-head">
+    <div>
+        <p class="eyebrow">Info send</p>
+        <h1>Bot info</h1>
+        <p class="lede">Payloads received by POST /info-send, newest first. Anyone can read them.</p>
+    </div>
+</div>
+
+@if (Model.LoadFailed)
+{
+    <div class="alert error">
+        <strong>Could not read the payloads from Sperone.</strong>
+        Check the site logs: the database may be unreachable.
+    </div>
+}
+
+@if (Model.Entries.Count == 0)
+{
+    <div class="empty">
+        <p>No payloads received yet.</p>
+        <p>POST something to <code>/info-send</code> and it will show up here.</p>
+    </div>
+}
+else
+{
+    <div class="table-wrap">
+        <table class="admin-table info-table">
+            <thead>
+                <tr>
+                    <th>When</th>
+                    <th>ID</th>
+                    <th>IP</th>
+                    <th>Country</th>
+                    <th class="cell-number">Size</th>
+                    <th>Payload</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var entry in Model.Entries)
+                {
+                    <tr>
+                        <td class="cell-date">@Model.FormatWhen(entry.Timestamp)</td>
+                        <td><code class="client-id">@entry.Guid</code></td>
+                        <td><code class="remote-ip">@(entry.RemoteIp ?? "—")</code></td>
+                        <td>@Model.CountryLabel(entry)</td>
+                        <td class="cell-number">@Model.FormatSize(entry)</td>
+                        <td><pre class="bot-payload">@(string.IsNullOrEmpty(entry.Payload) ? "—" : entry.Payload)</pre></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    <nav class="pagination" aria-label="Payload pagination">
+        @if (Model.PageNumber > 1)
+        {
+            <a class="button button-secondary" asp-page="/InfoBot" asp-route-pageNumber="@(Model.PageNumber - 1)" rel="prev">← Previous</a>
+        }
+        else
+        {
+            <span class="button button-secondary pagination-disabled">← Previous</span>
+        }
+
+        <span class="pagination-info">
+            Payloads @Model.FormatNumber(Model.FirstOnPage)–@Model.FormatNumber(Model.LastOnPage)
+            of @Model.FormatNumber(Model.Total) · page @Model.PageNumber of @Model.PageCount
+        </span>
+
+        @if (Model.PageNumber < Model.PageCount)
+        {
+            <a class="button button-secondary" asp-page="/InfoBot" asp-route-pageNumber="@(Model.PageNumber + 1)" rel="next">Next →</a>
+        }
+        else
+        {
+            <span class="button button-secondary pagination-disabled">Next →</span>
+        }
+    </nav>
+}

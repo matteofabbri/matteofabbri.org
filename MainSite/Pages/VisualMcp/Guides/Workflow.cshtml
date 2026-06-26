@@ -1,0 +1,145 @@
+@page "/visualmcp/guides/workflow"
+@{
+    ViewData["Title"] = "Workflow and integrations — VisualMCP";
+    ViewData["Description"] = "The plumbing around the code with VisualMCP: run_plan for batch execution, the kanban board and its memory, Git with conflicts resolved as data, GitHub and other hosts, Docker, the three search tools, HTTP and SignalR, and full audit and undo.";
+    ViewData["DocsKey"] = "workflow";
+    ViewData["DocsGitHub"] = "https://github.com/matteofabbri/VisualMCP/blob/master/docs/guides/workflow.md";
+}
+
+<partial name="_VisualMcpDocsNav" />
+
+<header class="page-head docs-head">
+    <div>
+        <h1>Workflow and integrations</h1>
+        <p class="lede">
+            The plumbing around the code: executing a batch of calls, keeping
+            a plan, remembering project facts, and driving Git, GitHub and
+            Docker without leaving the client.
+        </p>
+    </div>
+</header>
+
+<div class="docs-body prose">
+    <h2><code>run_plan</code>: a graph of calls, one round trip</h2>
+    <p>
+        <code>run_plan</code> executes a whole dependency graph
+        <strong>inside the server</strong>, with no model in the loop. A step
+        is either a tool call — any tool, by name, with the argument names its
+        schema uses — or a shell command. Steps declare what they
+        <code>dependsOn</code> and which <code>paths</code> they write: two
+        steps whose paths overlap never run at the same time, which is what
+        makes parallel edits safe. The plan is validated before anything runs
+        — a duplicate id, an unknown tool or a cycle rejects the whole thing —
+        and a failed step skips its dependents.
+    </p>
+    <pre><code>{
+  "name": "tidy-and-verify",
+  "steps": [
+    { "id": "simplify", "kind": "tool", "tool": "simplify_code",
+      "arguments": { "scope": "project", "projectName": "MyApp",
+                     "rules": "IDE0028,IDE0041", "dryRun": false },
+      "paths": ["src/MyApp"] },
+    { "id": "build", "kind": "command",
+      "command": "dotnet build src/MyApp/MyApp.csproj -c Release",
+      "dependsOn": ["simplify"], "timeoutSeconds": 300 }
+  ]
+}</code></pre>
+    <p>
+        Use it for <strong>mechanical</strong> work — the same operation over
+        many files, or a build that depends on a set of edits. Steps that need
+        judgement between them are still the model's job.
+    </p>
+
+    <h2>Planning and memory</h2>
+    <p>
+        The board lives in the solution store, so it survives restarts and is
+        scoped to the solution: cards move across
+        <code>backlog → todo → in_progress → review → done</code>, carry
+        comments and full change history, and <code>board_brief</code>
+        answers “what is missing, what comes next” in one compact call.
+        <code>create_task_checklist</code> puts a multi-step operation on the
+        board as one card with the steps as a checklist.
+    </p>
+    <p>
+        Memory is the board's second lane: a fact, a decision or a constraint
+        goes to <code>board_remember</code> under a topic — one current
+        version per topic, writing again supersedes instead of duplicating —
+        and <code>board_recall</code> reads it back. Pinned notes ride along
+        in <code>board_brief</code> and in <code>read_project_docs</code>,
+        which is what makes writing one worth the call.
+    </p>
+
+    <h2>Git, as data</h2>
+    <p>
+        The daily flow and the history operations that usually need a
+        terminal: status, diff, log, blame, stage and commit, branches,
+        squash, amend, reset, merge, rebase, cherry-pick, revert, stash, named
+        patches, remotes, tags, push and pull. The interesting part is what
+        stops being terminal-shaped:
+    </p>
+    <ul>
+        <li><strong>A merge conflict is data.</strong> <code>git_conflicts</code> lists the conflicted files with their hunks — ours, theirs, base — and resolves each hunk by strategy or custom content, then stages the file and tells you whether to continue or abort.</li>
+        <li><strong>An interactive rebase without an editor.</strong> <code>git_rebase action=plan</code> takes a JSON list of pick/reword/squash/fixup/drop steps and executes it exactly; <code>reword</code> and <code>squash</code> take their message from the step.</li>
+        <li><strong>Destructive actions are gated.</strong> <code>git_reset</code> with <code>mode=hard</code> and <code>git_sync</code> with <code>force=true</code> require <code>confirm=true</code>; force uses <code>--force-with-lease</code>.</li>
+    </ul>
+
+    <h2>GitHub and other hosts</h2>
+    <p>
+        Repositories, pull requests (with line-anchored reviews), issues,
+        releases, Actions runs and secrets, branch protection — eight tools
+        over the authenticated GitHub CLI, with destructive actions gated
+        behind <code>confirm=true</code>. GitLab, Azure DevOps and Bitbucket
+        Cloud are served by <code>git_host</code>, which reads the provider
+        and project from the git remote. Before reviewing anything,
+        <code>code_review</code> returns the brief a reviewer starts from:
+        changed files, the signals that matter first, the worst methods of
+        each changed file, and the findings that land in them.
+    </p>
+
+    <h2>Docker</h2>
+    <p>
+        The container lifecycle: status, inventory (containers, images,
+        networks, volumes), inspect, logs, stats, run and control, compose
+        up/down/logs/restart, and a prune that requires
+        <code>confirm=true</code> because it is irreversible. Structured
+        results instead of <code>docker ps</code> output the agent has to
+        parse again.
+    </p>
+
+    <h2>Files and the three searches</h2>
+    <ul>
+        <li><strong><code>search_text</code></strong> is grep with structure: regex, glob filter, context, <code>file:line</code>. For configs, logs, headers and arbitrary text.</li>
+        <li><strong><code>text_index</code></strong> is a full-text index over the whole solution: words are matched inside identifiers, results are BM25-ranked — for “where is this named or documented?”.</li>
+        <li><strong><code>reference_index</code></strong> is the symbol index: declarations and typed usages — call, read, write, inherit, implement, override — plus callers, callees, hierarchy and outline.</li>
+    </ul>
+    <p>
+        Around them: <code>read_files</code> for several known paths in one
+        budgeted call, <code>read_tree</code> for the shape of a folder,
+        <code>move_path</code> and <code>download_file</code>.
+    </p>
+
+    <h2>HTTP and SignalR</h2>
+    <p>
+        <code>http_invoke</code> calls a REST endpoint of a running app — any
+        method, headers, JSON body — and the <code>signal_r_*</code> family
+        connects to any ASP.NET Core SignalR hub, subscribes to a method,
+        buffers the messages and invokes hub methods. This is how an agent
+        tests a live API or a hub without writing a client:
+        <code>run_project</code> → read the listening URL →
+        <code>http_invoke</code> / <code>signal_r_connect</code>.
+    </p>
+
+    <h2>Audit and undo</h2>
+    <ul>
+        <li><code>command_log</code> — one row per tool call, with the arguments (credential-looking values redacted).</li>
+        <li><code>edit_history</code> — one row per file this server wrote, with the tool, the rules and whether it is still revertible.</li>
+        <li><code>revert_edit</code> — restore the file to its state before one recorded edit, refusing if the file changed after it.</li>
+        <li><code>local_history</code> — whole-file snapshots independent of commits: capture, walk, diff, restore.</li>
+    </ul>
+    <p>
+        Everything the server does to your solution is a row you can read —
+        and, for writes, a state you can put back.
+    </p>
+</div>
+
+<partial name="_VisualMcpDocsFooter" />

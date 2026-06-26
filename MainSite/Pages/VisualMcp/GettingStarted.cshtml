@@ -1,0 +1,128 @@
+@page "/visualmcp/getting-started"
+@{
+    ViewData["Title"] = "Getting started — VisualMCP";
+    ViewData["Description"] = "Install VisualMCP as a local MCP server: requirements, install scopes for ZCode and Claude Code, the routing guard, how to verify the connection and a first session through the main tool families.";
+    ViewData["DocsKey"] = "getting-started";
+    ViewData["DocsGitHub"] = "https://github.com/matteofabbri/VisualMCP/blob/master/docs/getting-started.md";
+}
+
+<partial name="_VisualMcpDocsNav" />
+
+<header class="page-head docs-head">
+    <div>
+        <h1>Getting started</h1>
+        <p class="lede">
+            One local process, registered in your client, and a solution folder:
+            that is the whole setup. This page covers the install, the optional
+            routing guard and a first session that touches the main tool
+            families.
+        </p>
+    </div>
+</header>
+
+<div class="docs-body prose">
+    <h2>Requirements</h2>
+    <table>
+        <thead>
+            <tr><th>Requirement</th><th>Why</th></tr>
+        </thead>
+        <tbody>
+            <tr><td><strong>.NET 10 SDK</strong></td><td>The server targets <code>net10.0</code> and uses MSBuild and Roslyn to load solutions.</td></tr>
+            <tr><td><strong>Windows 10/11, Linux or macOS</strong></td><td>One installer per platform: <code>install.ps1</code> on Windows, <code>install.sh</code> on Linux and macOS. The server adapts shell, debugger and profiler to the platform.</td></tr>
+            <tr><td><strong>An MCP client</strong></td><td>ZCode, Claude Code, or any client that can start a stdio MCP server.</td></tr>
+        </tbody>
+    </table>
+    <p>
+        Visual Studio is <strong>not</strong> required. Optional integrations light
+        up only when their tool is present: Docker for the <code>docker_*</code>
+        tools, the GitHub CLI for <code>gh_*</code>, and <code>coverlet.collector</code>
+        in your test projects for code coverage.
+    </p>
+
+    <h2>Install</h2>
+    <p>From a checkout of the repository:</p>
+    <pre><code># Windows: ZCode + Claude Code (default)
+powershell -ExecutionPolicy Bypass -File scripts\install.ps1
+
+# Linux / macOS: the same scopes, with the POSIX installer
+./scripts/install.sh</code></pre>
+    <p>The installer builds a Release binary, publishes it under your user profile and registers the server in your client's configuration. Then it installs the routing guard (below). It does <strong>not</strong> restart the client — MCP configuration is read at session start, so restart it yourself.</p>
+
+    <h3>Choose a scope</h3>
+    <table>
+        <thead>
+            <tr><th>Scope</th><th>Availability</th><th>Use when</th></tr>
+        </thead>
+        <tbody>
+            <tr><td><code>all</code> <em>(default)</em></td><td>ZCode + Claude Code + the desktop app</td><td>You use more than one client</td></tr>
+            <tr><td><code>zcode</code></td><td>Every ZCode session on the machine</td><td>You only use ZCode</td></tr>
+            <tr><td><code>user</code></td><td>Every folder, global</td><td>Claude Code only, everywhere</td></tr>
+            <tr><td><code>local</code></td><td>One project folder, private</td><td>One project, without affecting others</td></tr>
+            <tr><td><code>project</code></td><td>One project, shared</td><td>You want teammates to get it through a committed <code>.mcp.json</code></td></tr>
+        </tbody>
+    </table>
+
+    <h3>The routing guard</h3>
+    <p>
+        Registering the server is not enough on its own: a model that has never
+        been told otherwise keeps doing C# work with <code>grep -rn</code> and
+        friends. The optional guard is a pre-tool-use hook that denies read-only
+        shell probes (<code>grep</code>, <code>sed -n</code>, <code>cat</code>,
+        <code>ls</code>, <code>find</code>…) in a folder with a visible
+        <code>.sln</code>/<code>.slnx</code>, and replies with the semantic tool
+        to use instead. Build, test and git commands are never touched, and the
+        <code>run_command</code> tool remains the escape hatch for genuine shell
+        cases. Skip it at install time with <code>-NoHooks</code>.
+    </p>
+
+    <h2>Verify the connection</h2>
+    <p>
+        Restart the client, check that a <code>VisualMCP</code> server appears
+        with a large tool list, then open a folder that contains a solution and
+        ask the client to call:
+    </p>
+    <pre><code>check_solution</code></pre>
+    <p>
+        The answer reports whether a solution is loaded, its path, the project
+        count, the C# / Visual Basic breakdown and the workspace root in use.
+        Solutions are discovered automatically on first use — you normally do
+        not need to call <code>load_solution</code> yourself.
+    </p>
+
+    <h2>A first session</h2>
+    <p>A five-minute tour across the main families:</p>
+    <table>
+        <thead>
+            <tr><th>Step</th><th>Tool</th><th>What to look for</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>1</td><td><code>read_project_docs</code></td><td>The solution's README and Markdown, indexed when the solution opened.</td></tr>
+            <tr><td>2</td><td><code>solution_audit</code></td><td>Whole-solution health: inspections, diagnostics, complexity hotspots, project graph, first moves.</td></tr>
+            <tr><td>3</td><td><code>find_symbol</code> then <code>read_symbol</code></td><td>Locate a type by name, then read its declaration source with line numbers.</td></tr>
+            <tr><td>4</td><td><code>get_diagnostics</code></td><td>Compiler errors and warnings — the IDE Error List.</td></tr>
+            <tr><td>5</td><td><code>simplify_code</code> with <code>dryRun=true</code></td><td>A preview: before/after pairs and a line diff per edit, nothing written.</td></tr>
+        </tbody>
+    </table>
+    <p>Then try a question in your own words:</p>
+    <blockquote>
+        Find every implementation of <code>IOrderService</code>, show me the one
+        with the most dependencies, and tell me whether the interface is used
+        from a background service.
+    </blockquote>
+    <p>
+        The client should route to <code>find_implementations</code>,
+        <code>get_type_members</code> and <code>find_callers</code> rather than
+        grepping — that is the guard and the tool descriptions doing their job.
+    </p>
+
+    <h2>Upgrade and uninstall</h2>
+    <p>
+        <code>check_for_update</code> and <code>self_update</code> upgrade from
+        inside the client; or pull the repository and re-run the installer with
+        the same scope. Uninstalling removes the server registration but not the
+        solution's <code>.visualMCP</code> store — delete that folder if you
+        also want to remove the indexes, logs, board and edit history.
+    </p>
+</div>
+
+<partial name="_VisualMcpDocsFooter" />

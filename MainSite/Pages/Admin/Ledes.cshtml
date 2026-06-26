@@ -1,0 +1,78 @@
+@page "/admin/ledes"
+@model MainSite.Pages.Admin.LedesModel
+@{
+    ViewData["Title"] = "Ledes";
+}
+
+<div class="page-head">
+    <div>
+        <p class="eyebrow"><a asp-page="/Admin/Index">Administration</a> / Ledes</p>
+        <h1>Ledes</h1>
+        <p class="lede">Short texts shown at random in the blog jumbotron.</p>
+    </div>
+</div>
+
+@if (TempData["Messaggio"] is string message)
+{
+    <div class="alert success">@message</div>
+}
+@if (TempData["Errore"] is string error)
+{
+    <div class="alert error">@error</div>
+}
+@if (Model.LoadFailed)
+{
+    <div class="alert error">
+        <strong>Could not read the ledes from Sperone.</strong>
+        Check the site logs: the database may be unreachable.
+    </div>
+}
+
+<form method="post" asp-page-handler="Add" class="lede-add">
+    <input name="newText" class="input" maxlength="300" placeholder="Write a new lede" autocomplete="off" />
+    <button type="submit" class="button">Add</button>
+</form>
+
+@if (Model.Ledes.Count == 0)
+{
+    <div class="empty">
+        <p>No ledes yet.</p>
+        <p>The jumbotron shows no lede until you add one.</p>
+    </div>
+}
+else
+{
+    <div class="table-wrap">
+        <table class="admin-table lede-table">
+            <thead>
+                <tr>
+                    <th>Text</th>
+                    <th>Updated</th>
+                    <th class="cell-actions">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var lede in Model.Ledes)
+                {
+                    <tr>
+                        <td>
+                            <form method="post" asp-page-handler="Update" class="inline-edit">
+                                <input type="hidden" name="id" value="@lede.Id" />
+                                <input name="text" value="@lede.Text" class="input" maxlength="300" autocomplete="off" />
+                                <button type="submit" class="button button-secondary">Save</button>
+                            </form>
+                        </td>
+                        <td class="cell-date">@Model.FormatWhen(lede.UpdatedAt)</td>
+                        <td class="cell-actions">
+                            <form method="post" asp-page-handler="Delete"
+                                  onsubmit="return confirm('Delete this lede?');">
+                                <input type="hidden" name="id" value="@lede.Id" />
+                                <button type="submit" class="link-button danger">Delete</button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}

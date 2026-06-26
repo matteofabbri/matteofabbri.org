@@ -1,0 +1,216 @@
+# Deploy automatico: a ogni push su main costruisce le immagini dei tre siti e le
+# porta sul server, poi `docker compose up -d` riavvia solo i container cambiati.
+# E' lo stesso flusso manuale (publish.ps1 + docker save/load), automatizzato.
+#
+# Porta anche il contesto di build che sta nel repo (Caddy): il
+# `--build` del riavvio ricostruisce l'immagine solo se e' cambiato qualcosa.
+#
+# NON tocca: docker-compose/.env e mailcow — restano manuali (contengono
+# segreti e cambiano di rado). Se cambia l'AppHost/compose, deploy a mano.
+#
+# Segreti usati (impostati via `gh secret set`):
+#   DEPLOY_SSH_KEY   — chiave privata dedicata per ubuntu@server (la pubblica e'
+#                      in authorized_keys sul server; NON e' la chiave .ppk di Matteo)
+#   SPERONE_DEPLOY_KEY — deploy key read-only del repo privato
+#                      matteofabbri/SPERONE, il submodule di MainSite
+name: deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Mai due deploy sovrapposti; quello in corso finisce, il nuovo aspetta.
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+env:
+  SERVER: ubuntu@ns347806.ip-5-196-91.eu
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      # MainSite referenzia il motore Sperone embedded in external/SPERONE, che
+      # è un repo privato: il token del workflow non può clonarlo. Si usa la
+      # deploy key read-only SPERONE_DEPLOY_KEY. PredicitiveCoding non serve
+      # alle build dei tre siti e non viene clonato.
+      - name: Submodule SPERONE
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SPERONE_DEPLOY_KEY }}" > ~/.ssh/sperone_key
+          chmod 600 ~/.ssh/sperone_key
+          GIT_SSH_COMMAND="ssh -i ~/.ssh/sperone_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new" \
+            git -c url."git@github.com:matteofabbri/SPERONE.git".insteadOf="https://github.com/matteofabbri/SPERONE.git" \
+            submodule update --init external/SPERONE
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      # Il sito riceve un layer in più con ffmpeg (deploy/site-ffmpeg.Dockerfile):
+      # yt-dlp, che scarica i video del blog, senza ffmpeg non può unire video e
+      # audio. L'SDK pubblica :sdk, poi docker build produce :latest. TheQult e
+      # Maddalena non ne hanno bisogno e restano sull'immagine SDK.
+      # docker save porta con sé tutti i layer, quindi sul server non serve
+      # nient'altro.
+      - name: Build immagini
+        run: |
+          dotnet publish MainSite/MainSite.csproj  /t:PublishContainer /p:ContainerRepository=matteofabbri-site     /p:ContainerImageTag=sdk
+          docker build -f deploy/site-ffmpeg.Dockerfile -t matteofabbri-site:latest .
+          dotnet publish TheQult/TheQult.csproj    /t:PublishContainer /p:ContainerRepository=matteofabbri-theqult  /p:ContainerImageTag=latest
+          dotnet publish Maddalena/Maddalena.csproj /t:PublishContainer /p:ContainerRepository=matteofabbri-maddalena /p:ContainerImageTag=latest
+
+      - name: Chiave SSH del server
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          # Host key del server fissata qui (e' pubblica): niente "trust on first use".
+          echo 'ns347806.ip-5-196-91.eu ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDj21IMc/CsStOgBOQY5nsfHbc130zAtzaUBZhVEtVWO' >> ~/.ssh/known_hosts
+
+      - name: Trasferimento immagini
+        run: |
+          for img in matteofabbri-site matteofabbri-theqult matteofabbri-maddalena; do
+            docker save "$img:latest" | gzip | \
+              ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$SERVER" 'gunzip | sudo docker load'
+          done
+
+      # Il Caddyfile governa anche il routing della posta: se è invalido il
+      # container non parte e cadono siti E posta. Lo validiamo con l'immagine
+      # Caddy già in uso sul server, PRIMA di sostituire quello in /opt.
+      - name: Valida Caddyfile
+        run: |
+          scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \
+            "MatteoFabbri.org.AppHost/caddy/Caddyfile" "$SERVER:~/Caddyfile.new"
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$SERVER" '
+            set -e
+            cd /opt/matteofabbri
+            CID=$(sudo docker compose ps -q caddy | head -n1)
+            if [ -z "$CID" ]; then
+              echo "Container Caddy non in esecuzione: salto la validazione."
+              rm -f /home/ubuntu/Caddyfile.new
+              exit 0
+            fi
+            sudo docker compose build caddy
+            sudo docker compose run --rm --no-deps \
+              -v /home/ubuntu/Caddyfile.new:/etc/caddy/Caddyfile:ro \
+              caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+            rm -f /home/ubuntu/Caddyfile.new
+          '
+
+      # Il contesto di build che vive nel repo: Caddy.
+      # Passa dalla home perche' ubuntu non scrive in /opt, poi sudo lo mette
+      # al suo posto accanto al compose.
+      - name: Aggiornamento contesti di build
+        run: |
+          for ctx in caddy; do
+            ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$SERVER" "rm -rf ~/$ctx-new"
+            scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -r \
+              "MatteoFabbri.org.AppHost/$ctx" "$SERVER:~/$ctx-new"
+            ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$SERVER" \
+              "sudo mkdir -p /opt/matteofabbri/$ctx && sudo cp -r ~/$ctx-new/. /opt/matteofabbri/$ctx/ && rm -rf ~/$ctx-new"
+          done
+
+      # Blog e log richieste: i volumi devono esistere ed essere scrivibili
+      # dall'utente `app` (UID 1654) PRIMA che il sito parta. L'override
+      # aggiunge mount e variabili del blog e il volume Sperone dei log; se sul
+      # server ci sono già, li conserviamo.
+      - name: "Blog e log richieste: volumi e override"
+        run: |
+          scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \
+            deploy/docker-compose.override.yml "$SERVER:~/site-compose.override.yml"
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$SERVER" '
+            set -e
+            stamp=$(date +%Y%m%d-%H%M%S)
+            if [ -f /opt/matteofabbri/docker-compose.override.yml ]; then
+              sudo cp /opt/matteofabbri/docker-compose.override.yml /opt/matteofabbri/docker-compose.override.yml.$stamp.bak
+            fi
+            sudo mv ~/site-compose.override.yml /opt/matteofabbri/docker-compose.override.yml
+            sudo chown root:root /opt/matteofabbri/docker-compose.override.yml
+            for vol in blog-data request-log-data; do
+              sudo docker volume create "matteofabbri_$vol" >/dev/null
+              sudo docker run --rm -v "matteofabbri_$vol:/data" alpine chown -R 1654:1654 /data
+            done
+          '
+
+      # GeoIP per la mappa delle richieste: DB-IP Lite City, gratuito e senza
+      # chiave. Il file è ~60 MB e sta in /opt/matteofabbri/geoip (bind mount
+      # read-only in /data/geoip). Si scarica solo se manca; lo script resta
+      # sul server per l'aggiornamento mensile. Un errore qui non blocca il
+      # deploy: il sito parte e la pagina lo segnala.
+      - name: "GeoIP: DB-IP Lite City (se manca)"
+        continue-on-error: true
+        run: |
+          scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \
+            deploy/update-geoip.sh "$SERVER:~/update-geoip.sh"
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$SERVER" '
+            set -e
+            sudo mkdir -p /opt/matteofabbri/geoip
+            sudo mv ~/update-geoip.sh /opt/matteofabbri/update-geoip.sh
+            sudo chmod +x /opt/matteofabbri/update-geoip.sh
+            if [ ! -s /opt/matteofabbri/geoip/dbip-city-lite.mmdb ]; then
+              sudo /opt/matteofabbri/update-geoip.sh /opt/matteofabbri/geoip
+            fi
+          '
+
+      # up -d --build ricrea SOLO i container cambiati (immagine nuova o contesto
+      # di build cambiato). --remove-orphans butta i container dei servizi che
+      # NON ESISTONO PIU' nel compose (un servizio tolto dall'AppHost); il prune
+      # butta le immagini vecchie rimaste senza tag (sennò il disco si riempie).
+      # I due cicli finali completano la pulizia in modo GENERICO — per label di
+      # progetto, senza nomi di servizi: volumi e immagini dello stack che nessun
+      # container usa più (il grafo di valhalla, i dati di postgres, ...) vengono
+      # rimossi a ogni deploy. Vale solo per lo stack matteofabbri: i volumi di
+      # mailcow non hanno quella label e non vengono toccati.
+      # OCCHIO: un volume orfano contiene i DATI del servizio tolto — se possono
+      # ancora servire (un DB, ad esempio), salvali PRIMA di aggiornare il
+      # compose sul server, perché dal deploy successivo spariscono.
+      - name: Riavvio container e pulizia
+        run: |
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$SERVER" '
+            set -e
+            cd /opt/matteofabbri
+            sudo docker compose up -d --build --remove-orphans
+            sudo docker image prune -f
+            PROGETTO=$(basename "$PWD")
+            echo "=== Pulizia componenti non piu usati del progetto $PROGETTO ==="
+            for v in $(sudo docker volume ls --filter label=com.docker.compose.project="$PROGETTO" --format "{{.Name}}"); do
+              if [ -z "$(sudo docker ps -aq --filter volume="$v")" ]; then
+                echo "volume senza container: $v -> rimuovo"
+                sudo docker volume rm "$v" || true
+              fi
+            done
+            for img in $(sudo docker images --filter label=com.docker.compose.project="$PROGETTO" --format "{{.ID}}"); do
+              if [ -z "$(sudo docker ps -aq --filter ancestor="$img")" ]; then
+                echo "immagine senza container: $img -> rimuovo"
+                sudo docker rmi "$img" || true
+              fi
+            done
+          '
+
+      # Diagnostica: se il sito risponde 500, il messaggio vero è nei log del
+      # container, non nella pagina (in produzione non c'è la DeveloperExceptionPage).
+      - name: Log del sito
+        if: always()
+        continue-on-error: true
+        run: |
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$SERVER" '
+            cd /opt/matteofabbri
+            sudo docker compose ps
+            sudo docker inspect --format "user={{.Config.User}}" $(sudo docker compose ps -q site) || true
+            sudo docker compose exec -T site sh -c "id; ls -ld /data/blog; touch /data/blog/.probe && rm /data/blog/.probe && echo blog-writable" || true
+            curl -sS -o /dev/null -w "blog=%{http_code}\n" https://matteofabbri.org/blog || true
+            sleep 3
+            sudo docker compose logs --tail=120 site
+          '
+
+      # Solo maddalena.me: gli altri due domini non hanno ancora il DNS puntato qui.
+      - name: Verifica
+        run: |
+          sleep 5
+          curl -fsS -o /dev/null -w 'maddalena.me %{http_code}\n' https://maddalena.me/

@@ -1,0 +1,148 @@
+@page "/admin/edit/{slug?}"
+@model MainSite.Pages.Admin.EditModel
+@{
+    ViewData["Title"] = Model.IsNew ? "New post" : "Edit post";
+}
+
+@section Head {
+    <link rel="stylesheet" href="~/lib/toastui-editor/toastui-editor.min.css" asp-append-version="true" />
+}
+
+<div class="page-head">
+    <div>
+        <p class="eyebrow"><a asp-page="/Admin/Index">Your posts</a> / @(Model.IsNew ? "New" : "Edit")</p>
+        <h1>@(Model.IsNew ? "New post" : "Edit post")</h1>
+    </div>
+    <div class="actions">
+        @if (!Model.IsNew)
+        {
+            <a class="button button-secondary" asp-page="/Blog/Post" asp-route-slug="@Model.OriginalSlug" target="_blank" rel="noopener">Open</a>
+        }
+    </div>
+</div>
+
+@if (TempData["Messaggio"] is string message)
+{
+    <div class="alert success">@message</div>
+}
+@if (TempData["Errore"] is string error)
+{
+    <div class="alert error">@error</div>
+}
+
+@if (!ViewData.ModelState.IsValid)
+{
+    <div class="alert error">
+        <ul>
+            @foreach (var entry in ViewData.ModelState.Values.SelectMany(v => v.Errors))
+            {
+                if (!string.IsNullOrWhiteSpace(entry.ErrorMessage))
+                {
+                    <li>@entry.ErrorMessage</li>
+                }
+            }
+        </ul>
+    </div>
+}
+
+<form method="post" class="editor-form">
+    <div class="field">
+        <label asp-for="Input.Title">Title</label>
+        <input asp-for="Input.Title" class="input input-title" autocomplete="off" />
+    </div>
+
+    <div class="field-row">
+        <div class="field">
+            <label asp-for="Input.Slug">Slug</label>
+            <input asp-for="Input.Slug" class="input" autocomplete="off" placeholder="generated-from-the-title" />
+            <span class="hint">The URL will be <code>/blog/slug</code>. Leave it empty to generate it from the title.</span>
+        </div>
+        <div class="field">
+            <label asp-for="Input.Published">Published</label>
+            <input asp-for="Input.Published" class="input" type="datetime-local" />
+            <span class="hint">A future date keeps the post hidden until then.</span>
+        </div>
+    </div>
+
+    <div class="field">
+        <label asp-for="Input.Summary">Summary</label>
+        <textarea asp-for="Input.Summary" class="input" rows="2" maxlength="300"
+                  placeholder="A couple of lines for the list and the feed. Leave it empty to derive it from the text."></textarea>
+    </div>
+
+    <div class="field">
+        <label asp-for="Input.Tags">Tags</label>
+        <input asp-for="Input.Tags" class="input" autocomplete="off" placeholder="projects, math, notes" />
+        <span class="hint">Comma separated. At most 12.</span>
+    </div>
+
+    <div class="field">
+        <label asp-for="Input.Markdown">Body</label>
+        <textarea asp-for="Input.Markdown" id="markdown-input" class="input editor" spellcheck="false"
+                  placeholder="Write here. The editor switches between visual and Markdown mode."></textarea>
+        <div id="markdown-editor"></div>
+        <span class="hint">
+            Markdown is supported: <code>## heading</code>, <code>**bold**</code>, <code>[text](url)</code>,
+            <code>![description](/blog/media/file.jpg)</code>. Raw HTML is not executed.
+        </span>
+    </div>
+
+    <div class="editor-actions">
+        <button type="submit" class="button">Save</button>
+        <button type="submit" asp-page-handler="DownloadMedia" class="button button-secondary">Download media</button>
+        <label class="checkbox">
+            <input asp-for="Input.Draft" />
+            Draft (do not publish)
+        </label>
+    </div>
+    <p class="hint">
+        Download media runs yt-dlp on the video links in the body (YouTube and similar)
+        and saves the files in <code>content/</code>; nothing is published. Images, links to this
+        site and unsupported pages are skipped.
+    </p>
+</form>
+
+@if (!Model.IsNew)
+{
+    <form method="post" asp-page-handler="Delete" asp-route-slug="@Model.OriginalSlug" class="danger-zone"
+          onsubmit="return confirm('Move this post to the trash?');">
+        <button type="submit" class="button button-danger">Delete post</button>
+        <span class="hint">It goes to the trash folder inside the content directory; it is not gone forever.</span>
+    </form>
+}
+
+@section Scripts {
+    <script src="~/lib/toastui-editor/toastui-editor-all.min.js" asp-append-version="true"></script>
+    <script>
+        (() => {
+            const textarea = document.getElementById('markdown-input');
+            const container = document.getElementById('markdown-editor');
+            if (!textarea || !container || !window.toastui) return;
+
+            const editor = new toastui.Editor({
+                el: container,
+                height: '600px',
+                initialEditType: 'wysiwyg',
+                previewStyle: 'vertical',
+                initialValue: textarea.value,
+                usageStatistics: false,
+                toolbarItems: [
+                    ['heading', 'bold', 'italic', 'strike'],
+                    ['hr', 'quote'],
+                    ['ul', 'ol', 'task', 'indent', 'outdent'],
+                    ['table', 'image', 'link'],
+                    ['code', 'codeblock']
+                ]
+            });
+
+            // Se l'editor è partito, il textarea resta nel form ma nascosto:
+            // al submit ci finisce il Markdown prodotto dall'editor.
+            textarea.hidden = true;
+            if (textarea.form) {
+                textarea.form.addEventListener('submit', () => {
+                    textarea.value = editor.getMarkdown();
+                });
+            }
+        })();
+    </script>
+}

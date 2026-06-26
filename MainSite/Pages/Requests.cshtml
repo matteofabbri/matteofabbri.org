@@ -1,0 +1,348 @@
+@page "/requests"
+@model MainSite.Pages.RequestsModel
+@{
+    ViewData["Title"] = "Requests around the world";
+}
+
+@section Head {
+    <link rel="stylesheet" href="~/lib/leaflet/leaflet.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/request-map.css" asp-append-version="true" />
+}
+
+<div class="page-head">
+    <div>
+        <p class="eyebrow">The site in numbers</p>
+        <h1>Requests around the world</h1>
+        <p class="lede">
+            Where requests come from, @Model.PeriodLabel.
+            User-agent and IP are shown as recorded; no authenticated users.
+        </p>
+    </div>
+    <form method="get" class="map-controls">
+        @foreach (var filter in Model.ActiveFilters)
+        {
+            <input type="hidden" name="@filter.Key" value="@filter.Value" />
+        }
+        <label class="field map-period">
+            <span class="field-label">Period</span>
+            <select name="days" onchange="this.form.submit()">
+                <option value="7" selected="@(Model.Days == 7)">Last 7 days</option>
+                <option value="30" selected="@(Model.Days == 30)">Last 30 days</option>
+                <option value="90" selected="@(Model.Days == 90)">Last 90 days</option>
+            </select>
+        </label>
+        <noscript><button type="submit" class="button">Refresh</button></noscript>
+    </form>
+</div>
+
+@if (Model.HasFilters)
+{
+    <div class="filter-bar" role="group" aria-label="Active filters">
+        @foreach (var filter in Model.ActiveFilters)
+        {
+            <a class="filter-chip" asp-page="/Requests" asp-all-route-data="@Model.RemoveFilterRoute(filter.Key)"
+               title="Remove @filter.Label filter" aria-label="Remove @filter.Label filter">
+                <span class="filter-chip-text">@filter.Label</span>
+                <span class="filter-chip-x" aria-hidden="true">×</span>
+            </a>
+        }
+    </div>
+}
+
+@if (Model.LoadFailed)
+{
+    <div class="alert error">
+        <strong>Could not read the request counts from Sperone.</strong>
+        Check the site logs: the database may be unreachable.
+    </div>
+}
+else if (!Model.LogEnabled)
+{
+    <div class="alert error">
+        <strong>Request logging is disabled.</strong>
+        Enable <code>RequestLog:Enabled</code> to collect the data for this page.
+    </div>
+}
+else if (!Model.GeoIpAvailable)
+{
+    <div class="alert warning">
+        <strong>GeoIP database not configured.</strong>
+        The map stays empty until you download DB-IP Lite City to
+        <code>@Model.GeoIpPath</code>. Locally run <code>.\deploy\update-geoip.ps1</code>;
+        in production <code>sudo /opt/matteofabbri/update-geoip.sh /opt/matteofabbri/geoip</code>
+        and restart the site.
+    </div>
+}
+else if (Model.GeoIpUpdated is { } updated)
+{
+    <p class="hint">GeoIP: DB-IP Lite City, updated on @updated.ToLocalTime().ToString("d MMMM yyyy", System.Globalization.CultureInfo.GetCultureInfo("en-GB")).</p>
+}
+
+<div class="map-summary">
+    <div class="map-stat">
+        <span class="map-number">@Model.FormatNumber(Model.TotalRequests)</span>
+        <span class="map-label">@(Model.HasFilters ? "matching requests" : "requests in the period")</span>
+    </div>
+    <div class="map-stat">
+        <span class="map-number">@Model.FormatNumber(Model.GeocodedRequests)</span>
+        <span class="map-label">with a recognized country</span>
+    </div>
+    <div class="map-stat">
+        <span class="map-number">@Model.FormatNumber(Model.UnknownRequests)</span>
+        <span class="map-label">private or not geolocated</span>
+    </div>
+</div>
+
+@if (Model.TotalRequests == 0)
+{
+    <div class="empty">
+        <p>No requests recorded in the period@(Model.HasFilters ? " matching these filters" : "").</p>
+        <p>New requests appear here within seconds.</p>
+    </div>
+}
+
+<div class="map-card">
+    <div class="map-header">
+        <h2>Country map</h2>
+        <div id="map-legend" class="map-legend" hidden>
+            <span class="legend-title">Requests</span>
+            <div id="legend-scale" class="legend-scale"></div>
+        </div>
+    </div>
+    <div id="request-map" class="request-map" role="application"
+         aria-label="World map with countries coloured by number of requests"></div>
+    <p id="map-loading" class="hint">Loading the map…</p>
+    <p id="map-error" class="alert error" hidden>
+        Could not load the country borders. Reload the page or check the console.
+    </p>
+</div>
+
+@if (Model.Countries.Count > 0)
+{
+    <div class="table-wrap">
+        <table class="admin-table country-table">
+            <thead>
+                <tr>
+                    <th>Country</th>
+                    <th class="cell-number">Requests</th>
+                    <th class="cell-number">% of total</th>
+                    <th class="country-bar-cell"></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var country in Model.Countries)
+                {
+                    <tr>
+                        <td>
+                            <a class="request-filter" asp-page="/Requests" asp-all-route-data="@Model.FilterRoute("country", country.Code)">@country.Name</a>
+                        </td>
+                        <td class="cell-number">@Model.FormatNumber(country.Count)</td>
+                        <td class="cell-number">@Model.PercentLabel(country.Count) %</td>
+                        <td class="country-bar-cell">
+                            <span class="country-bar" style="width:@(Model.BarWidth(country.Count))%"></span>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+<h2 class="section-title">Requests</h2>
+
+@if (Model.Recent.Count == 0)
+{
+    <p class="hint">@(Model.HasFilters ? "No public requests match these filters." : "No public requests recorded in the period.")</p>
+}
+else
+{
+    <div class="table-wrap">
+        <table class="admin-table requests-table">
+            <thead>
+                <tr>
+                    <th>When</th>
+                    <th>Request</th>
+                    <th>Status</th>
+                    <th>Country</th>
+                    <th>IP</th>
+                    <th>Client ID</th>
+                    <th>User-Agent</th>
+                    <th class="cell-number">Duration</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var row in Model.Recent)
+                {
+                    <tr>
+                        <td class="cell-date">@Model.FormatWhen(row.When)</td>
+                        <td><code class="request-path">@row.Method @row.Path</code></td>
+                        <td><span class="status status-@(row.StatusCode / 100)xx">@row.StatusCode</span></td>
+                        <td>
+                            <a class="request-filter" asp-page="/Requests" asp-all-route-data="@Model.FilterRoute("country", row.CountryCode)">@row.Country</a>
+                        </td>
+                        <td>
+                            @if (row.RemoteIp != "—")
+                            {
+                                <code class="remote-ip"><a class="request-filter" asp-page="/Requests" asp-all-route-data="@Model.FilterRoute("ip", row.RemoteIp)">@row.RemoteIp</a></code>
+                            }
+                            else
+                            {
+                                <code class="remote-ip">@row.RemoteIp</code>
+                            }
+                        </td>
+                        <td>
+                            @if (row.ClientId != "—")
+                            {
+                                <code class="client-id"><a class="request-filter" asp-page="/Requests" asp-all-route-data="@Model.FilterRoute("clientId", row.ClientId)">@row.ClientId</a></code>
+                            }
+                            else
+                            {
+                                <code class="client-id">@row.ClientId</code>
+                            }
+                        </td>
+                        <td>
+                            @if (row.UserAgent != "—")
+                            {
+                                <code class="user-agent"><a class="request-filter" asp-page="/Requests" asp-all-route-data="@Model.FilterRoute("userAgent", row.UserAgent)">@row.UserAgent</a></code>
+                            }
+                            else
+                            {
+                                <code class="user-agent">@row.UserAgent</code>
+                            }
+                        </td>
+                        <td class="cell-number">@Model.FormatDuration(row.DurationMs)</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    <nav class="pagination" aria-label="Request pagination">
+        @if (Model.PageNumber > 1)
+        {
+            <a class="button button-secondary" asp-page="/Requests" asp-all-route-data="@Model.PageRoute(Model.PageNumber - 1)" rel="prev">← Previous</a>
+        }
+        else
+        {
+            <span class="button button-secondary pagination-disabled">← Previous</span>
+        }
+
+        <span class="pagination-info">
+            @(Model.PublicTotal == 0
+                ? "No public requests"
+                : $"Requests {Model.FormatNumber(Model.FirstOnPage)}–{Model.FormatNumber(Model.LastOnPage)} of {Model.FormatNumber(Model.PublicTotal)} · page {Model.PageNumber} of {Model.PageCount}")
+        </span>
+
+        @if (Model.PageNumber < Model.PageCount)
+        {
+            <a class="button button-secondary" asp-page="/Requests" asp-all-route-data="@Model.PageRoute(Model.PageNumber + 1)" rel="next">Next →</a>
+        }
+        else
+        {
+            <span class="button button-secondary pagination-disabled">Next →</span>
+        }
+    </nav>
+}
+
+<p class="hint map-attribution">
+    IP geolocation: <a href="https://db-ip.com" target="_blank" rel="noopener">DB-IP</a> (CC BY 4.0).
+    Borders: <a href="https://www.naturalearthdata.com" target="_blank" rel="noopener">Natural Earth</a> (public domain).
+    Map: &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors,
+    <a href="https://leafletjs.com" target="_blank" rel="noopener">Leaflet</a>.
+</p>
+
+<script id="country-counts" type="application/json">@Html.Raw(Model.CountsJson)</script>
+
+@section Scripts {
+    <script src="~/lib/leaflet/leaflet.js" asp-append-version="true"></script>
+    <script>
+        (() => {
+            const counts = JSON.parse(document.getElementById('country-counts').textContent);
+            const total = @Model.TotalRequests.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            const map = L.map('request-map', { preferCanvas: true, scrollWheelZoom: true, minZoom: 1 })
+                .setView([20, 10], 2);
+
+            L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 8,
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }).addTo(map);
+
+            const palette = ['#e9e7e1', '#d7efe9', '#a9dcd2', '#7cc9c0', '#4aa99f', '#206f68'];
+            const values = Object.values(counts).filter(value => value > 0);
+            const max = values.length ? Math.max(...values) : 0;
+            const bucket = value => value <= 0
+                ? 0
+                : Math.min(5, 1 + Math.floor((value - 1) / Math.max(1, max) * 5));
+            const color = value => palette[bucket(value)];
+            const formatNumber = value => value.toLocaleString('en-GB');
+
+            const isoOf = feature => {
+                const properties = feature.properties;
+                const code = (properties.ISO_A2 && properties.ISO_A2 !== '-99')
+                    ? properties.ISO_A2
+                    : properties.ISO_A2_EH;
+                return code && code !== '-99' ? code.toUpperCase() : null;
+            };
+
+            const geo = L.geoJSON(null, {
+                style: feature => {
+                    const code = isoOf(feature);
+                    return {
+                        fillColor: color(code ? counts[code] || 0 : 0),
+                        weight: 0.6,
+                        color: '#ffffff',
+                        fillOpacity: 0.9
+                    };
+                },
+                onEachFeature: (feature, layer) => {
+                    const code = isoOf(feature);
+                    if (!code) return;
+
+                    const count = counts[code] || 0;
+                    const name = feature.properties.NAME || feature.properties.NAME_IT;
+                    const percent = total ? (count * 100 / total).toFixed(1) : '0.0';
+                    layer.bindTooltip(`${name}: ${formatNumber(count)}`, { sticky: true });
+                    layer.bindPopup(`<strong>${name}</strong><br>${formatNumber(count)} requests (${percent}% of total)`);
+                    layer.on('mouseover', () => layer.setStyle({ weight: 1.5, color: '#1c1b19' }));
+                    layer.on('mouseout', () => geo.resetStyle(layer));
+                }
+            }).addTo(map);
+
+            fetch('@Url.Content("~/maps/countries.geojson")')
+                .then(response => {
+                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                    return response.json();
+                })
+                .then(data => {
+                    geo.addData(data);
+                    document.getElementById('map-loading').hidden = true;
+                    buildLegend(max);
+                })
+                .catch(error => {
+                    console.error('Country borders:', error);
+                    document.getElementById('map-loading').hidden = true;
+                    document.getElementById('map-error').hidden = false;
+                });
+
+            function buildLegend(maxValue) {
+                if (!maxValue) return;
+                const scale = document.getElementById('legend-scale');
+                const zero = document.createElement('span');
+                zero.className = 'legend-item';
+                zero.innerHTML = `<span class="legend-swatch" style="background:${palette[0]}"></span>0`;
+                scale.appendChild(zero);
+                for (let i = 1; i <= 5; i++) {
+                    // Stessi intervalli della funzione bucket() usata per i colori.
+                    const from = Math.ceil((i - 1) * maxValue / 5) + 1;
+                    const to = Math.ceil(i * maxValue / 5);
+                    if (from > maxValue) break;
+                    const item = document.createElement('span');
+                    item.className = 'legend-item';
+                    item.innerHTML = `<span class="legend-swatch" style="background:${palette[i]}"></span>${formatNumber(from)}${to > from ? '–' + formatNumber(to) : ''}`;
+                    scale.appendChild(item);
+                }
+                document.getElementById('map-legend').hidden = false;
+            }
+        })();
+    </script>
+}

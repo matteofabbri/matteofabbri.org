@@ -1,0 +1,54 @@
+@page "/admin/login"
+@model MainSite.Pages.Admin.LoginModel
+@{
+    ViewData["Title"] = "Sign in";
+}
+
+<div class="auth-card">
+    <p class="eyebrow">Writing area</p>
+    <h1>Sign in</h1>
+
+    @if (Model.Error is not null)
+    {
+        <div class="alert error">@Model.Error</div>
+    }
+
+    @if (Model.Fake)
+    {
+        <div class="alert warning">
+            <strong>Development mode.</strong>
+            Sign-in is fake and does not go through mailcow: this shortcut does not exist in production.
+        </div>
+        <p>You will sign in as <strong>@Model.FakeAuthor</strong>.</p>
+        <form method="post">
+            <input type="hidden" name="returnUrl" value="@Model.ReturnUrl" />
+            <button type="submit" class="button button-block">Enter as author</button>
+        </form>
+    }
+    else if (Model.Enabled)
+    {
+        <p>
+            Sign-in uses your mailbox <strong>@Model.MailcowHost</strong>: you will be taken to the
+            webmail, mailcow authenticates you (password and 2FA included) and then you come back here.
+            The password never passes through the blog. Any mailbox on
+            <strong>@Model.MailcowHost</strong> can write.
+        </p>
+        <form method="post">
+            <input type="hidden" name="returnUrl" value="@Model.ReturnUrl" />
+            <button type="submit" class="button button-block">Sign in with mailcow</button>
+        </form>
+    }
+    else
+    {
+        <div class="alert warning">
+            Sign-in is not configured yet: the mailcow OAuth2 client is missing.
+        </div>
+        <p class="muted">
+            On mailcow you need an OAuth2 app with redirect
+            <code>/admin/login/callback</code>; then put the client ID and secret in the
+            <code>MAILCOW_OAUTH_*</code> variables.
+        </p>
+    }
+
+    <p class="auth-back"><a asp-page="/Blog/Index">← Back to blog</a></p>
+</div>

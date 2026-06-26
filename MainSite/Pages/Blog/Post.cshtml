@@ -1,0 +1,83 @@
+@page "/blog/{slug}"
+@model MainSite.Pages.Blog.PostModel
+@{
+    ViewData["Title"] = Model.Post.Title;
+    ViewData["Description"] = Model.Post.Summary;
+    bool isAuthor = Model.IsAuthor;
+    string url = $"{HttpContext.Request.Scheme}://{HttpContext.Request.Host}/blog/{Model.Post.Slug}";
+}
+
+@section Head {
+    <link rel="canonical" href="@url" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="@Model.Post.Title" />
+    <meta property="og:description" content="@Model.Post.Summary" />
+    <meta property="og:url" content="@url" />
+    <meta property="article:published_time" content="@Model.Post.Published.UtcDateTime.ToString("O")" />
+}
+
+<article class="post">
+    <header class="post-header">
+        <div class="post-meta">
+            <time datetime="@Model.Post.Published.UtcDateTime.ToString("yyyy-MM-dd")">@Model.Clock.Format(Model.Post.Published)</time>
+            @if (BlogMarkdown.ReadingMinutes(Model.Post.Markdown) > 0)
+            {
+                <span aria-hidden="true">·</span>
+                <span>@BlogMarkdown.ReadingMinutes(Model.Post.Markdown) min read</span>
+            }
+        </div>
+
+        <h1>@Model.Post.Title</h1>
+
+        @if (!string.IsNullOrWhiteSpace(Model.Post.Summary))
+        {
+            <p class="lede">@Model.Post.Summary</p>
+        }
+
+        @if (Model.Post.Tags.Count > 0)
+        {
+            <div class="tags">
+                @foreach (string tag in Model.Post.Tags)
+                {
+                    <a class="tag" asp-page="/Blog/Tag" asp-route-tag="@BlogMarkdown.Slugify(tag)">@tag</a>
+                }
+            </div>
+        }
+    </header>
+
+    @if (Model.IsPreview)
+    {
+        <div class="alert warning">
+            @if (Model.Post.Draft)
+            {
+                <span>This is a draft: only you can see it because you are signed in.</span>
+            }
+            else
+            {
+                <span>This post is scheduled for @Model.Clock.Format(Model.Post.Published, "d MMMM yyyy 'at' HH:mm"): it is not public yet.</span>
+            }
+            @if (isAuthor)
+            {
+                <a asp-page="/Admin/Edit" asp-route-slug="@Model.Post.Slug">Edit</a>
+            }
+        </div>
+    }
+
+    <div class="prose">
+        @Html.Raw(Model.Html)
+    </div>
+
+    <footer class="post-footer">
+        <p>
+            Written by @Model.AuthorName
+            @if (Model.Post.Updated > Model.Post.Published.AddDays(2))
+            {
+                <span>· updated on @Model.Clock.Format(Model.Post.Updated)</span>
+            }
+        </p>
+        @if (isAuthor)
+        {
+            <a class="button button-secondary" asp-page="/Admin/Edit" asp-route-slug="@Model.Post.Slug">Edit post</a>
+        }
+    </footer>
+</article>

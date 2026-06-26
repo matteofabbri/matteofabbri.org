@@ -1,0 +1,179 @@
+@page "/visualmcp"
+@{
+    ViewData["Title"] = "VisualMCP";
+    ViewData["Description"] = "VisualMCP — a local MCP server that gives AI coding agents the IDE's brain for C#/.NET: Roslyn semantics, compiler-gated refactorings, debugging, profiling and decompilation as tools.";
+}
+
+<header class="page-head project-head">
+    <div>
+        <p class="eyebrow">Project</p>
+        <h1>VisualMCP</h1>
+        <p class="lede">
+            A local MCP server that gives AI coding agents the IDE's brain for
+            C#/.NET. More than 400 tools built on Roslyn, MSBuild and a real
+            debugger, so the agent asks the compiler instead of grepping text.
+        </p>
+    </div>
+</header>
+
+<p class="project-intro">
+    “Your agent is fluent in JavaScript. It guesses at C#.” VisualMCP exists so
+    that it stops guessing: every question about the code goes through the same
+    semantic model an IDE uses, and every edit is checked against the compiler
+    before it touches the disk. The code and the docs are on
+    <a href="https://github.com/matteofabbri/VisualMCP" target="_blank" rel="noopener">GitHub</a>.
+</p>
+
+<ol class="feature-list">
+    <li class="feature">
+        <span class="feature-number" aria-hidden="true">01</span>
+        <div class="feature-body">
+            <h2>It reads code the way the compiler does</h2>
+            <p class="feature-role">Semantic model, not regex</p>
+            <p>
+                Symbols, references, callers and implementations are resolved
+                through Roslyn, so overloads, generics, partial types and
+                interface dispatch are answered exactly — the way Visual
+                Studio would answer them, not the way a text search would.
+            </p>
+        </div>
+    </li>
+
+    <li class="feature">
+        <span class="feature-number" aria-hidden="true">02</span>
+        <div class="feature-body">
+            <h2>Refactorings that refuse to break the build</h2>
+            <p class="feature-role">Compiler-gated edits</p>
+            <p>
+                Rename, extract, move and change-signature operations are
+                verified against the compiler before anything is written. An
+                edit that would introduce an error is refused, and every write
+                is recorded so it can be reverted.
+            </p>
+        </div>
+    </li>
+
+    <li class="feature">
+        <span class="feature-number" aria-hidden="true">03</span>
+        <div class="feature-body">
+            <h2>The whole dev loop, in the conversation</h2>
+            <p class="feature-role">Build, test, debug, profile</p>
+            <p>
+                Build the solution, run the tests with coverage, attach a
+                debugger with breakpoints, run benchmarks, profile CPU,
+                allocations, GC and lock contention — all without the agent
+                ever leaving your repo's context.
+            </p>
+        </div>
+    </li>
+
+    <li class="feature">
+        <span class="feature-number" aria-hidden="true">04</span>
+        <div class="feature-body">
+            <h2>It reads binaries too</h2>
+            <p class="feature-role">ILSpy and Ghidra</p>
+            <p>
+                .NET assemblies are decompiled with ILSpy and native binaries
+                recovered with Ghidra; the result lands in the same queryable
+                model as the source code, so “what does this library actually
+                do?” has an answer.
+            </p>
+        </div>
+    </li>
+
+    <li class="feature">
+        <span class="feature-number" aria-hidden="true">05</span>
+        <div class="feature-body">
+            <h2>Local first</h2>
+            <p class="feature-role">No account, no hosted service</p>
+            <p>
+                One local process, talking to your MCP client — Claude Code,
+                ZCode and friends. Nothing about your code leaves the machine.
+            </p>
+        </div>
+    </li>
+</ol>
+
+<section class="docs-landing-head" aria-labelledby="visualmcp-docs">
+    <h2 id="visualmcp-docs">Documentation</h2>
+    <p>
+        The whole server, explained page by page: what each family of tools
+        does, which tool answers which question, and the ways of working that
+        make the agent and the compiler agree.
+    </p>
+</section>
+
+<ul class="docs-cards">
+    <li>
+        <a class="docs-card" href="/visualmcp/getting-started">
+            <h3>Getting started</h3>
+            <p>Requirements, install scopes, the routing guard, and a first five-minute session.</p>
+            <span class="docs-card-more">Read <span aria-hidden="true">→</span></span>
+        </a>
+    </li>
+    <li>
+        <a class="docs-card" href="/visualmcp/how-it-works">
+            <h3>How it works</h3>
+            <p>The process model, the solution store, the dashboard, the safety ladder and privacy.</p>
+            <span class="docs-card-more">Read <span aria-hidden="true">→</span></span>
+        </a>
+    </li>
+    <li>
+        <a class="docs-card" href="/visualmcp/tools">
+            <h3>Capabilities</h3>
+            <p>What is in the box: navigation, analysis, refactoring, style, runtime work and more.</p>
+            <span class="docs-card-more">Read <span aria-hidden="true">→</span></span>
+        </a>
+    </li>
+    <li>
+        <a class="docs-card" href="/visualmcp/guides/code">
+            <h3>Read code</h3>
+            <p>Finding and understanding code: symbols, references, diagnostics, audits, complexity.</p>
+            <span class="docs-card-more">Read <span aria-hidden="true">→</span></span>
+        </a>
+    </li>
+    <li>
+        <a class="docs-card" href="/visualmcp/guides/refactoring">
+            <h3>Refactor</h3>
+            <p>Semantic refactorings, the style engine, inspections and code fixes — and what “safe” means.</p>
+            <span class="docs-card-more">Read <span aria-hidden="true">→</span></span>
+        </a>
+    </li>
+    <li>
+        <a class="docs-card" href="/visualmcp/guides/razor">
+            <h3>Razor &amp; binaries</h3>
+            <p>Razor and Blazor pages, the canonical pseudocode model, ILSpy and Ghidra.</p>
+            <span class="docs-card-more">Read <span aria-hidden="true">→</span></span>
+        </a>
+    </li>
+    <li>
+        <a class="docs-card" href="/visualmcp/guides/runtime">
+            <h3>Build &amp; test</h3>
+            <p>Build, run, test with coverage, benchmarks, NuGet, publish and framework upgrades.</p>
+            <span class="docs-card-more">Read <span aria-hidden="true">→</span></span>
+        </a>
+    </li>
+    <li>
+        <a class="docs-card" href="/visualmcp/guides/profiling">
+            <h3>Profiling</h3>
+            <p>CPU, GC, allocations, I/O and locks of a live process — with verdicts, not just tables.</p>
+            <span class="docs-card-more">Read <span aria-hidden="true">→</span></span>
+        </a>
+    </li>
+    <li>
+        <a class="docs-card" href="/visualmcp/guides/workflow">
+            <h3>Workflow</h3>
+            <p>Batch plans, the board and its memory, Git, GitHub, Docker, HTTP and SignalR.</p>
+            <span class="docs-card-more">Read <span aria-hidden="true">→</span></span>
+        </a>
+    </li>
+</ul>
+
+<p class="project-note">
+    Source-available under the PolyForm Noncommercial license: free for
+    noncommercial use, commercial use requires a license. Stop your agent from
+    guessing — give it a compiler.
+    <a class="feature-link" href="https://github.com/matteofabbri/VisualMCP" target="_blank" rel="noopener">
+        matteofabbri/VisualMCP on GitHub <span aria-hidden="true">↗</span>
+    </a>
+</p>

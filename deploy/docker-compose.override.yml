@@ -1,0 +1,36 @@
+# Override del compose del sito, applicato automaticamente da `docker compose`
+# nella cartella /opt/matteofabbri.
+#
+# Serve a MainSite:
+#  - gli articoli e le immagini del blog stanno nel volume blog-data, non
+#    nell'immagine; senza il mount ogni deploy cancellerebbe i post;
+#  - il database Sperone embedded dei log richieste sta nel volume
+#    request-log-data, montato in /data/sperone, per la stessa ragione;
+#  - il database GeoIP (DB-IP Lite, aggiornato dallo script
+#    deploy/update-geoip.sh) sta in /opt/matteofabbri/geoip, montato read-only
+#    in /data/geoip;
+#  - il container gira come utente `app` (UID 1654), quindi il workflow di
+#    deploy crea i volumi e li chowna a 1654 prima di avviare il sito;
+#  - le variabili Blog__Auth__* arrivano dal .env del server: finché ClientId
+#    e secret sono vuoti l'area di scrittura resta spenta, il blog è leggibile;
+#  - la password DAV del calendario arriva da CALDAV_PASSWORD; l'account
+#    (matteo@matteofabbri.org) è hardcodato nel sito.
+services:
+  site:
+    environment:
+      Blog__ContentPath: /data/blog
+      Blog__Auth__BaseUrl: ${MAILCOW_OAUTH_URL:-https://mail.maddalena.me}
+      Blog__Auth__ClientId: ${MAILCOW_OAUTH_CLIENT_ID:-}
+      Blog__Auth__ClientSecret: ${MAILCOW_OAUTH_CLIENT_SECRET:-}
+      Calendar__CalDavUrl: ${CALDAV_URL:-https://mail.maddalena.me/SOGo/dav/}
+      Calendar__Password: ${CALDAV_PASSWORD:-}
+      RequestLog__Path: /data/sperone
+      RequestLog__GeoIpDatabasePath: /data/geoip/dbip-city-lite.mmdb
+    volumes:
+      - blog-data:/data/blog
+      - request-log-data:/data/sperone
+      - /opt/matteofabbri/geoip:/data/geoip:ro
+
+volumes:
+  blog-data:
+  request-log-data:

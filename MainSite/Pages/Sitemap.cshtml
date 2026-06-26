@@ -1,0 +1,73 @@
+@page "/sitemap"
+@model MainSite.Pages.SitemapModel
+@{
+    ViewData["Title"] = "Sitemap";
+}
+
+<div class="page-head">
+    <div>
+        <p class="eyebrow">Navigation</p>
+        <h1>Sitemap</h1>
+        <p class="lede">Every public page of the site in one place.</p>
+    </div>
+</div>
+
+<section class="sitemap-section">
+    <h2>Pages</h2>
+    <ul class="sitemap-list">
+        <li><a asp-page="/Blog/Index">Home / Blog</a></li>
+        <li><a asp-page="/Booking">Book a video call</a></li>
+        <li><a asp-page="/WhoIAmNot">Who I am not</a></li>
+        <li>
+            <a asp-page="/VisualMcp">VisualMCP</a>
+            <ul class="sitemap-nested">
+                <li><a href="/visualmcp/getting-started">Getting started</a></li>
+                <li><a href="/visualmcp/how-it-works">How it works</a></li>
+                <li><a href="/visualmcp/tools">Capabilities</a></li>
+                <li><a href="/visualmcp/guides/code">Reading and analysing code</a></li>
+                <li><a href="/visualmcp/guides/refactoring">Refactoring and style</a></li>
+                <li><a href="/visualmcp/guides/razor">Razor, metacode and decompilation</a></li>
+                <li><a href="/visualmcp/guides/runtime">Build, test and modernization</a></li>
+                <li><a href="/visualmcp/guides/profiling">Profiling</a></li>
+                <li><a href="/visualmcp/guides/workflow">Workflow and integrations</a></li>
+            </ul>
+        </li>
+        <li><a asp-page="/Requests">Requests around the world</a></li>
+        <li><a asp-page="/InfoBot">Bot info</a></li>
+        <li><a href="/blog/feed.xml">RSS feed</a></li>
+        <li><a href="/sitemap.xml">XML sitemap</a></li>
+    </ul>
+</section>
+
+<section class="sitemap-section">
+    <h2>Posts</h2>
+    @if (Model.Posts.Count == 0)
+    {
+        <p class="hint">No published posts yet.</p>
+    }
+    else
+    {
+        <ul class="sitemap-list">
+            @foreach (var post in Model.Posts)
+            {
+                <li>
+                    <a asp-page="/Blog/Post" asp-route-slug="@post.Slug">@post.Title</a>
+                    <span class="hint">@Model.Clock.Format(post.Published, "d MMM yyyy")</span>
+                </li>
+            }
+        </ul>
+    }
+</section>
+
+@if (Model.Tags.Count > 0)
+{
+    <section class="sitemap-section">
+        <h2>Tags</h2>
+        <ul class="sitemap-list">
+            @foreach (string tag in Model.Tags)
+            {
+                <li><a asp-page="/Blog/Tag" asp-route-tag="@BlogMarkdown.Slugify(tag)">@tag</a></li>
+            }
+        </ul>
+    </section>
+}

@@ -1,0 +1,153 @@
+@page "/visualmcp/guides/refactoring"
+@{
+    ViewData["Title"] = "Refactoring and style — VisualMCP";
+    ViewData["Description"] = "Semantic refactorings with VisualMCP: what makes them different from find/replace, the safety ladder from previews to the compiler gate, the style engine behind simplify_code, inspections with code fixes, and a safe working loop.";
+    ViewData["DocsKey"] = "refactoring";
+    ViewData["DocsGitHub"] = "https://github.com/matteofabbri/VisualMCP/blob/master/docs/guides/refactoring.md";
+}
+
+<partial name="_VisualMcpDocsNav" />
+
+<header class="page-head docs-head">
+    <div>
+        <h1>Refactoring and style</h1>
+        <p class="lede">
+            VisualMCP can change your code, not just read it. This guide
+            explains what makes those changes different from a find/replace,
+            which tools preview before writing, and how to run the style
+            engine without surprises.
+        </p>
+    </div>
+</header>
+
+<div class="docs-body prose">
+    <h2>What “semantic refactoring” means here</h2>
+    <ol>
+        <li><strong>Resolves the symbol</strong> through Roslyn — the exact declaration, overload or override you named.</li>
+        <li><strong>Rewrites the affected references</strong> across the solution — call sites, interface implementations, usings, constructor calls.</li>
+        <li><strong>Refuses rather than guesses</strong> when the operation would change meaning or cannot be expressed: a method group in <code>nameof</code>, an object initializer, a base class that uses the member.</li>
+        <li><strong>Records the write</strong> in the solution's edit history, with the previous text, so it can be audited and reverted.</li>
+    </ol>
+    <p>
+        A rename through <code>apply_rename</code> updates the declaration and
+        every real reference. A find/replace renames the same text in
+        comments, strings and unrelated types — and usually misses the
+        implicit interface implementations.
+    </p>
+
+    <h2>The safety ladder</h2>
+    <table>
+        <thead>
+            <tr><th>Stage</th><th>What it gives you</th></tr>
+        </thead>
+        <tbody>
+            <tr><td><strong>Read-only previews</strong></td><td><code>preview_rename</code>, <code>extract_method_candidates</code>, <code>inspect_code</code> — see the shape before touching anything.</td></tr>
+            <tr><td><strong>Dry run</strong></td><td>Most write tools accept <code>dryRun</code>: a before/after pair and a line diff per edit, nothing written.</td></tr>
+            <tr><td><strong>Compiler gate</strong></td><td>Risky operations compile the project after the change and refuse it if it would add errors.</td></tr>
+            <tr><td><strong>Edit history</strong></td><td><code>edit_history</code> lists every write; <code>revert_edit(id)</code> restores the file exactly.</td></tr>
+            <tr><td><strong>Your own safety net</strong></td><td>A branch and a clean <code>git_status</code> are still the cheapest rollback.</td></tr>
+        </tbody>
+    </table>
+
+    <h2>The catalogue by task</h2>
+    <h3>Rename and move</h3>
+    <p>
+        <code>apply_rename</code> / <code>preview_rename</code>,
+        <code>rename_namespace</code>, <code>move_type</code>,
+        <code>move_to_namespace</code>, <code>move_static_members</code>,
+        <code>move_instance_method</code>. Renames are semantic: parameter
+        names, backing fields, <code>nameof</code>, XML docs and interface
+        members follow.
+    </p>
+    <h3>Extract and inline</h3>
+    <p>
+        <code>extract_method</code>, <code>extract_class</code>,
+        <code>extract_superclass</code>, <code>extract_interface</code>,
+        <code>inline_symbol</code>, <code>introduce_variable</code>.
+        <code>extract_method</code> handles a contiguous statement block; a
+        block that awaits becomes an <code>async Task</code> method, and
+        blocks that cannot be proven equivalent — <code>yield</code>,
+        <code>break</code>, a mid-block return — are refused.
+    </p>
+    <h3>Signatures and types</h3>
+    <p>
+        <code>change_signature</code> is the one to reach for when a parameter
+        is added, removed or reordered: it returns every call site as a
+        before/after pair and is gated on the compiler.
+        <code>change_type</code>, <code>change_nullability</code>,
+        <code>use_base_type</code>, <code>convert_to_record</code>,
+        <code>convert_to_primary_constructor</code>,
+        <code>constructor_to_factory</code>, <code>copy_type</code>.
+    </p>
+    <h3>Inheritance and membership</h3>
+    <p>
+        <code>pull_members_up</code>, <code>push_members_down</code>,
+        <code>generate_members</code>, <code>implement_inpc</code>,
+        <code>make_static</code>, <code>type_to_partial</code>. A selection
+        that would not compile is refused with the name of the offending
+        member, not applied half-way.
+    </p>
+    <h3>Complexity</h3>
+    <p>
+        <code>reduce_complexity</code> is the bridge between analysis and
+        refactoring: it plans the moves that remove decisions from a method —
+        extract a nested block, name a tangled boolean, flatten a tail
+        <code>if</code> into a guard clause — applies them one at a time,
+        re-measures, and stops at the target. <code>fix_complexity</code> is
+        the same reducer without having to name a method: it ranks the whole
+        solution and lowers the worst methods.
+    </p>
+
+    <h2>The style engine</h2>
+    <p>
+        <code>simplify_code</code> applies the IDE's mechanical suggestions —
+        the quick-fix popup equivalents — without an IDE. It is a rewrite
+        engine over Roslyn syntax trees, not a formatter: collection
+        expressions, null-coalescing, pattern matching, expression-bodied
+        members, switch expressions, LINQ chain simplifications, dead code and
+        unused members, <code>^</code> and ranges, <code>nameof</code>,
+        nullability-directive cleanup.
+    </p>
+    <pre><code>simplify_code scope=project projectName=MyApp rules=IDE0028,IDE0041</code></pre>
+    <ul>
+        <li><strong>Scope</strong> is one document, one project or the solution; <strong>rules</strong> is a comma-separated list, or all supported rules when omitted.</li>
+        <li><strong><code>dryRun=true</code> is the default</strong>: the before/after pair per edit and a line diff, nothing written.</li>
+        <li>On write, each changed document is <strong>compiled</strong>; a document whose change would add errors is reported under <code>refused</code> and left untouched.</li>
+        <li>Team preferences are <strong>option-driven</strong>: the rules that depend on a style choice act only when your <code>.editorconfig</code> sets the option, and the result names the option it waited for.</li>
+        <li>Visual Basic has its own layer, <code>simplify_vb_code</code>, with the same shape and its own rule set.</li>
+    </ul>
+
+    <h2>Inspections and code fixes</h2>
+    <p>
+        Two tools, two directions. <code>inspect_code</code> runs the built-in
+        inspection packs — the house rules, Roslynator, .NET analyzers,
+        AsyncFixer, Meziantou, StyleCop — over every project, with no analyzer
+        package referenced by your solution. <code>apply_code_fix</code>
+        re-runs the packs and executes the analyzer's <strong>own</strong>
+        code fix provider: preview by default, FixAll supported, and rules
+        that ship no fix are refused with that message rather than a guessed
+        edit.
+    </p>
+    <pre><code>inspect_code    packs=all minSeverity=warning ids=RCS*,CA18*
+apply_code_fix  diagnosticId=RCS1060 filePath=Services/OrderService.cs line=42</code></pre>
+
+    <h2>What “safe” does not mean</h2>
+    <ul>
+        <li>The compiler gate proves <strong>compilation, not behaviour</strong>. A rewrite can compile and still change meaning.</li>
+        <li>The style gate is per document: one bad rewrite refuses that document's changes; other documents in the same run still apply.</li>
+        <li>Refactorings refuse instead of approximating. A refusal names what blocked it; the next step is usually to prepare the code, then retry.</li>
+    </ul>
+
+    <h2>A safe working loop</h2>
+    <ol>
+        <li><code>git_status</code> — know what is already modified.</li>
+        <li>Understand the target: <code>find_symbol</code>, <code>read_symbol</code>, <code>find_references</code>.</li>
+        <li>Preview: <code>preview_rename</code>, <code>simplify_code</code> with <code>dryRun=true</code>.</li>
+        <li>Write one operation at a time.</li>
+        <li><code>build_project</code> and <code>run_tests</code>.</li>
+        <li><code>inspect_code</code> to catch what the compiler does not.</li>
+        <li>If something is wrong: <code>edit_history</code>, then <code>revert_edit(id)</code>.</li>
+    </ol>
+</div>
+
+<partial name="_VisualMcpDocsFooter" />

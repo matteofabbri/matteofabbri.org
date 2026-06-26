@@ -1,0 +1,123 @@
+@page "/visualmcp/how-it-works"
+@{
+    ViewData["Title"] = "How it works — VisualMCP";
+    ViewData["Description"] = "VisualMCP under the hood: the process model, Roslyn solution loading, one process per workspace, the solution store, the loopback dashboard, the safety model behind every write and what the privacy guarantees really are.";
+    ViewData["DocsKey"] = "how-it-works";
+    ViewData["DocsGitHub"] = "https://github.com/matteofabbri/VisualMCP/blob/master/docs/how-it-works.md";
+}
+
+<partial name="_VisualMcpDocsNav" />
+
+<header class="page-head docs-head">
+    <div>
+        <h1>How it works</h1>
+        <p class="lede">
+            A single local process, loaded with the same MSBuild workspace an
+            IDE uses. This page explains what it loads, what it writes, how it
+            decides that a change is safe, and what does — and does not —
+            leave your machine.
+        </p>
+    </div>
+</header>
+
+<div class="docs-body prose">
+    <h2>The process model</h2>
+    <p>
+        Your MCP client starts the server as a child process and speaks MCP
+        over stdin/stdout. Nothing is hosted: there is no listening port except
+        the optional loopback dashboard. The process does four things:
+    </p>
+    <ul>
+        <li><strong>Loads the solution</strong> with Roslyn's <code>MSBuildWorkspace</code>, so tools see the project graph, target frameworks, references and compiler diagnostics the way an IDE does.</li>
+        <li><strong>Keeps derived data</strong> in <code>&lt;workspace&gt;/.visualMCP/visualmcp.db</code> — indexes, edit history, the board, cached reports. The source files on disk remain the only truth.</li>
+        <li><strong>Serves an optional web view</strong> on a loopback port: read-only pages over the store, plus an interactive board.</li>
+        <li><strong>Writes its log</strong> to a file — stdout belongs to the protocol.</li>
+    </ul>
+    <p>
+        At startup the server opens the environment in the background, so the
+        first tool call does not pay for MSBuild evaluation. A client's
+        discovery probe is detected and skips the load entirely.
+    </p>
+
+    <h2>One process, one workspace</h2>
+    <p>
+        The folder your client opened is the <strong>workspace</strong>: it is
+        fixed at startup, discovery and the store belong to it, and
+        <code>load_solution</code> accepts only a solution beneath it. Another
+        repository is another server, which the client already starts. The
+        store is the workspace's one database, keyed on its primary solution —
+        and two sessions on the same workspace share it, with one background
+        watcher elected through a lease.
+    </p>
+    <p>
+        The workspace is a snapshot: the server keeps it in sync with its own
+        writes, and after large changes made outside it — an IDE, a branch
+        switch — call <code>load_solution</code> again to refresh the model.
+    </p>
+
+    <h2>The solution store</h2>
+    <p>
+        <code>.visualMCP/visualmcp.db</code> is a SQLite database with one rule
+        for what goes in: <strong>only derived, reconstructible data</strong>,
+        always stamped with the hash or timestamp of its inputs. Activity
+        (every tool call, every file written — with the previous text,
+        compressed), the board, the symbol index, the metacode index, the
+        full-text index, the resolved NuGet graph and the decompilation
+        artifacts each have their own tables.
+    </p>
+    <ul>
+        <li><strong>Indexes are snapshots.</strong> They are built incrementally from content hashes; build or refresh them after substantial edits.</li>
+        <li><strong>The store is a cache, not a backup.</strong> Add <code>.visualMCP/</code> to <code>.gitignore</code>. Deleting it costs a rebuild, not data — the board being the deliberate exception.</li>
+    </ul>
+
+    <h2>The dashboard</h2>
+    <p>
+        The server hosts a web view of itself at
+        <code>http://127.0.0.1:4677</code>: a home page with process facts and
+        the latest calls, the interactive board, one page per store table with
+        filtering and CSV/JSON export, the schema, the live tool catalogue and
+        the log tail. Only the board writes, through the same service the
+        <code>board_*</code> tools call, from a same-origin POST — so another
+        site cannot drive it. <code>VISUALMCP_DASHBOARD=off</code> disables it.
+    </p>
+
+    <h2>The safety model</h2>
+    <p>Tools fall into four classes. Knowing which one you are calling is the whole safety story.</p>
+    <table>
+        <thead>
+            <tr><th>Class</th><th>Examples</th><th>Behaviour</th></tr>
+        </thead>
+        <tbody>
+            <tr><td><strong>Read-only</strong></td><td><code>find_symbol</code>, <code>solution_audit</code>, <code>inspect_code</code>, <code>profile_*</code></td><td>Reads the solution, the store or a process. Writes nothing.</td></tr>
+            <tr><td><strong>Preview-first</strong></td><td><code>simplify_code</code>, <code>apply_code_fix</code>, <code>razor_edit</code>, most refactorings</td><td>Returns the proposed change and a line diff. Nothing is written until <code>dryRun=false</code>.</td></tr>
+            <tr><td><strong>Write-through</strong></td><td><code>apply_rename</code>, <code>change_signature</code>, <code>safe_delete</code></td><td>Performs the change; the tool's schema states the default.</td></tr>
+            <tr><td><strong>Destructive, confirmed</strong></td><td><code>git_reset</code> with <code>mode=hard</code>, <code>docker_prune</code></td><td>Refuses unless <code>confirm=true</code> is passed.</td></tr>
+        </tbody>
+    </table>
+    <p>Three further mechanisms make writes auditable and reversible:</p>
+    <ul>
+        <li><strong>The compiler gate.</strong> Risky refactorings compile the project after the change and refuse it if it would add errors; the file is left untouched.</li>
+        <li><strong>The edit history.</strong> Every write preserves the file's BOM and line endings and records the previous text. <code>edit_history</code> lists each write; <code>revert_edit(id)</code> restores the file exactly.</li>
+        <li><strong>The <code>expect</code> guard.</strong> <code>razor_edit</code> takes the text the target lines must currently hold and refuses the splice if the file no longer matches.</li>
+    </ul>
+
+    <h2>Privacy, stated precisely</h2>
+    <p>
+        The server is local and has no remote endpoint. It does not upload
+        source, telemetry or usage data. Network access happens only when a
+        specific job requires it: a NuGet restore during a build, an explicit
+        <code>download_file</code>, the GitHub CLI, the update check, the
+        symbol server you configure, and the one-time Ghidra download used by
+        native binary analysis.
+    </p>
+    <p>
+        What does reach a remote party is the <strong>conversation</strong>
+        your client sends to its model provider — including tool results such
+        as source returned by <code>read_file</code> or <code>read_symbol</code>.
+        That is identical to any other MCP tool or to pasting code into the
+        chat; VisualMCP only makes sure the server side of the conversation
+        stays local.
+    </p>
+</div>
+
+<partial name="_VisualMcpDocsFooter" />

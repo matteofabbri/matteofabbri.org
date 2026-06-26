@@ -1,0 +1,120 @@
+@page "/visualmcp/guides/razor"
+@{
+    ViewData["Title"] = "Razor, metacode and decompilation — VisualMCP";
+    ViewData["Description"] = "Three ways of reading code that is not plain C#: Razor and Blazor pages analysed from disk with security rules, the canonical pseudocode model shared by every language, and binaries decompiled with ILSpy and Ghidra.";
+    ViewData["DocsKey"] = "razor";
+    ViewData["DocsGitHub"] = "https://github.com/matteofabbri/VisualMCP/blob/master/docs/guides/razor-metacode.md";
+}
+
+<partial name="_VisualMcpDocsNav" />
+
+<header class="page-head docs-head">
+    <div>
+        <h1>Razor, metacode and decompilation</h1>
+        <p class="lede">
+            Three ways of reading code that is not plain C# in a Roslyn
+            project: Razor pages, canonical pseudocode shared by every
+            language, and compiled assemblies — managed or native.
+        </p>
+    </div>
+</header>
+
+<div class="docs-body prose">
+    <h2>Razor and Blazor pages</h2>
+    <p>
+        <code>.cshtml</code> and <code>.razor</code> files are not Roslyn
+        documents: the Razor SDK compiles them with a different toolchain.
+        VisualMCP reads them <strong>from disk</strong>, with a dedicated
+        scanner that maps each file to a page model — which also means the
+        analysis works without a loaded solution, useful for auditing a
+        repository you have not opened.
+    </p>
+    <table>
+        <thead>
+            <tr><th>Tool</th><th>Answers</th></tr>
+        </thead>
+        <tbody>
+            <tr><td><code>razor_pages</code></td><td>What exists and how it is wired: kind, <code>@@page</code> route, <code>@@model</code>, layout, sections, <code>@@inject</code>, handlers, code-behind, markup counts.</td></tr>
+            <tr><td><code>analyze_razor_pages</code></td><td>What is wrong with the markup: broken HTML, accessibility, Razor misuse, maintainability.</td></tr>
+            <tr><td><code>find_razor_vulnerabilities</code></td><td>What is exploitable: XSS, CSRF, secrets, unsafe URLs, CSP — each finding with a CWE id.</td></tr>
+            <tr><td><code>razor_edit</code></td><td>The write side: six verified text splices.</td></tr>
+        </tbody>
+    </table>
+    <p>
+        The security rules know Razor: <code>@@Html.Raw</code> with an
+        unencoded value, model data inside a <code>&lt;script&gt;</code> block
+        or an inline handler, <code>javascript:</code> URLs, POST forms with
+        no anti-forgery token, passwords submitted with GET, hardcoded
+        credentials, <code>target="_blank"</code> without
+        <code>noopener</code>. Values already passed to an encoder do not
+        fire. It is a heuristic analysis — no data flow — so a clean result is
+        not a security proof.
+    </p>
+    <p>
+        <code>razor_edit</code> performs one verified splice per call: set or
+        remove an attribute on the <em>n</em>-th element with a tag, add a
+        directive, insert, replace or delete lines. The <code>expect</code>
+        argument takes the text the target lines must currently hold — if the
+        file no longer matches, the edit is refused. The page is re-scanned
+        before writing, and the result reports the findings the edit resolved
+        and introduced.
+    </p>
+
+    <h2>Metacode</h2>
+    <p>
+        Metacode is one canonical pseudocode model for syntax trees from
+        different languages. The same algorithm prints the same body, line
+        for line, whichever frontend produced it: uppercase keywords, one
+        statement per line, operator precedence preserved.
+    </p>
+    <pre><code>metacode_translate  path=Services/OrderService.cs
+metacode_translate  path=Pages/Checkout.cshtml
+metacode_compare    leftPath=OrderService.cs rightPath=OrderService.kt.mc</code></pre>
+    <ul>
+        <li>C#, Visual Basic, Razor, JavaScript, Java, Python, C++ and Rust are all inputs — the last three through their own toolchains, lowered into the same model.</li>
+        <li>A construct the model has no node for stays visible as <code>RAW[lang]</code> with a diagnostic: incomplete translation is visible, never silent.</li>
+        <li><code>metacode_compare</code> is the equivalence check: two spellings of an algorithm compared line by line, which is how you review a port or verify that a refactor kept the shape of a body.</li>
+    </ul>
+
+    <h2>Decompiling managed assemblies</h2>
+    <table>
+        <thead>
+            <tr><th>Tool</th><th>What it does</th></tr>
+        </thead>
+        <tbody>
+            <tr><td><code>decompile_type</code></td><td>One type from a <code>.dll</code> back to C#, with ILSpy.</td></tr>
+            <tr><td><code>decompile_assembly</code></td><td>A whole module, or a filtered, paged set of types; can export one file per type.</td></tr>
+            <tr><td><code>inspect_assembly</code></td><td>The public API — types, base types, interfaces, members — without running anything.</td></tr>
+            <tr><td><code>decompile_to_metacode</code></td><td>ILSpy → C# → the metacode model, printed as pseudocode instead of C#.</td></tr>
+            <tr><td><code>inspect_package</code>, <code>decompile_package_type</code></td><td>The same, starting from a NuGet package id and version.</td></tr>
+        </tbody>
+    </table>
+
+    <h2>Recovering native binaries</h2>
+    <p>
+        <code>analyze_native_binary</code> runs <strong>Ghidra headless</strong>
+        on a PE/ELF/Mach-O file, exports every function's decompiled C and
+        lowers it into the same model:
+    </p>
+    <pre><code>analyze_native_binary  binaryPath=C:\Windows\System32\notepad.exe maxFunctions=5</code></pre>
+    <p>
+        It is a real external run — tens of seconds, bounded by a timeout that
+        kills the whole process tree. Narrow it with a function name or entry
+        address, or a maximum function count. Ghidra is installed on demand
+        into the per-user tools folder when no installation is found, and the
+        binary never leaves the machine.
+    </p>
+
+    <h2>Decompiled code lives in the same AST</h2>
+    <p>
+        What gets decompiled is stored in the <strong>same tables</strong> as
+        the solution's own code, under <code>assembly://</code> and
+        <code>native://</code> keys, with provenance columns that say which
+        file it came from and that it was decompiled. The complexity ranking,
+        the metacode queries and a raw SQL query never confuse recovered code
+        with source you own — so “what does this library actually do?” is
+        answered with the same tools that answer it about your own code.
+    </p>
+</div>
+
+<partial name="_VisualMcpDocsFooter" />

@@ -1,0 +1,147 @@
+@page "/visualmcp/guides/code"
+@{
+    ViewData["Title"] = "Reading and analysing code — VisualMCP";
+    ViewData["Description"] = "How to find, read and understand code with VisualMCP: the semantic lookup table, why grep answers a different question, build and diagnostics, and how to pick the right analysis tool for a question.";
+    ViewData["DocsKey"] = "code";
+    ViewData["DocsGitHub"] = "https://github.com/matteofabbri/VisualMCP/blob/master/docs/guides/code.md";
+}
+
+<partial name="_VisualMcpDocsNav" />
+
+<header class="page-head docs-head">
+    <div>
+        <h1>Reading and analysing code</h1>
+        <p class="lede">
+            The first rule of working in a .NET solution with VisualMCP: ask
+            the compiler, not the text. This guide covers how to find, read
+            and understand code — and how to pick the right analysis tool for
+            a question.
+        </p>
+    </div>
+</header>
+
+<div class="docs-body prose">
+    <h2>The lookup table</h2>
+    <table>
+        <thead>
+            <tr><th>You want</th><th>Call</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>A type or member by name</td><td><code>find_symbol</code></td></tr>
+            <tr><td>The <strong>source</strong> of that declaration</td><td><code>read_symbol</code></td></tr>
+            <tr><td>Every place a symbol is used</td><td><code>find_references</code></td></tr>
+            <tr><td>Every method that calls this one</td><td><code>find_callers</code></td></tr>
+            <tr><td>Every implementation of an interface</td><td><code>find_implementations</code></td></tr>
+            <tr><td>The subclasses of a class</td><td><code>find_derived_types</code></td></tr>
+            <tr><td>A type's full member list, with signatures and docs</td><td><code>get_type_members</code></td></tr>
+            <tr><td>The project's files, references and packages</td><td><code>get_project_info</code></td></tr>
+            <tr><td>The solution's README and Markdown</td><td><code>read_project_docs</code></td></tr>
+        </tbody>
+    </table>
+
+    <h2>Why not grep</h2>
+    <p>
+        Text search answers a different question: <em>where does this string
+        appear?</em> On real C# that is not the same as <em>where is this
+        symbol used?</em> A method name can be an overload; a call through an
+        interface has no textual trace of the concrete method; comments,
+        strings and same-named members of unrelated types all match.
+        <code>find_references</code> resolves the <strong>symbol</strong>, so
+        it returns the real uses and skips the noise. Text search still exists
+        — <code>search_text</code> for arbitrary files, <code>text_index</code>
+        for ranked, word-based search across the whole solution.
+    </p>
+
+    <h3>A typical walk</h3>
+    <pre><code>find_symbol        → OrderService.ChargeAsync (3 matches, in two projects)
+read_symbol        → the method body, with line numbers
+find_references    → 14 real uses: 9 calls, 3 interface implementations, 2 registrations
+find_callers       → the 4 methods that call it
+get_type_members   → the rest of OrderService, with signatures and docs</code></pre>
+    <p>Each of those is one call. A text-based agent spends several round trips per step and still misses the interface dispatch.</p>
+
+    <h2>Build and diagnostics</h2>
+    <table>
+        <thead>
+            <tr><th>Question</th><th>Tool</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>Does it compile, and what are the errors?</td><td><code>build_project</code></td></tr>
+            <tr><td>What does the compiler think right now?</td><td><code>get_diagnostics</code></td></tr>
+            <tr><td>Fix the mechanical compiler diagnostics</td><td><code>fix_diagnostics</code></td></tr>
+            <tr><td>What do the configured analyzers say?</td><td><code>run_code_analysis</code></td></tr>
+            <tr><td>What do the built-in inspection packs say?</td><td><code>inspect_code</code></td></tr>
+        </tbody>
+    </table>
+    <p>
+        <code>build_project</code> returns structured diagnostics — id,
+        severity, file, line — instead of a log tail. <code>fix_diagnostics</code>
+        is the write side: it rewrites eight mechanical <code>CS####</code>
+        shapes (unused locals and fields, duplicated usings, hidden members…),
+        each accepted only when the project compiles no worse.
+    </p>
+
+    <h2>Choose the right analysis</h2>
+    <p>
+        <code>solution_audit</code> is the front door: one call returns
+        inspections grouped by id, compiler diagnostics, the most complex
+        methods, the largest files, the project graph with cycles and
+        suggested first moves. When you need to go deeper:
+    </p>
+    <table>
+        <thead>
+            <tr><th>Question</th><th>Tool</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>How many paths must a reader hold?</td><td><code>complexity_report</code>, <code>get_complexity_hotspots</code></td></tr>
+            <tr><td>How does this scale with <em>n</em>?</td><td><code>analyze_complexity</code> — a static Big-O estimate with its evidence</td></tr>
+            <tr><td>This method is too complex — lower it</td><td><code>reduce_complexity</code>, or <code>fix_complexity</code> for the whole solution</td></tr>
+            <tr><td>Where does a refactoring pay first?</td><td><code>git_churn_hotspots</code> — git history joined with the complexity ranking</td></tr>
+            <tr><td>Did this branch make the code better or worse?</td><td><code>get_quality_trend</code></td></tr>
+            <tr><td>Is this code reachable?</td><td><code>find_dead_code</code> — control-flow graph, not heuristics over text</td></tr>
+            <tr><td>Is this code duplicated?</td><td><code>find_duplicate_code</code> — structural clones, normalised over names and literals</td></tr>
+            <tr><td>Is there a security problem?</td><td><code>find_security_issues</code> — CWE-tagged: injection, crypto, secrets, SSRF, XXE, TLS…</td></tr>
+            <tr><td>Is the async code wrong?</td><td><code>find_async_anti_patterns</code> — <code>.Result</code>/<code>.Wait()</code>, <code>async void</code>, await in loops</td></tr>
+            <tr><td>Are the namespaces tangled?</td><td><code>analyze_namespace_coupling</code>, real cycles included</td></tr>
+            <tr><td>What will this change break?</td><td><code>plan_feature_change</code> — ordered impact plan with files and tests</td></tr>
+        </tbody>
+    </table>
+
+    <h3>The two meanings of “complexity”</h3>
+    <p>
+        Cyclomatic and cognitive complexity measure how many paths a
+        <em>reader</em> has to hold in their head. Big-O measures how cost
+        grows with input size. They are easy to confuse, and using the wrong
+        one gives a misleading answer: <code>complexity_report</code> for the
+        first, <code>analyze_complexity</code> for the second, and
+        <code>profile_*</code> to measure what actually happens at runtime.
+    </p>
+
+    <h2>Confidence</h2>
+    <p>
+        These tools are static. They are precise about what the compiler knows
+        — symbols, overloads, types, control flow — and honest about what they
+        infer. <code>analyze_complexity</code> reports its confidence and its
+        evidence; a clean <code>find_security_issues</code> is not a security
+        audit; code invoked by reflection may look dead. A refusal or a
+        confidence note is information, not an error.
+    </p>
+
+    <h2>Worked examples</h2>
+    <p><strong>“Where is this used and what breaks if I change it?”</strong></p>
+    <pre><code>find_symbol          OrderService.ChargeAsync
+find_references      → every call, implementation and registration
+plan_feature_change  → impact graph with files and tests, in order</code></pre>
+    <p><strong>“Make this solution understandable before I touch it.”</strong></p>
+    <pre><code>read_project_docs    → what the project says about itself
+solution_audit       → health report and first moves
+find_unused_symbols  → dead weight
+analyze_dependencies → project graph, cycles</code></pre>
+    <p><strong>“Is this safe to ship?”</strong></p>
+    <pre><code>find_security_issues
+find_async_anti_patterns
+inspect_code         with packs=all, minSeverity=warning
+run_tests</code></pre>
+</div>
+
+<partial name="_VisualMcpDocsFooter" />

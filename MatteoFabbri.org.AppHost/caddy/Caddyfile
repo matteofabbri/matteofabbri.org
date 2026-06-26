@@ -1,0 +1,202 @@
+# Caddyfile — la "portineria" davanti a tutto (Strada B: "lascia passare").
+#
+# LOGICA: Caddy riconosce solo i SITI (lista corta e stabile) e li termina lui
+# (TLS + certificati Let's Encrypt). TUTTO IL RESTO passa sigillato a mailcow,
+# che gestisce i suoi nomi e i suoi certificati da solo.
+#
+# I SITI oggi sono TRE (ognuno col suo blocco in fondo + il suo nome nel matcher
+# @site qui sotto). Tutti e tre hanno il redirect /mail verso la webmail:
+#   - matteofabbri.org  (SITE_DOMAIN)      -> sito personale
+#   - theqult.org       (THEQULT_DOMAIN)   -> API TheQult
+#   - maddalena.me      (MADDALENA_DOMAIN) -> sito MVC Maddalena
+#
+# Conseguenza pratica: aggiungere un nome alla POSTA (il nome generico OVH per
+# la transizione, mail.theqult.org, ...) NON richiede di toccare questo file.
+# Si fa tutto lato mailcow (ADDITIONAL_SAN in mailcow.conf + DNS).
+# Questo file si tocca solo per aggiungere/togliere un SITO WEB.
+# Eccezione dichiarata: autoconfig./autodiscover.maddalena.me hanno un forward
+# ESPLICITO verso mailcow (matcher @mailauto in :443 e :80), per non dipendere
+# dal catch-all.
+#
+# Variabili (impostate dall'AppHost Aspire / file .env del compose):
+#   SITE_DOMAIN           -> dominio del sito personale   (es. matteofabbri.org)
+#   THEQULT_DOMAIN        -> secondo sito                 (es. theqult.org)
+#   MADDALENA_DOMAIN      -> terzo sito                   (es. maddalena.me)
+#   WEBMAIL_HOST          -> dove vive la webmail, usato dal redirect /mail
+#                            (es. mail.matteofabbri.org; durante la transizione
+#                             puo' essere il nome generico OVH)
+#   SITE_UPSTREAM         -> backend del sito personale   (es. site:8080)
+#   THEQULT_UPSTREAM      -> backend dell'API TheQult      (es. theqult:8080)
+#   MADDALENA_UPSTREAM    -> backend del sito Maddalena    (es. maddalena:8080)
+#   MAILCOW_TLS_UPSTREAM  -> nginx di mailcow, HTTPS       (es. nginx-mailcow:8443)
+#   MAILCOW_HTTP_UPSTREAM -> nginx di mailcow, HTTP        (es. nginx-mailcow:8080)
+{
+	# Porte INTERNE del server HTTP/HTTPS di Caddy. Le porte pubbliche reali
+	# (80/443) le tiene il livello "layer4" qui sotto.
+	http_port 8080
+	https_port 8443
+
+	# Il layer4 inoltra il traffico dei siti a questo server HTTP: senza
+	# PROXY protocol l'IP del client collasserebbe su 127.0.0.1 (GeoIP, rate
+	# limit per IP e log vedrebbero tutti uguali). Il wrapper va prima di tls,
+	# che altrimenti leggerebbe l'header come inizio dell'handshake.
+	# fallback_policy use: usa l'indirizzo del header quando c'è; le
+	# connessioni senza header (es. la porta 8080 interna) passano lo stesso.
+	servers {
+		listener_wrappers {
+			proxy_protocol {
+				fallback_policy use
+			}
+			tls
+		}
+	}
+
+	# Account ACME per Let's Encrypt (solo per i siti che Caddy termina).
+	email {$ACME_EMAIL}
+
+	# --- Smistamento a livello TCP, prima del TLS -------------------------
+	layer4 {
+		# HTTPS pubblico (443)
+		:443 {
+			# Siti: riconosco il nome nell'handshake (SNI) e li termino io.
+			# Per un nuovo sito: aggiungi il suo dominio (e il suo www.) a
+			# questa riga e crea il suo blocco in fondo al file.
+			@site tls sni {$SITE_DOMAIN} www.{$SITE_DOMAIN} {$THEQULT_DOMAIN} www.{$THEQULT_DOMAIN} {$MADDALENA_DOMAIN} www.{$MADDALENA_DOMAIN}
+			route @site {
+				proxy {
+					upstream 127.0.0.1:8443
+					# Passa l'IP originale al server HTTP interno (che sta
+					# nello stesso processo ma su un'altra connessione).
+					proxy_protocol v1
+				}
+			}
+			# Autoconfigurazione dei client di posta (Thunderbird = autoconfig,
+			# Outlook = autodiscover): forward ESPLICITO a mailcow, TLS sigillato
+			# (il certificato per questi nomi se lo fa mailcow, che li include da
+			# solo nel suo cert). Passerebbero comunque dal catch-all qui sotto:
+			# dichiararli li rende garantiti anche se il catch-all cambia.
+			@mailauto tls sni autoconfig.{$MADDALENA_DOMAIN} autodiscover.{$MADDALENA_DOMAIN}
+			route @mailauto {
+				proxy {
+					upstream {$MAILCOW_TLS_UPSTREAM}
+				}
+			}
+			# Tutto il resto (posta: mail.*, autodiscover, autoconfig,
+			# nome OVH di transizione, ...): TLS sigillato a mailcow.
+			route {
+				proxy {
+					upstream {$MAILCOW_TLS_UPSTREAM}
+				}
+			}
+		}
+
+		# HTTP pubblico (80)
+		:80 {
+			# Siti: al server HTTP interno di Caddy (fara' il redirect a https).
+			@site http host {$SITE_DOMAIN} www.{$SITE_DOMAIN} {$THEQULT_DOMAIN} www.{$THEQULT_DOMAIN} {$MADDALENA_DOMAIN} www.{$MADDALENA_DOMAIN}
+			route @site {
+				proxy {
+					upstream 127.0.0.1:8080
+				}
+			}
+			# Autoconfigurazione client di posta anche in chiaro: Thunderbird
+			# prova autoconfig pure su http, e da qui passano le sfide
+			# Let's Encrypt di questi due nomi.
+			@mailauto http host autoconfig.{$MADDALENA_DOMAIN} autodiscover.{$MADDALENA_DOMAIN}
+			route @mailauto {
+				proxy {
+					upstream {$MAILCOW_HTTP_UPSTREAM}
+				}
+			}
+			# Tutto il resto a mailcow: cosi' le sfide Let's Encrypt dei
+			# nomi di posta (qualunque essi siano) gli arrivano da sole.
+			route {
+				proxy {
+					upstream {$MAILCOW_HTTP_UPSTREAM}
+				}
+			}
+		}
+	}
+}
+
+# --- Header comuni a tutti i siti (importati con "import secure_headers") ----
+# Sicurezza in piu', informazioni in meno:
+#   - HSTS: il browser memorizza "questo sito solo in https" per un anno.
+#     Niente includeSubDomains: i sottodomini (mail.*, autoconfig.*, ...) li
+#     serve mailcow o il vecchio server, non vincoliamo casa d'altri.
+#   - X-Frame-Options: la pagina non e' incorniciabile da siti terzi (clickjacking).
+#   - Referrer-Policy: ai link esterni arriva solo il dominio, non l'URL intero.
+#   - -Server/-Via: non riveliamo che dietro ci sono Kestrel e Caddy
+#     (le rimozioni Caddy le applica a fine risposta, quindi valgono anche
+#     sugli header aggiunti dal reverse_proxy e dall'upstream).
+(secure_headers) {
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Frame-Options "SAMEORIGIN"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+		-Via
+	}
+}
+
+# --- Sito personale (TLS terminato da Caddy) ---------------------------------
+# Include anche www.: serve solo per il certificato + redirect alla versione
+# senza www (es. se il registrar crea un www. accanto al record principale).
+{$SITE_DOMAIN}, www.{$SITE_DOMAIN} {
+	import secure_headers
+
+	@www host www.{$SITE_DOMAIN}
+	redir @www https://{$SITE_DOMAIN}{uri} permanent
+
+	# /mail -> redirect alla webmail, ovunque essa viva in questo momento.
+	redir /mail /mail/
+	handle_path /mail/* {
+		redir https://{$WEBMAIL_HOST}/ permanent
+	}
+
+	# Tutto il resto -> il sito personale.
+	handle {
+		reverse_proxy {$SITE_UPSTREAM}
+	}
+}
+
+# --- theqult.org (API) -------------------------------------------------------
+{$THEQULT_DOMAIN}, www.{$THEQULT_DOMAIN} {
+	import secure_headers
+
+	@www host www.{$THEQULT_DOMAIN}
+	redir @www https://{$THEQULT_DOMAIN}{uri} permanent
+
+	# /mail -> webmail su mailcow (stesso meccanismo di matteofabbri.org).
+	redir /mail /mail/
+	handle_path /mail/* {
+		redir https://{$WEBMAIL_HOST}/ permanent
+	}
+
+	# Tutto il resto -> l'API TheQult.
+	handle {
+		reverse_proxy {$THEQULT_UPSTREAM}
+	}
+}
+
+# --- maddalena.me (sito MVC) -------------------------------------------------
+{$MADDALENA_DOMAIN}, www.{$MADDALENA_DOMAIN} {
+	import secure_headers
+
+	@www host www.{$MADDALENA_DOMAIN}
+	redir @www https://{$MADDALENA_DOMAIN}{uri} permanent
+
+	# /mail -> webmail su mailcow (stesso meccanismo di matteofabbri.org).
+	redir /mail /mail/
+	handle_path /mail/* {
+		redir https://{$WEBMAIL_HOST}/ permanent
+	}
+
+	# Tutto il resto -> il sito Maddalena.
+	handle {
+		reverse_proxy {$MADDALENA_UPSTREAM}
+	}
+}
+
+# --- Altri siti futuri: copia un blocco qui sopra (dominio + www.) e aggiungi
+# --- entrambi i nomi anche al matcher @site nelle sezioni :443 e :80.

@@ -1,0 +1,80 @@
+@page "/admin"
+@model MainSite.Pages.Admin.IndexModel
+@{
+    ViewData["Title"] = "Administration";
+}
+
+<div class="page-head">
+    <div>
+        <p class="eyebrow">Administration</p>
+        <h1>Administration</h1>
+        <p class="lede">Manage posts, ledes and site content.</p>
+    </div>
+    <div class="actions">
+        <a class="button" asp-page="/Admin/Edit">New post</a>
+        <a class="button button-secondary" asp-page="/Admin/Ledes">Ledes</a>
+        <a class="button button-secondary" asp-page="/Admin/Jumbotron">Jumbotron</a>
+        <a class="button button-secondary" asp-page="/Admin/NotFoundMedia">404 media</a>
+        <a class="button button-secondary" asp-page="/Admin/Media">Images</a>
+        <a class="button button-secondary" asp-page="/Requests">Site requests</a>
+    </div>
+</div>
+
+<h2 class="section-title">Posts</h2>
+<p class="hint">@(Model.Posts.Count == 1 ? "1 post in total, drafts included." : $"{Model.Posts.Count} posts in total, drafts included.")</p>
+
+@if (TempData["Messaggio"] is string message)
+{
+    <div class="alert success">@message</div>
+}
+@if (TempData["Errore"] is string error)
+{
+    <div class="alert error">@error</div>
+}
+
+@if (Model.Posts.Count == 0)
+{
+    <div class="empty">
+        <p>You have not written anything yet.</p>
+        <p><a asp-page="/Admin/Edit">Create the first post</a>.</p>
+    </div>
+}
+else
+{
+    <div class="table-wrap">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>Title</th>
+                    <th>Status</th>
+                    <th>Date</th>
+                    <th class="cell-actions">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var post in Model.Posts)
+                {
+                    string status = Model.Status(post);
+                    <tr>
+                        <td>
+                            <a class="table-title" asp-page="/Admin/Edit" asp-route-slug="@post.Slug">@post.Title</a>
+                            <span class="table-slug">/@post.Slug</span>
+                        </td>
+                        <td>
+                            <span class="badge badge-@status">@status</span>
+                        </td>
+                        <td class="cell-date">@Model.Clock.Format(post.Published, "d MMM yyyy")</td>
+                        <td class="cell-actions">
+                            <a asp-page="/Admin/Edit" asp-route-slug="@post.Slug">Edit</a>
+                            <a asp-page="/Blog/Post" asp-route-slug="@post.Slug">View</a>
+                            <form method="post" asp-page-handler="Delete" asp-route-slug="@post.Slug"
+                                  onsubmit="return confirm('Move this post to the trash?');">
+                                <button type="submit" class="link-button danger">Delete</button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}

@@ -1,0 +1,18 @@
+@{
+    // Navigazione a schede dell'area /visualmcp: la pagina corrente arriva da
+    // ViewData["DocsKey"], impostata da ogni pagina che include questo partial.
+    string docsKey = ViewData["DocsKey"] as string ?? "";
+}
+<nav class="docs-nav" aria-label="VisualMCP documentation">
+    <p class="docs-crumb">
+        <a href="/visualmcp">VisualMCP</a>
+        <span aria-hidden="true">/</span>
+        <span>Documentation</span>
+    </p>
+    <ul class="docs-tabs">
+        @foreach (var entry in VisualMcpDocsArea.Pages)
+        {
+            <li><a href="@entry.Href" aria-current="@(entry.Key == docsKey ? "page" : null)">@entry.Label</a></li>
+        }
+    </ul>
+</nav>

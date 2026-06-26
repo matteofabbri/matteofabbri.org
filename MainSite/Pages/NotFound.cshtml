@@ -1,0 +1,44 @@
+@page "/404"
+@model MainSite.Pages.NotFoundModel
+@{
+    ViewData["Title"] = "Page not found";
+}
+
+<div class="not-found">
+    <h1>Page not found</h1>
+    <hr />
+    @if (Model.MediaUrl is not null)
+    {
+        <figure class="not-found-media">
+            @if (Model.IsVideo)
+            {
+                <video id="not-found-video" src="@Model.MediaUrl" autoplay loop playsinline controls></video>
+            }
+            else
+            {
+                <img src="@Model.MediaUrl" alt="@Model.MediaName" />
+            }
+        </figure>
+    }
+    else
+    {
+        <p class="hint">
+            Put an image or a video in <code>wwwroot/404</code> and one will show up here at random.
+        </p>
+    }
+
+    <p><a class="button" asp-page="/Blog/Index">Back to the blog</a></p>
+</div>
+
+@section Scripts {
+    <script>
+        (() => {
+            const video = document.getElementById('not-found-video');
+            if (!video) return;
+
+            video.volume = 1;
+            video.muted = false;
+            video.play().catch(() => { });
+        })();
+    </script>
+}

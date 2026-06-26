@@ -1,0 +1,129 @@
+@page "/visualmcp/tools"
+@{
+    ViewData["Title"] = "Capabilities — VisualMCP";
+    ViewData["Description"] = "What is in the box of VisualMCP: navigation and understanding, analysis, semantic refactoring, the code-style engine, Razor/Blazor/XAML layers, runtime work, the wider loop around the code, and the metacode model.";
+    ViewData["DocsKey"] = "tools";
+    ViewData["DocsGitHub"] = "https://github.com/matteofabbri/VisualMCP/blob/master/docs/tools.md";
+}
+
+<partial name="_VisualMcpDocsNav" />
+
+<header class="page-head docs-head">
+    <div>
+        <h1>Capabilities</h1>
+        <p class="lede">
+            More than 400 tools, one idea behind all of them: the answer comes
+            from the compiler's view of the solution, not from text. These are
+            the families, and the questions each one answers.
+        </p>
+    </div>
+</header>
+
+<div class="docs-body prose">
+    <h2>Navigation and understanding</h2>
+    <p>
+        Symbols, references, callers, implementations, inheritance, type
+        outlines, declaration source and project docs. The lookup that greps
+        try to approximate — resolved through Roslyn, so overloads, generics,
+        partial types and interface dispatch are answered exactly.
+        <code>find_symbol</code>, <code>read_symbol</code>,
+        <code>find_references</code>, <code>find_callers</code>,
+        <code>find_implementations</code>, <code>get_type_members</code>,
+        <code>get_symbol_info</code>, <code>get_xml_docs</code>.
+    </p>
+
+    <h2>Analysis</h2>
+    <p>
+        Whole-solution audit, compiler diagnostics <strong>and the mechanical
+        ones fixed</strong>, inspections with code fixes, cyclomatic and
+        cognitive complexity with the lines that own the score, static Big-O
+        estimates, churn × complexity hotspots, dead code, structural
+        duplicates, CWE-tagged security findings, async anti-patterns,
+        allocation anti-patterns, dependency injection and namespace coupling.
+        <code>solution_audit</code>, <code>inspect_code</code>,
+        <code>complexity_report</code>, <code>analyze_complexity</code>,
+        <code>find_security_issues</code>, <code>find_dead_code</code>,
+        <code>fix_complexity</code>.
+    </p>
+
+    <h2>Refactoring</h2>
+    <p>
+        A full semantic refactoring catalogue — rename, extract method, extract
+        class and superclass, change signature, move type and members, convert
+        between kinds — most of it compiler-gated: an edit that would introduce
+        an error is refused, and every write is recorded so it can be reverted.
+        <code>apply_rename</code>, <code>extract_method</code>,
+        <code>change_signature</code>, <code>safe_delete</code>,
+        <code>move_type</code>, <code>reduce_complexity</code>.
+    </p>
+
+    <h2>Code style</h2>
+    <p>
+        <code>simplify_code</code> applies the IDE's mechanical quick fixes
+        without an IDE: the rewrite engine behind the quick-fix popup, with a
+        per-document compiler gate, option-driven rules that respect your
+        <code>.editorconfig</code>, and a recorded, revertible edit history.
+        Visual Basic has its own layer, <code>simplify_vb_code</code>.
+        <code>apply_code_fix</code> executes the analyzers' own fixers;
+        <code>code_cleanup</code>, <code>format_code</code> and
+        <code>optimize_usings</code> complete the sweep.
+    </p>
+
+    <h2>Razor, Blazor and XAML</h2>
+    <p>
+        Razor pages and Blazor components are read from disk with a dedicated
+        scanner: inventory and wiring, markup/accessibility/maintainability
+        rules, and CWE-tagged security rules — with verified, history-recorded
+        edits. XAML has its own layer: inventory with the project's dialect,
+        markup diagnostics, <strong>binding paths checked against their data
+        type</strong>, the element tree and navigation by name, key and style.
+        <code>razor_pages</code>, <code>analyze_razor_pages</code>,
+        <code>find_razor_vulnerabilities</code>, <code>razor_edit</code>,
+        <code>xaml_pages</code>, <code>xaml_bindings</code>.
+    </p>
+
+    <h2>Runtime work</h2>
+    <p>
+        Build with structured diagnostics, run, test with coverage, debug
+        through a real DAP debugger with breakpoints and watch windows, run
+        benchmarks, and profile a live .NET process — CPU, GC, allocations,
+        I/O, locks, dumps — with verdicts in plain language.
+        <code>build_project</code>, <code>run_tests</code>,
+        <code>get_test_coverage_map</code>, <code>debug_launch</code>,
+        <code>quick_benchmark</code>, <code>profile_slowdown</code>.
+    </p>
+
+    <h2>The wider loop</h2>
+    <p>
+        The plumbing around the code: NuGet package facts, vulnerability checks
+        and fixes, .NET modernization with a build gate that rolls back, EF
+        Core migrations, Git and GitHub, Docker, repository scaffolding
+        (licenses, CONTRIBUTING, CI workflows), a solution-scoped kanban board
+        with memory, and <code>run_plan</code> to execute a whole dependency
+        graph of tool calls in one round trip.
+        <code>update_solution</code>, <code>check_nuget_vulnerabilities</code>,
+        <code>ef_migrations</code>, <code>git_conflicts</code>,
+        <code>gh_pr</code>, <code>board_brief</code>, <code>run_plan</code>.
+    </p>
+
+    <h2>Metacode</h2>
+    <p>
+        One canonical pseudocode model for C#, Visual Basic, Razor, JavaScript,
+        Python, C++ and Rust — and for code recovered from binaries: .NET
+        assemblies decompiled with ILSpy, native binaries recovered with
+        Ghidra. The same algorithm prints the same body whichever frontend
+        produced it, so two spellings of an algorithm can be compared line by
+        line, and a decompiled library can be queried like source.
+        <code>metacode_translate</code>, <code>metacode_compare</code>,
+        <code>decompile_to_metacode</code>, <code>analyze_native_binary</code>.
+    </p>
+
+    <p>
+        The complete catalogue — every tool, grouped by area, with a one-line
+        description — is the
+        <a href="https://github.com/matteofabbri/VisualMCP/blob/master/docs/tools.md" target="_blank" rel="noopener">tool catalogue in the repository <span aria-hidden="true">↗</span></a>;
+        the guides in this area show the ways of working with each family.
+    </p>
+</div>
+
+<partial name="_VisualMcpDocsFooter" />
