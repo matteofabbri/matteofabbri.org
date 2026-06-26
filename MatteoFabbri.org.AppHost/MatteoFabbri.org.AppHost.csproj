@@ -10,6 +10,9 @@
 
   <ItemGroup>
     <PackageReference Include="Aspire.Hosting.Docker" Version="13.4.3" />
+    <!-- Fa nascere il container Mongo per il sito licenze (prima stava nell'AppHost
+         dedicato dentro SPERONE, ora lo ospitiamo qui). -->
+    <PackageReference Include="Aspire.Hosting.MongoDB" Version="13.4.3" />
     <PackageReference Include="MessagePack" Version="3.1.7" />
   </ItemGroup>
 

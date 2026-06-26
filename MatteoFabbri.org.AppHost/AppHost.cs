@@ -46,17 +46,29 @@ var mailcowHttpUpstream = builder.AddParameter("mailcow-http-upstream");
 var site = builder.AddProject<Projects.MainSite>("site");
 
 // --- Il sito licenze (da un altro repo: SPERONE, via sottomodulo git) --------
-// NOTA: questo progetto si aspetta una connection string MongoDB
-// (ConnectionStrings:licenses): cosi' com'e' compila e si avvia come risorsa,
-// ma per FUNZIONARE va ancora cablato il Mongo (prossimo passo).
-builder.AddProject<Projects.Sperone_LicenseSite>("licensesite");
+// Gira QUI con il suo Mongo. Prima questo aggancio stava nell'AppHost dedicato
+// dentro SPERONE (Sperone.LicenseSite.AppHost); ora lo ospitiamo noi, cosi' in
+// SPERONE resta solo il progetto da referenziare.
+//
+// Mongo e' lo "schedario" del venditore: registra richieste e licenze emesse
+// (NON e' Sperone). WithDataVolume => i dati sopravvivono ai riavvii.
+var mongo = builder.AddMongoDB("mongo")
+    .WithDataVolume();
+var licenses = mongo.AddDatabase("licenses");
+
+builder.AddProject<Projects.Sperone_LicenseSite>("licensesite")
+    // Inietta ConnectionStrings:licenses nel sito (il nome che cerca nel suo Program.cs).
+    .WithReference(licenses)
+    .WaitFor(licenses);
 
 // L'indirizzo interno (host:porta) a cui Caddy inoltra il traffico del sito:
-// deriva dall'endpoint del progetto, quindi nel compose diventa da solo
-// "site:8080" senza nulla di inchiodato a mano.
+// deriva dall'endpoint del progetto. HostAndPort restituisce "host:porta" gia'
+// risolti e si adatta da solo alla modalita': in pubblicazione diventa "site:8080",
+// in esecuzione locale "aspire.dev.internal:<porta>". (TargetPort da solo NON si
+// risolve in run: Caddy riceveva un template grezzo e non partiva.)
 var siteHttp = site.GetEndpoint("http");
 var siteUpstream = ReferenceExpression.Create(
-    $"{siteHttp.Property(EndpointProperty.Host)}:{siteHttp.Property(EndpointProperty.TargetPort)}");
+    $"{siteHttp.Property(EndpointProperty.HostAndPort)}");
 
 // --- Caddy: la "portineria" sulle porte 80/443 ------------------------------
 // Immagine su misura (Caddy ufficiale + modulo layer4), costruita dal
