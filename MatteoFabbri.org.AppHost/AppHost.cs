@@ -56,10 +56,29 @@ var mongo = builder.AddMongoDB("mongo")
     .WithDataVolume();
 var licenses = mongo.AddDatabase("licenses");
 
+// Postgres: gli account del sito licenze (ASP.NET Core Identity) e, a seguire, il modello relazionale
+// account<->licenza<->attivazione. WithDataVolume => gli account sopravvivono ai riavvii.
+var postgres = builder.AddPostgres("postgres")
+    .WithDataVolume();
+var identityDb = postgres.AddDatabase("identitydb");
+
+// Chiavi Stripe (test/sandbox in dev, live in prod). I valori stanno negli user-secrets di QUESTO AppHost
+// come Parameters:stripe-* ; opzionali (default vuoto) cosi' il sito parte anche prima di impostarle.
+//   dotnet user-secrets set "Parameters:stripe-secret" "sk_test_…" --project <questo AppHost>
+var stripePublishable = builder.AddParameter("stripe-publishable", () => builder.Configuration["Parameters:stripe-publishable"] ?? "");
+var stripeSecret = builder.AddParameter("stripe-secret", () => builder.Configuration["Parameters:stripe-secret"] ?? "", secret: true);
+var stripeWebhook = builder.AddParameter("stripe-webhook", () => builder.Configuration["Parameters:stripe-webhook"] ?? "", secret: true);
+
 builder.AddProject<Projects.Sperone_LicenseSite>("licensesite")
-    // Inietta ConnectionStrings:licenses nel sito (il nome che cerca nel suo Program.cs).
+    // Inietta ConnectionStrings:licenses + :identitydb (i nomi che il sito cerca nel suo Program.cs).
     .WithReference(licenses)
-    .WaitFor(licenses);
+    .WithReference(identityDb)
+    .WaitFor(licenses)
+    .WaitFor(identityDb)
+    // Stripe via env (Stripe__X -> config Stripe:X). publishable e' pubblica; secret/webhook sono segrete.
+    .WithEnvironment("Stripe__PublishableKey", stripePublishable)
+    .WithEnvironment("Stripe__SecretKey", stripeSecret)
+    .WithEnvironment("Stripe__WebhookSecret", stripeWebhook);
 
 // L'indirizzo interno (host:porta) a cui Caddy inoltra il traffico del sito:
 // deriva dall'endpoint del progetto. HostAndPort restituisce "host:porta" gia'
