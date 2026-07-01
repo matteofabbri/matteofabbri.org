@@ -10,19 +10,14 @@
 
   <ItemGroup>
     <PackageReference Include="Aspire.Hosting.Docker" Version="13.4.3" />
-    <!-- Fa nascere il container Mongo per il sito licenze (prima stava nell'AppHost
-         dedicato dentro SPERONE, ora lo ospitiamo qui). -->
-    <PackageReference Include="Aspire.Hosting.MongoDB" Version="13.4.3" />
     <PackageReference Include="Aspire.Hosting.PostgreSQL" Version="13.4.3" />
     <PackageReference Include="MessagePack" Version="3.1.7" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\MainSite\MainSite.csproj" />
-    <!-- Progetto da un ALTRO repo (SPERONE), portato qui come sottomodulo git in
-         external/SPERONE. Il percorso relativo risolve sia in locale sia dopo un
-         clone ricorsivo, perche' il sottomodulo mette i file in quella cartella. -->
-    <ProjectReference Include="..\external\SPERONE\LICENSING\Sperone.LicenseSite\Sperone.LicenseSite.csproj" />
+    <ProjectReference Include="..\TheQult\TheQult.csproj" />
+    <ProjectReference Include="..\Maddalena\Maddalena.csproj" />
   </ItemGroup>
 
 </Project>

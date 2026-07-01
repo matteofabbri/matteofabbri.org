@@ -4,10 +4,15 @@ Due stack docker separati sulla stessa macchina, collegati da una rete condivisa
 "neutra" (`matteo-shared`). Caddy fa da portineria sulle porte 80/443 e smista
 per nome:
 
-- `matteofabbri.org` (`SITE_DOMAIN`) → sito personale (TLS terminato da Caddy)
-- `matteofabbri.org/mail`            → redirect a `https://<WEBMAIL_HOST>`
+- `matteofabbri.org` (`SITE_DOMAIN`) → sito personale (progetto `site`)
+- `theqult.org` (`THEQULT_DOMAIN`)   → API `TheQult`
+- `maddalena.me` (`MADDALENA_DOMAIN`) → sito MVC `Maddalena`
+  - `maddalena.me/licensing`         → sito licenze Sperone (`LICENSING_UPSTREAM`)
+- `<dominio>/mail` (tutti e tre)     → redirect a `https://<WEBMAIL_HOST>`
 - **qualunque altro nome**           → mailcow (TLS **passato sigillato**: il
   certificato se lo fa mailcow)
+
+Tutti e tre i SITI hanno il TLS terminato da Caddy (certificati Let's Encrypt).
 
 La regola d'oro: Caddy conosce solo i SITI. I nomi della posta
 (`mail.matteofabbri.org`, `autodiscover.`, `autoconfig.`, il nome OVH di
@@ -83,6 +88,8 @@ Compila il file `out/.env` con i valori reali:
 ```ini
 ACME_EMAIL=tua@mail.it
 SITE_DOMAIN=matteofabbri.org             # dominio del sito (Caddy lo termina lui)
+THEQULT_DOMAIN=theqult.org               # secondo sito (Caddy lo termina lui)
+MADDALENA_DOMAIN=maddalena.me            # terzo sito (Caddy lo termina lui)
 WEBMAIL_HOST=mail.matteofabbri.org       # bersaglio del redirect /mail
                                          # (in transizione: il nome OVH)
 SITE_IMAGE=matteofabbri-site:latest      # immagine del sito (la fa publish.ps1)
@@ -90,6 +97,9 @@ SITE_PORT=8080                           # porta interna del sito
 MAILCOW_TLS_UPSTREAM=nginx-mailcow:8443  # nginx di mailcow, HTTPS
 MAILCOW_HTTP_UPSTREAM=nginx-mailcow:8080 # nginx di mailcow, HTTP
 ```
+
+> `THEQULT_DOMAIN`/`MADDALENA_DOMAIN` hanno gia' un default nell'AppHost
+> (`theqult.org`/`maddalena.me`): nel `.env` servono solo se vuoi cambiarli.
 
 Avvia (la prima volta costruisce l'immagine Caddy su misura, col modulo layer4):
 
@@ -155,13 +165,18 @@ TXT (SPF/DKIM/DMARC) come indicato dal pannello mailcow
 I client si connettono sempre a `mail.matteofabbri.org` (un server, molti
 domini). Caddy non si tocca.
 
-### Un sito web su un altro dominio (es. theqult.org)
+### Un sito web su un altro dominio
 
-Questo sì che tocca Caddy (è un sito, non posta):
-1. nel `Caddyfile`: aggiungi il dominio alle due righe `@site` e crea il blocco
-   del sito in fondo (c'è l'esempio commentato);
-2. ricostruisci: `docker compose up -d --build`;
-3. record A di theqult.org → IP del server. Il certificato lo fa Caddy da solo.
+`matteofabbri.org`, `theqult.org` e `maddalena.me` sono già cablati in Caddy.
+Per i loro certificati basta il record A → IP del server (Caddy fa il resto).
+
+Per un **quarto** dominio (è un sito, non posta, quindi tocca Caddy):
+1. nell'`AppHost.cs`: aggiungi il parametro del dominio e la sua `XXX_UPSTREAM`,
+   sul modello di `theqult-domain`/`THEQULT_UPSTREAM`;
+2. nel `Caddyfile`: aggiungi `{$XXX_DOMAIN}` alle due righe `@site` (:443 e :80)
+   e crea il blocco del sito in fondo (c'è l'esempio);
+3. ricostruisci: `docker compose up -d --build`;
+4. record A del dominio → IP del server. Il certificato lo fa Caddy da solo.
 
 ---
 

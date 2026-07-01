@@ -30,10 +30,15 @@ var acmeEmail = builder.AddParameter("acme-email");
 
 // I nomi pubblici. Caddy termina solo i SITI; ogni altro nome (posta, nome
 // OVH di transizione, ...) passa sigillato a mailcow senza toccare nulla qui.
-//   - site-domain  -> dominio del sito personale (es. matteofabbri.org)
-//   - webmail-host -> dove vive la webmail, bersaglio del redirect /mail
-//                     (es. mail.matteofabbri.org; in transizione il nome OVH)
+// Oggi i siti sono TRE:
+//   - site-domain      -> sito personale (es. matteofabbri.org)
+//   - theqult-domain   -> theqult.org   (default impostato qui, override da .env)
+//   - maddalena-domain -> maddalena.me  (default impostato qui, override da .env)
+//   - webmail-host     -> dove vive la webmail, bersaglio del redirect /mail
+//                         (es. mail.matteofabbri.org; in transizione il nome OVH)
 var siteDomain = builder.AddParameter("site-domain");
+var thequltDomain = builder.AddParameter("theqult-domain", () => builder.Configuration["Parameters:theqult-domain"] ?? "theqult.org");
+var maddalenaDomain = builder.AddParameter("maddalena-domain", () => builder.Configuration["Parameters:maddalena-domain"] ?? "maddalena.me");
 var webmailHost = builder.AddParameter("webmail-host");
 
 // Dove Caddy raggiunge mailcow, per nome sulla rete condivisa.
@@ -45,49 +50,72 @@ var mailcowHttpUpstream = builder.AddParameter("mailcow-http-upstream");
 // --- Il sito personale -------------------------------------------------------
 var site = builder.AddProject<Projects.MainSite>("site");
 
-// --- Il sito licenze (da un altro repo: SPERONE, via sottomodulo git) --------
-// Gira QUI con il suo Mongo. Prima questo aggancio stava nell'AppHost dedicato
-// dentro SPERONE (Sperone.LicenseSite.AppHost); ora lo ospitiamo noi, cosi' in
-// SPERONE resta solo il progetto da referenziare.
-//
-// Mongo e' lo "schedario" del venditore: registra richieste e licenze emesse
-// (NON e' Sperone). WithDataVolume => i dati sopravvivono ai riavvii.
-var mongo = builder.AddMongoDB("mongo")
-    .WithDataVolume();
-var licenses = mongo.AddDatabase("licenses");
+// --- theqult.org: progetto API ----------------------------------------------
+var theqult = builder.AddProject<Projects.TheQult>("theqult");
 
-// Postgres: gli account del sito licenze (ASP.NET Core Identity) e, a seguire, il modello relazionale
-// account<->licenza<->attivazione. WithDataVolume => gli account sopravvivono ai riavvii.
+// --- maddalena.me: progetto MVC ---------------------------------------------
+// Fa da sito principale del dominio; sotto /licensing ospitera' il sito licenze
+// (vedi sotto) e in prospettiva fara' da provider di identita' per i sotto-siti.
+var maddalena = builder.AddProject<Projects.Maddalena>("maddalena");
+
+// Postgres: gli account di Maddalena (ASP.NET Core Identity) + le tabelle OpenIddict + le licenze
+// commerciali comprate (tabella AccountLicense). WithDataVolume => i dati sopravvivono ai riavvii.
 var postgres = builder.AddPostgres("postgres")
     .WithDataVolume();
-var identityDb = postgres.AddDatabase("identitydb");
+
+// DB di Maddalena: account + OpenIddict + licenze. Il licensing vive ORA dentro Maddalena (sotto
+// /licensing) — niente piu' sito separato ne' Mongo.
+var maddalenaDb = postgres.AddDatabase("maddalenadb");
+
+// L'indirizzo pubblico del provider di identita' (Maddalena): i sotto-siti ci
+// puntano per il login OIDC e per validare i token. Niente slash finale: deve
+// combaciare con l'emittente (iss) che Maddalena mette nei token dietro Caddy.
+var oidcAuthority = builder.AddParameter("oidc-authority",
+    () => builder.Configuration["Parameters:oidc-authority"] ?? "https://maddalena.me");
 
 // Chiavi Stripe (test/sandbox in dev, live in prod). I valori stanno negli user-secrets di QUESTO AppHost
-// come Parameters:stripe-* ; opzionali (default vuoto) cosi' il sito parte anche prima di impostarle.
+// come Parameters:stripe-* ; opzionali (default vuoto) cosi' Maddalena parte anche prima di impostarle.
 //   dotnet user-secrets set "Parameters:stripe-secret" "sk_test_…" --project <questo AppHost>
 var stripePublishable = builder.AddParameter("stripe-publishable", () => builder.Configuration["Parameters:stripe-publishable"] ?? "");
 var stripeSecret = builder.AddParameter("stripe-secret", () => builder.Configuration["Parameters:stripe-secret"] ?? "", secret: true);
 var stripeWebhook = builder.AddParameter("stripe-webhook", () => builder.Configuration["Parameters:stripe-webhook"] ?? "", secret: true);
 
-builder.AddProject<Projects.Sperone_LicenseSite>("licensesite")
-    // Inietta ConnectionStrings:licenses + :identitydb (i nomi che il sito cerca nel suo Program.cs).
-    .WithReference(licenses)
-    .WithReference(identityDb)
-    .WaitFor(licenses)
-    .WaitFor(identityDb)
-    // Stripe via env (Stripe__X -> config Stripe:X). publishable e' pubblica; secret/webhook sono segrete.
+// La chiave PRIVATA di firma delle licenze: vive SOLO qui (mai nel prodotto). Il webhook la usa per firmare
+// la chiave portabile. Vuota di default (Maddalena parte lo stesso); in prod via user-secrets.
+//   dotnet user-secrets set "Parameters:licensing-private-key" "<base64>" --project <questo AppHost>
+var licensingPrivateKey = builder.AddParameter("licensing-private-key",
+    () => builder.Configuration["Parameters:licensing-private-key"] ?? "", secret: true);
+
+// Maddalena fa da provider OIDC (server OpenIddict) E ospita il licensing: le servono il suo DB, le chiavi
+// Stripe e la chiave privata di firma (Stripe__X -> Stripe:X ; Licensing__X -> Licensing:X).
+maddalena
+    .WithReference(maddalenaDb)
+    .WaitFor(maddalenaDb)
     .WithEnvironment("Stripe__PublishableKey", stripePublishable)
     .WithEnvironment("Stripe__SecretKey", stripeSecret)
-    .WithEnvironment("Stripe__WebhookSecret", stripeWebhook);
+    .WithEnvironment("Stripe__WebhookSecret", stripeWebhook)
+    .WithEnvironment("Licensing__PrivateKey", licensingPrivateKey)
+    .WithEnvironment("Licensing__KeyId", "k1");
+
+// --- Emittente (issuer) OIDC di Maddalena -----------------------------------
+// L'iss dei token deve combaciare con l'authority che i sotto-siti useranno. In PUBBLICAZIONE e' il dominio
+// pubblico; in LOCALE (aspire run) e' l'URL localhost reale che Aspire gia' conosce.
+if (builder.ExecutionContext.IsPublishMode)
+    maddalena.WithEnvironment("Oidc__Issuer", oidcAuthority);
+else
+    maddalena.WithEnvironment("Oidc__Issuer", maddalena.GetEndpoint("http"));
 
 // L'indirizzo interno (host:porta) a cui Caddy inoltra il traffico del sito:
 // deriva dall'endpoint del progetto. HostAndPort restituisce "host:porta" gia'
 // risolti e si adatta da solo alla modalita': in pubblicazione diventa "site:8080",
 // in esecuzione locale "aspire.dev.internal:<porta>". (TargetPort da solo NON si
 // risolve in run: Caddy riceveva un template grezzo e non partiva.)
-var siteHttp = site.GetEndpoint("http");
 var siteUpstream = ReferenceExpression.Create(
-    $"{siteHttp.Property(EndpointProperty.HostAndPort)}");
+    $"{site.GetEndpoint("http").Property(EndpointProperty.HostAndPort)}");
+var thequltUpstream = ReferenceExpression.Create(
+    $"{theqult.GetEndpoint("http").Property(EndpointProperty.HostAndPort)}");
+var maddalenaUpstream = ReferenceExpression.Create(
+    $"{maddalena.GetEndpoint("http").Property(EndpointProperty.HostAndPort)}");
 
 // --- Caddy: la "portineria" sulle porte 80/443 ------------------------------
 // Immagine su misura (Caddy ufficiale + modulo layer4), costruita dal
@@ -104,8 +132,12 @@ var caddy = builder.AddDockerfile("caddy", "caddy")
     .WithExternalHttpEndpoints()
     .WithEnvironment("ACME_EMAIL", acmeEmail)
     .WithEnvironment("SITE_DOMAIN", siteDomain)
+    .WithEnvironment("THEQULT_DOMAIN", thequltDomain)
+    .WithEnvironment("MADDALENA_DOMAIN", maddalenaDomain)
     .WithEnvironment("WEBMAIL_HOST", webmailHost)
     .WithEnvironment("SITE_UPSTREAM", siteUpstream)
+    .WithEnvironment("THEQULT_UPSTREAM", thequltUpstream)
+    .WithEnvironment("MADDALENA_UPSTREAM", maddalenaUpstream)
     .WithEnvironment("MAILCOW_TLS_UPSTREAM", mailcowTlsUpstream)
     .WithEnvironment("MAILCOW_HTTP_UPSTREAM", mailcowHttpUpstream)
     // Aggancia Caddy alla rete condivisa (per raggiungere mailcow per nome) e

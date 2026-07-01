@@ -1,6 +1,7 @@
 <Solution>
   <Project Path="MainSite/MainSite.csproj" />
+  <Project Path="TheQult/TheQult.csproj" />
+  <Project Path="Maddalena/Maddalena.csproj" />
   <Project Path="MatteoFabbri.org.AppHost/MatteoFabbri.org.AppHost.csproj" />
   <Project Path="MatteoFabbri.org.ServiceDefaults/MatteoFabbri.org.ServiceDefaults.csproj" />
-  <Project Path="external/SPERONE/LICENSING/Sperone.LicenseSite/Sperone.LicenseSite.csproj" />
 </Solution>

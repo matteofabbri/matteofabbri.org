@@ -1,0 +1,43 @@
+@{
+    ViewData["Title"] = "Sperone licensing";
+    var signedIn = User?.Identity?.IsAuthenticated == true;
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sperone — licensing</title>
+    <style>
+        body { font-family: system-ui, sans-serif; max-width: 40rem; margin: 3rem auto; padding: 0 1rem; line-height: 1.5; }
+        h1 { font-size: 1.6rem; }
+        .muted { color: #666; }
+        .card { border: 1px solid #ddd; border-radius: 0.6rem; padding: 1.2rem 1.4rem; margin-top: 1.5rem; }
+        button { padding: 0.6rem 1.2rem; font: inherit; cursor: pointer; }
+        code { background: #f5f5f5; padding: 0.1rem 0.3rem; border-radius: 0.2rem; }
+        a { color: #06c; }
+    </style>
+</head>
+<body>
+    <h1>Sperone licensing</h1>
+    <p>Sperone is <strong>free to run</strong>. There is nothing to install or activate — download it and go.
+       Licensing is honor-based: the server never refuses to serve.</p>
+    <p class="muted">A commercial license is required to use Sperone for business. It is a portable key you
+       install on your server; it removes nothing technical — it makes your use licensed.</p>
+
+    <div class="card">
+        <h2 style="margin-top:0; font-size:1.15rem;">Commercial license — €99 / year</h2>
+        <p class="muted">Pay with card on Stripe. The signed key is saved to your account to download and re-download.</p>
+        <form method="post" action="/licensing/buy">
+            <button type="submit">@(signedIn ? "Buy a commercial license" : "Log in to buy")</button>
+        </form>
+        @if (signedIn)
+        {
+            <p style="margin-top:1rem;"><a href="/licensing/mine">My licenses &rarr;</a></p>
+        }
+    </div>
+
+    <p style="margin-top:2rem;" class="muted">Already have a key? Install it on your server:
+       <code>sperone-setup license-install license.json</code></p>
+</body>
+</html>

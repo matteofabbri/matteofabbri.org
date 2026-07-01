@@ -1,0 +1,41 @@
+@model Maddalena.Data.AccountLicense
+@{
+    ViewData["Title"] = "Payment received";
+    var sessionId = Context.Request.Query["session_id"].ToString();
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sperone — payment received</title>
+    @* While the (verified) webhook is still minting the key, auto-refresh so the download appears on its own. *@
+    @if (Model is null)
+    {
+        <meta http-equiv="refresh" content="3" />
+    }
+    <style>
+        body { font-family: system-ui, sans-serif; max-width: 40rem; margin: 3rem auto; padding: 0 1rem; line-height: 1.5; }
+        a { color: #06c; }
+        code { background: #f5f5f5; padding: 0.1rem 0.3rem; border-radius: 0.2rem; }
+        .muted { color: #666; }
+        .dl { display: inline-block; margin-top: 0.6rem; padding: 0.6rem 1.2rem; border: 1px solid #06c; border-radius: 0.4rem; text-decoration: none; }
+    </style>
+</head>
+<body>
+    <h1>Thank you — payment received</h1>
+    @if (Model is null)
+    {
+        <p>Your license key is being prepared. This page will show the download in a moment…</p>
+        <p class="muted">If it doesn't appear, <a href="/licensing/success?session_id=@sessionId">refresh</a>.</p>
+    }
+    else
+    {
+        <p>Here is your license — <strong>@Model.Customer</strong>, expires @Model.ExpiresAt.ToString("yyyy-MM-dd").</p>
+        <a class="dl" href="/licensing/download/@Model.Id">Download license.json</a>
+        <p style="margin-top:1.5rem;">Install it on your server:</p>
+        <p><code>sperone-setup license-install license.json</code></p>
+        <p class="muted">You can re-download it any time from <a href="/licensing/mine">my licenses</a>.</p>
+    }
+</body>
+</html>

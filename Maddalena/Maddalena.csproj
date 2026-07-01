@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MatteoFabbri.org.ServiceDefaults\MatteoFabbri.org.ServiceDefaults.csproj" />
+    <!-- The licensing signing core, from the SPERONE git submodule. Vendor-only (holds the private key);
+         Maddalena mints portable keys on Stripe payment. -->
+    <ProjectReference Include="..\external\SPERONE\LICENSING\Sperone.Licensing.Issuing\Sperone.Licensing.Issuing.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" Version="13.4.6" />
+    <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.9" />
+    <PackageReference Include="Microsoft.AspNetCore.Identity.UI" Version="10.0.9" />
+    <PackageReference Include="OpenIddict.AspNetCore" Version="7.5.0" />
+    <PackageReference Include="OpenIddict.EntityFrameworkCore" Version="7.5.0" />
+    <PackageReference Include="Stripe.net" Version="52.1.0" />
+  </ItemGroup>
+
+</Project>
