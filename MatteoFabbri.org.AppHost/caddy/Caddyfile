@@ -41,9 +41,9 @@
 		# HTTPS pubblico (443)
 		:443 {
 			# Siti: riconosco il nome nell'handshake (SNI) e li termino io.
-			# Per un nuovo sito: aggiungi il suo dominio a questa riga e crea
-			# il suo blocco in fondo al file.
-			@site tls sni {$SITE_DOMAIN} {$THEQULT_DOMAIN} {$MADDALENA_DOMAIN}
+			# Per un nuovo sito: aggiungi il suo dominio (e il suo www.) a
+			# questa riga e crea il suo blocco in fondo al file.
+			@site tls sni {$SITE_DOMAIN} www.{$SITE_DOMAIN} {$THEQULT_DOMAIN} www.{$THEQULT_DOMAIN} {$MADDALENA_DOMAIN} www.{$MADDALENA_DOMAIN}
 			route @site {
 				proxy {
 					upstream 127.0.0.1:8443
@@ -61,7 +61,7 @@
 		# HTTP pubblico (80)
 		:80 {
 			# Siti: al server HTTP interno di Caddy (fara' il redirect a https).
-			@site http host {$SITE_DOMAIN} {$THEQULT_DOMAIN} {$MADDALENA_DOMAIN}
+			@site http host {$SITE_DOMAIN} www.{$SITE_DOMAIN} {$THEQULT_DOMAIN} www.{$THEQULT_DOMAIN} {$MADDALENA_DOMAIN} www.{$MADDALENA_DOMAIN}
 			route @site {
 				proxy {
 					upstream 127.0.0.1:8080
@@ -79,7 +79,12 @@
 }
 
 # --- Sito personale (TLS terminato da Caddy) ---------------------------------
-{$SITE_DOMAIN} {
+# Include anche www.: serve solo per il certificato + redirect alla versione
+# senza www (es. se il registrar crea un www. accanto al record principale).
+{$SITE_DOMAIN}, www.{$SITE_DOMAIN} {
+	@www host www.{$SITE_DOMAIN}
+	redir @www https://{$SITE_DOMAIN}{uri} permanent
+
 	# /mail -> redirect alla webmail, ovunque essa viva in questo momento.
 	redir /mail /mail/
 	handle_path /mail/* {
@@ -93,7 +98,10 @@
 }
 
 # --- theqult.org (API) -------------------------------------------------------
-{$THEQULT_DOMAIN} {
+{$THEQULT_DOMAIN}, www.{$THEQULT_DOMAIN} {
+	@www host www.{$THEQULT_DOMAIN}
+	redir @www https://{$THEQULT_DOMAIN}{uri} permanent
+
 	# /mail -> webmail su mailcow (stesso meccanismo di matteofabbri.org).
 	redir /mail /mail/
 	handle_path /mail/* {
@@ -107,7 +115,10 @@
 }
 
 # --- maddalena.me (sito MVC) -------------------------------------------------
-{$MADDALENA_DOMAIN} {
+{$MADDALENA_DOMAIN}, www.{$MADDALENA_DOMAIN} {
+	@www host www.{$MADDALENA_DOMAIN}
+	redir @www https://{$MADDALENA_DOMAIN}{uri} permanent
+
 	# /mail -> webmail su mailcow (stesso meccanismo di matteofabbri.org).
 	redir /mail /mail/
 	handle_path /mail/* {
@@ -120,5 +131,5 @@
 	}
 }
 
-# --- Altri siti futuri: copia un blocco qui sopra e aggiungi il dominio anche
-# --- al matcher @site nelle sezioni :443 e :80.
+# --- Altri siti futuri: copia un blocco qui sopra (dominio + www.) e aggiungi
+# --- entrambi i nomi anche al matcher @site nelle sezioni :443 e :80.
