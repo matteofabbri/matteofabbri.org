@@ -106,7 +106,7 @@ public sealed class LicensingController(
     // Stripe → us: the authoritative "payment happened" signal (server-to-server, signature-verified). On a
     // completed checkout it signs a portable key and stores it on the buyer's account. Anonymous but verified.
     [AllowAnonymous]
-    [HttpPost("stripe/webhook")]
+    [HttpPost("sperone/webhook")]
     public async Task<IActionResult> Webhook()
     {
         string json = await new StreamReader(Request.Body).ReadToEndAsync();
