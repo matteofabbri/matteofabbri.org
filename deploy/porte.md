@@ -32,6 +32,6 @@
   PRIMA di girare il DNS. Senza sblocco le mail inviate non partono; quelle
   ricevute arrivano lo stesso.
 - **PTR (reverse DNS)**: dal pannello OVH, imposta il reverse dell'IP a
-  `mail.matteofabbri.org` — fondamentale per non finire in spam.
+  `mail.maddalena.me` — fondamentale per non finire in spam.
 - Lo script `server-setup.sh` NON tocca il firewall di proposito: se attivi
   ufw/iptables/firewall OVH, apri le porte della prima tabella.

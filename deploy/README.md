@@ -6,8 +6,7 @@ per nome:
 
 - `matteofabbri.org` (`SITE_DOMAIN`) → sito personale (progetto `site`)
 - `theqult.org` (`THEQULT_DOMAIN`)   → API `TheQult`
-- `maddalena.me` (`MADDALENA_DOMAIN`) → sito MVC `Maddalena`
-  - `maddalena.me/licensing`         → sito licenze Sperone (`LICENSING_UPSTREAM`)
+- `maddalena.me` (`MADDALENA_DOMAIN`) → sito MVC `Maddalena` (include `/licensing`)
 - `<dominio>/mail` (tutti e tre)     → redirect a `https://<WEBMAIL_HOST>`
 - **qualunque altro nome**           → mailcow (TLS **passato sigillato**: il
   certificato se lo fa mailcow)
@@ -15,9 +14,9 @@ per nome:
 Tutti e tre i SITI hanno il TLS terminato da Caddy (certificati Let's Encrypt).
 
 La regola d'oro: Caddy conosce solo i SITI. I nomi della posta
-(`mail.matteofabbri.org`, `autodiscover.`, `autoconfig.`, il nome OVH di
-transizione, domini futuri) NON vanno dichiarati in Caddy: ci passano da soli.
-Per quelli si lavora solo lato mailcow e DNS (vedi sezione 4).
+(`mail.maddalena.me`, `autodiscover.`, `autoconfig.`, domini futuri) NON vanno
+dichiarati in Caddy: ci passano da soli. Per quelli si lavora solo lato
+mailcow e DNS (vedi sezione 4).
 
 Le porte della posta vera (SMTP 25/465/587, IMAP 143/993, POP 110/995, sieve
 4190) le pubblica mailcow direttamente verso l'esterno: NON passano da Caddy.
@@ -40,7 +39,10 @@ docker network create matteo-shared
 Nel file `mailcow.conf` (generato da `generate_config.sh`):
 
 ```ini
-MAILCOW_HOSTNAME=mail.matteofabbri.org
+# Per ORA il nuovo mailcow serve solo maddalena.me/theqult.org: la posta di
+# matteofabbri.org resta sul vecchio server, DNS incluso (nessuna collisione:
+# mail.maddalena.me e' un sottodominio nuovo, non ancora usato da nessuno).
+MAILCOW_HOSTNAME=mail.maddalena.me
 
 # Caddy tiene 80/443 sull'host: mailcow ascolta su porte interne e si pubblica
 # solo su loopback, così non va in conflitto. Caddy lo raggiunge comunque per
@@ -90,16 +92,32 @@ ACME_EMAIL=tua@mail.it
 SITE_DOMAIN=matteofabbri.org             # dominio del sito (Caddy lo termina lui)
 THEQULT_DOMAIN=theqult.org               # secondo sito (Caddy lo termina lui)
 MADDALENA_DOMAIN=maddalena.me            # terzo sito (Caddy lo termina lui)
-WEBMAIL_HOST=mail.matteofabbri.org       # bersaglio del redirect /mail
-                                         # (in transizione: il nome OVH)
-SITE_IMAGE=matteofabbri-site:latest      # immagine del sito (la fa publish.ps1)
-SITE_PORT=8080                           # porta interna del sito
-MAILCOW_TLS_UPSTREAM=nginx-mailcow:8443  # nginx di mailcow, HTTPS
-MAILCOW_HTTP_UPSTREAM=nginx-mailcow:8080 # nginx di mailcow, HTTP
+WEBMAIL_HOST=mail.maddalena.me           # bersaglio del redirect /mail (per ora: solo maddalena.me/theqult.org)
+SITE_IMAGE=matteofabbri-site:latest       # immagine del sito (la fa publish.ps1)
+SITE_PORT=8080                            # porta interna del sito
+THEQULT_IMAGE=matteofabbri-theqult:latest # immagine di TheQult (la fa publish.ps1)
+THEQULT_PORT=8080                         # porta interna di TheQult
+MADDALENA_IMAGE=matteofabbri-maddalena:latest # immagine di Maddalena (la fa publish.ps1)
+MADDALENA_PORT=8080                       # porta interna di Maddalena
+POSTGRES_PASSWORD=                        # password del Postgres di Maddalena: generala una volta, non lasciarla vuota
+MAILCOW_TLS_UPSTREAM=nginx-mailcow:8443   # nginx di mailcow, HTTPS
+MAILCOW_HTTP_UPSTREAM=nginx-mailcow:8080  # nginx di mailcow, HTTP
+
+# Licensing (Maddalena, sotto /licensing): senza queste il sito parte lo
+# stesso, ma "Buy" e l'emissione delle chiavi non funzionano.
+OIDC_AUTHORITY=https://maddalena.me      # issuer OIDC di Maddalena (di solito non serve toccarlo)
+STRIPE_PUBLISHABLE=pk_live_...           # dashboard Stripe > Developers > API keys
+STRIPE_SECRET=sk_live_...                # dashboard Stripe > Developers > API keys
+STRIPE_WEBHOOK=whsec_...                 # dashboard Stripe > Developers > Webhooks (endpoint /licensing/sperone/webhook, evento checkout.session.completed)
+LICENSING_PRIVATE_KEY=                   # chiave privata che firma le licenze portabili (vedi nota sotto)
 ```
 
 > `THEQULT_DOMAIN`/`MADDALENA_DOMAIN` hanno gia' un default nell'AppHost
 > (`theqult.org`/`maddalena.me`): nel `.env` servono solo se vuoi cambiarli.
+
+> `LICENSING_PRIVATE_KEY` non va persa ne' rigenerata a cuor leggero: e' la
+> chiave che verifica le licenze gia' emesse. Generala una volta sola e
+> tienila al sicuro (es. gestore di password), non solo nel `.env` sul server.
 
 Avvia (la prima volta costruisce l'immagine Caddy su misura, col modulo layer4):
 
@@ -112,58 +130,49 @@ docker compose up -d --build
 
 ## 3. DNS (perché certificati e posta funzionino)
 
+Scelta corrente: il nuovo mailcow serve **solo maddalena.me/theqult.org**.
+**matteofabbri.org non si tocca** — resta sul suo server di posta attuale.
+
 | Record | Nome | Valore |
 |--------|------|--------|
-| A | `matteofabbri.org` | IP del server |
-| A | `mail.matteofabbri.org` | IP del server |
-| A | `autodiscover.matteofabbri.org` | IP del server |
-| A | `autoconfig.matteofabbri.org` | IP del server |
-| MX | `matteofabbri.org` | `mail.matteofabbri.org` |
-| PTR (reverse) | IP del server | `mail.matteofabbri.org` |
-| TXT (SPF/DKIM/DMARC) | — | come indicato dal pannello mailcow |
+| A | `matteofabbri.org` | IP del server (sito, non posta) |
+| A | `theqult.org` | IP del server (sito) |
+| A | `maddalena.me` | IP del server (sito) |
+| A | `mail.maddalena.me` | IP del server |
+| A | `autodiscover.maddalena.me` | IP del server |
+| A | `autoconfig.maddalena.me` | IP del server |
+| MX | `maddalena.me` | `mail.maddalena.me` |
+| MX | `theqult.org` | `mail.maddalena.me` |
+| PTR (reverse) | IP del server | `mail.maddalena.me` |
+| TXT (SPF/DKIM/DMARC) | maddalena.me, theqult.org | come indicato dal pannello mailcow |
 
-Il reverse DNS (PTR) che punta a `mail.matteofabbri.org` è importante per non
+Il reverse DNS (PTR) che punta a `mail.maddalena.me` è importante per non
 finire in spam: si imposta dal pannello del provider della macchina.
+
+Su matteofabbri.org non aggiungere/cambiare nulla lato posta (niente MX,
+niente autodiscover/autoconfig, niente PTR): il record A del sito è l'unico
+che lo riguarda qui.
 
 ---
 
-## 4. Più domini e transizione da OVH
+## 4. Più domini e un'eventuale futura migrazione di matteofabbri.org
 
-### Fase 1 — porting con il nome generico OVH
-
-Mentre il DNS di matteofabbri.org punta ancora al vecchio server di posta, il
-mailcow nuovo si raggiunge col nome OVH (es. `vpsXXXX.ovh.net`). In Caddy NON
-si tocca niente; lato mailcow:
-
-```ini
-# mailcow.conf
-MAILCOW_HOSTNAME=mail.matteofabbri.org   # il nome definitivo, da subito
-ADDITIONAL_SAN=vpsXXXX.ovh.net           # il certificato copre anche il nome OVH
-```
-
-Configuri i client di prova contro `vpsXXXX.ovh.net`, porti gli account, provi.
-Volendo, nel frattempo `WEBMAIL_HOST=vpsXXXX.ovh.net` nel `.env` fa puntare
-`/mail` alla webmail di transizione.
-
-### Fase 2 — vai in produzione
-
-Giri il DNS (A/MX di matteofabbri.org → questo server, come da sezione 3),
-metti `WEBMAIL_HOST=mail.matteofabbri.org` e riavvii Caddy
-(`docker compose up -d`). Quando il nome OVH non serve più, togli
-`ADDITIONAL_SAN` da mailcow.conf.
-
-### Caselle @theqult.org (o altri domini di posta)
+### Aggiungere un altro dominio di posta (oltre maddalena.me/theqult.org)
 
 Solo pannello admin di mailcow ("Configurazione e dettagli > Domini > Aggiungi
-dominio") + record DNS di theqult.org:
+dominio") + il suo MX -> `mail.maddalena.me` + TXT (SPF/DKIM/DMARC) come
+indicato dal pannello. I client si connettono sempre a `mail.maddalena.me`
+(un server, molti domini). Caddy non si tocca.
 
-```
-MX  theqult.org  ->  mail.matteofabbri.org
-TXT (SPF/DKIM/DMARC) come indicato dal pannello mailcow
-```
+### Se un domani vorrai spostare qui anche la posta di matteofabbri.org
 
-I client si connettono sempre a `mail.matteofabbri.org` (un server, molti
-domini). Caddy non si tocca.
+Basta cambiare l'MX di matteofabbri.org da quello attuale a
+`mail.maddalena.me`, aggiungere il dominio in mailcow e impostare SPF/DKIM/DMARC
+dal pannello. Non serve nessun trucco di hostname provvisorio: `mail.maddalena.me`
+non va in conflitto con nulla del vecchio server di posta, quindi puoi testare
+l'invio con calma anche PRIMA di girare l'MX definitivo (manda una mail di
+prova in uscita per verificare che la porta 25 sia sbloccata sul nuovo VPS,
+vedi [porte.md](porte.md)).
 
 ### Un sito web su un altro dominio
 
@@ -189,8 +198,10 @@ Dal PC (PowerShell), prepara e copia tutto:
 
 ```powershell
 cd MatteoFabbri.org
-.\publish.ps1                                              # genera .\out
+.\publish.ps1                                              # genera .\out (compose + tutte e tre le immagini)
 docker save matteofabbri-site:latest -o out\matteofabbri-site.tar
+docker save matteofabbri-theqult:latest -o out\matteofabbri-theqult.tar
+docker save matteofabbri-maddalena:latest -o out\matteofabbri-maddalena.tar
 # COMPILA out\.env PRIMA di copiarlo (vedi sezione 2)
 scp -r out deploy root@IP_SERVER:~/
 ```
@@ -203,14 +214,14 @@ sudo bash ~/deploy/server-setup.sh
 
 Lo script è rilanciabile: se un passo è già fatto lo salta. L'unico momento
 interattivo è la prima configurazione di mailcow (`generate_config.sh`), che
-chiede l'hostname: rispondi `mail.matteofabbri.org`. Se il `.env` è incompleto
+chiede l'hostname: rispondi `mail.maddalena.me`. Se il `.env` è incompleto
 lo script si ferma e ti dice cosa compilare.
 
-Per gli aggiornamenti successivi del solo sito:
+Per gli aggiornamenti successivi (i tre siti insieme; salta quelli che non sono cambiati):
 
 ```powershell
 .\publish.ps1
-docker save matteofabbri-site:latest | ssh root@IP_SERVER docker load
+docker save matteofabbri-site:latest matteofabbri-theqult:latest matteofabbri-maddalena:latest | ssh root@IP_SERVER docker load
 scp out\docker-compose.yaml root@IP_SERVER:/opt/matteofabbri/
 ssh root@IP_SERVER 'cd /opt/matteofabbri && docker compose up -d --build'
 ```

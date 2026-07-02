@@ -5,7 +5,7 @@
 # COSA FA
 #   Affaccia i container di mailcow che ci servono sul "corridoio" comune,
 #   cosi' lo stack generato da Aspire (Caddy + sito) puo' parlargli per nome:
-#     - nginx-mailcow   -> la webmail, raggiunta da Caddy   (mail.matteofabbri.org)
+#     - nginx-mailcow   -> la webmail, raggiunta da Caddy   (mail.maddalena.me)
 #     - postfix-mailcow -> invio mail dal sito (SMTP submission 587)
 #     - dovecot-mailcow -> (opzionale) lettura caselle dal sito (IMAP)
 #

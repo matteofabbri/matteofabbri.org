@@ -8,8 +8,7 @@
 # @site qui sotto). Tutti e tre hanno il redirect /mail verso la webmail:
 #   - matteofabbri.org  (SITE_DOMAIN)      -> sito personale
 #   - theqult.org       (THEQULT_DOMAIN)   -> API TheQult
-#   - maddalena.me      (MADDALENA_DOMAIN) -> sito MVC Maddalena
-#                                             + /licensing -> sito licenze Sperone
+#   - maddalena.me      (MADDALENA_DOMAIN) -> sito MVC Maddalena (include /licensing)
 #
 # Conseguenza pratica: aggiungere un nome alla POSTA (il nome generico OVH per
 # la transizione, mail.theqult.org, ...) NON richiede di toccare questo file.
@@ -26,7 +25,6 @@
 #   SITE_UPSTREAM         -> backend del sito personale   (es. site:8080)
 #   THEQULT_UPSTREAM      -> backend dell'API TheQult      (es. theqult:8080)
 #   MADDALENA_UPSTREAM    -> backend del sito Maddalena    (es. maddalena:8080)
-#   LICENSING_UPSTREAM    -> sito licenze sotto /licensing (es. licensesite:8080)
 #   MAILCOW_TLS_UPSTREAM  -> nginx di mailcow, HTTPS       (es. nginx-mailcow:8443)
 #   MAILCOW_HTTP_UPSTREAM -> nginx di mailcow, HTTP        (es. nginx-mailcow:8080)
 {

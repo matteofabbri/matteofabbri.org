@@ -11,7 +11,8 @@
 #       matteofabbri-site.tar (opzionale: l'immagine del sito via docker save)
 #
 # USO:  sudo bash ~/deploy/server-setup.sh [percorso-cartella-out]
-#       (default: ~/out)
+#       (default: la cartella 'out' accanto a 'deploy', non $HOME: con sudo
+#        $HOME diventerebbe quello di root)
 #
 # Rilanciabile: ogni passo controlla se e' gia' stato fatto.
 # ============================================================================
@@ -21,7 +22,10 @@ umask 0022   # richiesto da mailcow
 MAILCOW_DIR="/opt/mailcow-dockerized"
 STACK_DIR="/opt/matteofabbri"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-OUT_SRC="${1:-$HOME/out}"
+# Non $HOME: con "sudo bash ~/deploy/server-setup.sh" sudo cambia $HOME in
+# quello di root (/root), mentre 'out' sta accanto a questo script (copiati
+# insieme via scp), non nella home di chi ha lanciato sudo.
+OUT_SRC="${1:-$SCRIPT_DIR/../out}"
 
 step() { echo; echo "=== $* ==="; }
 
@@ -59,7 +63,11 @@ cd "$MAILCOW_DIR"
 
 if [ ! -f mailcow.conf ]; then
     echo "Configurazione iniziale di mailcow (interattiva):"
-    echo "  - hostname: mail.matteofabbri.org"
+    echo "  - hostname: mail.maddalena.me"
+    # generate_config.sh (versioni recenti) rifiuta di partire senza questo
+    # symlink gia' presente: lo richiede per essere sicuro di essere lanciato
+    # dalla cartella giusta.
+    ln -sf mailcow.conf .env
     ./generate_config.sh
     # Caddy tiene 80/443 sull'host: mailcow ascolta su porte interne,
     # solo su loopback. Caddy lo raggiunge via rete condivisa.
@@ -85,14 +93,15 @@ mkdir -p "$STACK_DIR"
 cp -r "$OUT_SRC/." "$STACK_DIR/"
 cd "$STACK_DIR"
 
-# Immagine del sito portata come tar (docker save)? Caricala.
-if [ -f matteofabbri-site.tar ]; then
-    docker load -i matteofabbri-site.tar
-    rm -f matteofabbri-site.tar
-fi
+# Immagini dei tre siti portate come tar (docker save)? Caricale tutte.
+for tarball in matteofabbri-*.tar; do
+    [ -f "$tarball" ] || continue
+    docker load -i "$tarball"
+    rm -f "$tarball"
+done
 
 # Il .env deve essere compilato: blocco se le voci chiave sono vuote.
-if grep -qE '^(ACME_EMAIL|SITE_DOMAIN|WEBMAIL_HOST|SITE_IMAGE|SITE_PORT|MAILCOW_TLS_UPSTREAM|MAILCOW_HTTP_UPSTREAM)=\s*$' .env; then
+if grep -qE '^(ACME_EMAIL|SITE_DOMAIN|WEBMAIL_HOST|SITE_IMAGE|SITE_PORT|THEQULT_IMAGE|THEQULT_PORT|MADDALENA_IMAGE|MADDALENA_PORT|POSTGRES_PASSWORD|MAILCOW_TLS_UPSTREAM|MAILCOW_HTTP_UPSTREAM)=\s*$' .env; then
     echo
     echo "FERMO QUI: $STACK_DIR/.env ha valori vuoti. Compilalo e poi:"
     echo "  cd $STACK_DIR && docker compose up -d --build"
