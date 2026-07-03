@@ -1,0 +1,49 @@
+@model Maddalena.Controllers.ChangePasswordModel
+@{
+    ViewData["Title"] = "Account";
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Maddalena — account</title>
+    <style>
+        body { font-family: system-ui, sans-serif; max-width: 26rem; margin: 4rem auto; padding: 0 1rem; line-height: 1.5; }
+        h1 { font-size: 1.4rem; }
+        h2 { font-size: 1.05rem; margin-top: 0; }
+        .card { border: 1px solid #ddd; border-radius: 0.6rem; padding: 1.2rem 1.4rem; margin-top: 1.5rem; }
+        label { display: block; margin-top: 1rem; font-size: 0.9rem; }
+        input { width: 100%; box-sizing: border-box; padding: 0.5rem 0.6rem; font: inherit; border: 1px solid #bbb; border-radius: 0.35rem; margin-top: 0.25rem; }
+        button { margin-top: 1.5rem; padding: 0.5rem 1rem; font: inherit; cursor: pointer; }
+        .errors ul { color: #b00; margin: 1rem 0 0; padding-left: 1.2rem; }
+        .ok { color: #070; }
+        .muted { color: #666; font-size: 0.9rem; }
+        a { color: #06c; }
+    </style>
+</head>
+<body>
+    <h1>Account</h1>
+    <p>Signed in as <strong>@User.Identity?.Name</strong></p>
+    <p><a href="/licensing/mine">My licenses &rarr;</a></p>
+
+    <div class="card">
+        <h2>Change password</h2>
+        @if (TempData["Message"] is string message)
+        {
+            <p class="ok">@message</p>
+        }
+        <form method="post" asp-action="ChangePassword">
+            <div class="errors" asp-validation-summary="All"></div>
+            <label>Current password <input asp-for="CurrentPassword" autocomplete="current-password" /></label>
+            <label>New password (8+ characters) <input asp-for="NewPassword" autocomplete="new-password" /></label>
+            <label>Confirm new password <input asp-for="ConfirmPassword" autocomplete="new-password" /></label>
+            <button type="submit">Change password</button>
+        </form>
+    </div>
+
+    <form method="post" asp-action="Logout">
+        <button type="submit">Sign out</button>
+    </form>
+</body>
+</html>

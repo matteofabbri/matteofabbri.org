@@ -19,7 +19,6 @@ public class Program
         // Telemetria, health check e service discovery condivisi della soluzione.
         builder.AddServiceDefaults();
         builder.Services.AddControllersWithViews();
-        builder.Services.AddRazorPages();          // UI di Identity (login / registrazione / account)
 
         // Dietro Caddy: fidati degli header X-Forwarded-* cosi' Maddalena sa di
         // essere https://maddalena.me. L'emittente (issuer) dei token OIDC deve
@@ -39,13 +38,25 @@ public class Program
         builder.AddNpgsqlDbContext<ApplicationDbContext>("maddalenadb",
             configureDbContextOptions: options => options.UseOpenIddict());
 
+        // Identity SENZA la UI prefabbricata (niente pacchetto Identity.UI): le pagine
+        // account (login, registrazione, gestione) sono nostre, in AccountController.
         builder.Services
-            .AddDefaultIdentity<IdentityUser>(options =>
+            .AddIdentity<IdentityUser, IdentityRole>(options =>
             {
                 options.SignIn.RequireConfirmedAccount = false;   // finche' non c'e' un invio email
                 options.Password.RequiredLength = 8;
             })
-            .AddEntityFrameworkStores<ApplicationDbContext>();
+            .AddEntityFrameworkStores<ApplicationDbContext>()
+            .AddDefaultTokenProviders();
+
+        // Il cookie di sessione deve sapere dove stanno le NOSTRE pagine: e' qui che
+        // finisce chi arriva su un [Authorize] senza sessione (incluso /connect/authorize).
+        builder.Services.ConfigureApplicationCookie(options =>
+        {
+            options.LoginPath = "/account/login";
+            options.LogoutPath = "/account/logout";
+            options.AccessDeniedPath = "/account/denied";
+        });
 
         // Identity usa i nomi-claim standard di OpenIddict (sub, name, email, role).
         builder.Services.Configure<IdentityOptions>(options =>
@@ -130,9 +141,8 @@ public class Program
         app.UseAuthentication();
         app.UseAuthorization();
 
-        app.MapControllers();          // gli endpoint /connect/* (attribute routing)
+        app.MapControllers();          // /connect/*, /account/*, /licensing/* (attribute routing)
         app.MapControllerRoute("default", "{controller=Home}/{action=Index}/{id?}");
-        app.MapRazorPages();           // /Identity/Account/{Login,Register,Manage,...}
         app.MapDefaultEndpoints();
 
         app.Run();

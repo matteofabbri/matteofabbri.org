@@ -12,5 +12,13 @@
     <h1>Maddalena</h1>
     <p>Sito MVC su maddalena.me.</p>
     <p><a href="/licensing">Licenze Sperone &rarr;</a></p>
+    @if (User.Identity?.IsAuthenticated == true)
+    {
+        <p><a href="/account">Il mio account</a></p>
+    }
+    else
+    {
+        <p><a href="/account/login">Accedi</a></p>
+    }
 </body>
 </html>
