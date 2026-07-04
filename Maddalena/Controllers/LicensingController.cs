@@ -11,27 +11,26 @@ using Stripe.Checkout;
 namespace Maddalena.Controllers;
 
 /// <summary>
-/// Licensing, hosted inside maddalena.me under /licensing (no separate site). A logged-in customer buys a
-/// commercial license via Stripe; the signature-verified webhook SIGNS a portable key and stores it on the
-/// account. The customer downloads it from the success page or "my licenses". Honor model: the key is a
-/// receipt, not a machine lock — free users never come here.
+/// Licensing, hosted inside maddalena.me under /licensing. A logged-in customer buys a commercial
+/// license via Stripe; the signature-verified webhook SIGNS a portable key and stores it on the
+/// account. Honor model: the key is a receipt, not a machine lock — free users never come here.
+/// The UI lives in the static pages (wwwroot/licensing*.html, licenses.html): this controller is
+/// JSON endpoints under /api/licensing plus the two non-UI routes (key download, Stripe webhook).
 /// </summary>
 [Route("licensing")]
 public sealed class LicensingController(
     ApplicationDbContext db,
     UserManager<IdentityUser> users,
     IConfiguration config,
-    ILogger<LicensingController> log) : Controller
+    ILogger<LicensingController> log) : ControllerBase
 {
     // A single SKU for now: a 1-year commercial license, priced inline (no dashboard product).
     private const long PriceCents = 9900;   // €99.00
     private const string Currency = "eur";
 
-    [HttpGet("")]
-    public IActionResult Index() => View();
-
+    // Starts a Stripe Checkout and returns its URL: it is the JS that navigates there.
     [Authorize]
-    [HttpPost("buy")]
+    [HttpPost("~/api/licensing/buy")]
     public async Task<IActionResult> Buy()
     {
         string userId = users.GetUserId(User)!;
@@ -56,28 +55,16 @@ public sealed class LicensingController(
                     },
                 },
             ],
-            SuccessUrl = $"{domain}/licensing/success?session_id={{CHECKOUT_SESSION_ID}}",
-            CancelUrl = $"{domain}/licensing/cancel",
+            SuccessUrl = $"{domain}/licensing-success.html?session_id={{CHECKOUT_SESSION_ID}}",
+            CancelUrl = $"{domain}/licensing-cancel.html",
         };
         var session = await new SessionService().CreateAsync(options);
-        return Redirect(session.Url);
+        return Ok(new { url = session.Url });
     }
 
-    // Stripe redirects here after payment. The grant is the webhook's job; this just fetches the stored key
-    // for this account+session. If the webhook has not run yet (a moment's lag), the key is null → refresh.
+    // The licenses of the current account, newest first.
     [Authorize]
-    [HttpGet("success")]
-    public async Task<IActionResult> Success(string? session_id)
-    {
-        string userId = users.GetUserId(User)!;
-        var lic = string.IsNullOrEmpty(session_id)
-            ? null
-            : await db.Licenses.FirstOrDefaultAsync(l => l.StripeSessionId == session_id && l.UserId == userId);
-        return View(lic);
-    }
-
-    [Authorize]
-    [HttpGet("mine")]
+    [HttpGet("~/api/licensing/mine")]
     public async Task<IActionResult> Mine()
     {
         string userId = users.GetUserId(User)!;
@@ -85,10 +72,38 @@ public sealed class LicensingController(
             .Where(l => l.UserId == userId)
             .OrderByDescending(l => l.IssuedAt)
             .ToListAsync();
-        return View(mine);
+        return Ok(mine.Select(l => new
+        {
+            l.Id,
+            l.Kind,
+            l.MaxNodes,
+            l.IssuedAt,
+            l.ExpiresAt,
+            Expired = l.ExpiresAt < DateTime.UtcNow,
+            DownloadUrl = $"/licensing/download/{l.Id}",
+        }));
     }
 
-    // Re-download a key — only if it belongs to the current user.
+    // Stripe redirects the buyer to the success page with a session_id; the grant itself is the
+    // webhook's job. Here the page asks "is my key ready?": if the webhook has not run yet (a
+    // moment's lag) ready=false and the page retries.
+    [Authorize]
+    [HttpGet("~/api/licensing/session")]
+    public async Task<IActionResult> CheckoutSession(string? session_id)
+    {
+        string userId = users.GetUserId(User)!;
+        var lic = string.IsNullOrEmpty(session_id)
+            ? null
+            : await db.Licenses.FirstOrDefaultAsync(l => l.StripeSessionId == session_id && l.UserId == userId);
+        return Ok(new
+        {
+            Ready = lic is not null,
+            DownloadUrl = lic is null ? null : $"/licensing/download/{lic.Id}",
+        });
+    }
+
+    // Re-download a key — only if it belongs to the current user. A plain navigable link
+    // (not /api): an anonymous hit gets redirected to the static login page.
     [Authorize]
     [HttpGet("download/{id:int}")]
     public async Task<IActionResult> Download(int id)
@@ -99,9 +114,6 @@ public sealed class LicensingController(
             return NotFound();
         return File(Encoding.UTF8.GetBytes(lic.Token), "application/json", "license.json");
     }
-
-    [HttpGet("cancel")]
-    public IActionResult Cancel() => View();
 
     // Stripe → us: the authoritative "payment happened" signal (server-to-server, signature-verified). On a
     // completed checkout it signs a portable key and stores it on the buyer's account. Anonymous but verified.

@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sperone — my licenses</title>
+    <link rel="stylesheet" href="/site.css" />
+    <script src="/site.js"></script>
+</head>
+<body class="wide">
+    <h1>My licenses</h1>
+    <button id="buy" style="margin:0 0 1.5rem;">Buy another (1 year) — €99</button>
+
+    <p id="empty" class="muted hidden">You have no licenses yet.</p>
+    <table id="list" class="hidden">
+        <thead>
+            <tr><th>Issued (UTC)</th><th>Kind</th><th>Max nodes</th><th>Expires</th><th></th></tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+
+    <script>
+        // Le date arrivano ISO (es. 2026-07-02T18:33:12Z): si mostrano tagliate.
+        const day = s => s.slice(0, 10);
+        const minute = s => s.slice(0, 16).replace('T', ' ');
+
+        (async () => {
+            const r = await api('GET', '/api/licensing/mine');
+            if (r.status === 401) return gotoLogin();
+
+            const rows = r.data || [];
+            if (rows.length === 0) {
+                document.getElementById('empty').classList.remove('hidden');
+            } else {
+                const tbody = document.querySelector('#list tbody');
+                for (const l of rows) {
+                    const tr = document.createElement('tr');
+                    const cells = [
+                        minute(l.issuedAt),
+                        l.kind,
+                        String(l.maxNodes),
+                        day(l.expiresAt) + (l.expired ? ' (expired)' : ''),
+                    ];
+                    for (const [i, text] of cells.entries()) {
+                        const td = document.createElement('td');
+                        td.textContent = text;
+                        if (i === 3 && l.expired) td.className = 'expired';
+                        tr.appendChild(td);
+                    }
+                    const td = document.createElement('td');
+                    const a = document.createElement('a');
+                    a.href = l.downloadUrl;
+                    a.textContent = 'download';
+                    td.appendChild(a);
+                    tr.appendChild(td);
+                    document.getElementById('list').classList.remove('hidden');
+                    tbody.appendChild(tr);
+                }
+            }
+
+            document.getElementById('buy').onclick = async () => {
+                const b = await api('POST', '/api/licensing/buy');
+                if (b.ok) location = b.data.url;
+                else if (b.status === 401) gotoLogin();
+                else alert(apiErrors(b).join('\n'));
+            };
+        })();
+    </script>
+</body>
+</html>

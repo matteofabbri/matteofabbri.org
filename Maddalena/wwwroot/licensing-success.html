@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sperone — thank you</title>
+    <link rel="stylesheet" href="/site.css" />
+    <script src="/site.js"></script>
+</head>
+<body>
+    <h1>Thank you!</h1>
+    <p id="status" class="muted">Preparing your license key&hellip;</p>
+    <p id="download" class="hidden"><a id="download-link" href="#">Download your license key</a>
+       <span class="muted">— it also stays saved in <a href="/licenses.html">your licenses</a>.</span></p>
+    <p class="muted" style="margin-top:2rem;">Install it on your server:
+       <code>sperone-setup license-install license.json</code></p>
+
+    <script>
+        // La chiave la firma il webhook di Stripe: di solito e' questione di
+        // secondi. La pagina richiede lo stato qualche volta, poi si arrende
+        // con gentilezza (la chiave resta comunque in "your licenses").
+        (async () => {
+            const sessionId = new URLSearchParams(location.search).get('session_id');
+            const status = document.getElementById('status');
+            if (!sessionId) { status.textContent = 'Missing checkout reference — check your licenses below.'; return; }
+
+            for (let attempt = 0; attempt < 10; attempt++) {
+                const r = await api('GET', '/api/licensing/session?session_id=' + encodeURIComponent(sessionId));
+                if (r.status === 401) return gotoLogin();
+                if (r.ok && r.data.ready) {
+                    document.getElementById('download-link').href = r.data.downloadUrl;
+                    document.getElementById('download').classList.remove('hidden');
+                    status.textContent = 'Your license key is ready.';
+                    return;
+                }
+                await new Promise(done => setTimeout(done, 2000));
+            }
+            status.textContent = 'Payment received — the key is taking a moment. Refresh this page, or find it later in your licenses.';
+        })();
+    </script>
+</body>
+</html>

@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Maddalena — account</title>
+    <link rel="stylesheet" href="/site.css" />
+    <script src="/site.js"></script>
+</head>
+<body class="narrow">
+    <!-- Tre schermate in una pagina: login, registrazione, gestione account.
+         Decide il JS in fondo, in base a /api/account/me. -->
+
+    <section id="login" class="hidden">
+        <h1>Sign in</h1>
+        <p class="muted">One account for maddalena.me and its sites.</p>
+        <form id="login-form">
+            <ul class="errors"></ul>
+            <label>Email <input name="email" type="email" autocomplete="username" required /></label>
+            <label>Password <input name="password" type="password" autocomplete="current-password" required /></label>
+            <label class="remember"><input name="remember" type="checkbox" /> Stay signed in</label>
+            <button type="submit">Sign in</button>
+        </form>
+        <p class="muted">No account yet? <a href="#" data-show="register">Create one</a>.</p>
+    </section>
+
+    <section id="register" class="hidden">
+        <h1>Create account</h1>
+        <p class="muted">One account for maddalena.me and its sites.</p>
+        <form id="register-form">
+            <ul class="errors"></ul>
+            <label>Email <input name="email" type="email" autocomplete="username" required /></label>
+            <label>Password (8+ characters) <input name="password" type="password" autocomplete="new-password" required minlength="8" /></label>
+            <label>Confirm password <input name="confirm" type="password" autocomplete="new-password" required /></label>
+            <button type="submit">Create account</button>
+        </form>
+        <p class="muted">Already registered? <a href="#" data-show="login">Sign in</a>.</p>
+    </section>
+
+    <section id="manage" class="hidden">
+        <h1>Account</h1>
+        <p>Signed in as <strong id="manage-email"></strong></p>
+        <p><a href="/licenses.html">My licenses &rarr;</a></p>
+
+        <div class="card">
+            <h2>Change password</h2>
+            <p class="ok hidden" id="password-changed">Password changed.</p>
+            <form id="password-form">
+                <ul class="errors"></ul>
+                <label>Current password <input name="current" type="password" autocomplete="current-password" required /></label>
+                <label>New password (8+ characters) <input name="new" type="password" autocomplete="new-password" required minlength="8" /></label>
+                <label>Confirm new password <input name="confirm" type="password" autocomplete="new-password" required /></label>
+                <button type="submit">Change password</button>
+            </form>
+        </div>
+
+        <button id="logout">Sign out</button>
+    </section>
+
+    <script>
+        function show(id) {
+            for (const s of document.querySelectorAll('section')) s.classList.add('hidden');
+            document.getElementById(id).classList.remove('hidden');
+        }
+        for (const a of document.querySelectorAll('[data-show]'))
+            a.onclick = e => { e.preventDefault(); show(a.dataset.show); };
+
+        document.getElementById('login-form').onsubmit = async e => {
+            e.preventDefault();
+            const f = e.target;
+            const r = await api('POST', '/api/account/login', {
+                email: f.email.value, password: f.password.value, rememberMe: f.remember.checked,
+            });
+            if (r.ok) location = returnUrl();
+            else showErrors(f.querySelector('.errors'), apiErrors(r));
+        };
+
+        document.getElementById('register-form').onsubmit = async e => {
+            e.preventDefault();
+            const f = e.target;
+            if (f.password.value !== f.confirm.value)
+                return showErrors(f.querySelector('.errors'), ['Passwords do not match.']);
+            const r = await api('POST', '/api/account/register', {
+                email: f.email.value, password: f.password.value,
+            });
+            if (r.ok) location = returnUrl();
+            else showErrors(f.querySelector('.errors'), apiErrors(r));
+        };
+
+        document.getElementById('password-form').onsubmit = async e => {
+            e.preventDefault();
+            const f = e.target;
+            const done = document.getElementById('password-changed');
+            done.classList.add('hidden');
+            if (f.new.value !== f.confirm.value)
+                return showErrors(f.querySelector('.errors'), ['Passwords do not match.']);
+            const r = await api('POST', '/api/account/password', {
+                currentPassword: f.current.value, newPassword: f.new.value,
+            });
+            if (r.ok) { f.reset(); showErrors(f.querySelector('.errors'), []); done.classList.remove('hidden'); }
+            else showErrors(f.querySelector('.errors'), apiErrors(r));
+        };
+
+        document.getElementById('logout').onclick = async () => {
+            await api('POST', '/api/account/logout');
+            location = '/';
+        };
+
+        (async () => {
+            const user = await whoami();
+            if (!user) return show('login');
+            document.getElementById('manage-email').textContent = user.email;
+            show('manage');
+        })();
+    </script>
+</body>
+</html>

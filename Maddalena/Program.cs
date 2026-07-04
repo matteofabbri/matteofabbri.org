@@ -17,7 +17,11 @@ public class Program
 
         // Telemetria, health check e service discovery condivisi della soluzione.
         builder.AddServiceDefaults();
-        builder.Services.AddControllersWithViews();
+
+        // Niente view lato server: il frontend sono i file STATICI in wwwroot
+        // (HTML/CSS/JS puri, sostituibili senza toccare il C#); il backend sono
+        // gli endpoint JSON /api/* dei controller.
+        builder.Services.AddControllers();
 
         // Dietro Caddy: fidati degli header X-Forwarded-* cosi' Maddalena sa di
         // essere https://maddalena.me. L'emittente (issuer) dei token OIDC deve
@@ -46,13 +50,25 @@ public class Program
             .AddEntityFrameworkStores<ApplicationDbContext>()
             .AddDefaultTokenProviders();
 
-        // Il cookie di sessione deve sapere dove stanno le NOSTRE pagine: e' qui che
-        // finisce chi arriva su un [Authorize] senza sessione (incluso /connect/authorize).
+        // Chi arriva su un [Authorize] senza sessione: le /api/* ricevono un 401
+        // secco (ci pensa il JavaScript della pagina), le navigazioni normali
+        // (es. il link di download licenza) vanno alla pagina statica di login.
         builder.Services.ConfigureApplicationCookie(options =>
         {
-            options.LoginPath = "/account/login";
-            options.LogoutPath = "/account/logout";
-            options.AccessDeniedPath = "/account/denied";
+            options.Events.OnRedirectToLogin = context =>
+            {
+                if (context.Request.Path.StartsWithSegments("/api"))
+                    context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                else
+                    context.Response.Redirect("/account.html?return="
+                        + Uri.EscapeDataString(context.Request.Path + context.Request.QueryString));
+                return Task.CompletedTask;
+            };
+            options.Events.OnRedirectToAccessDenied = context =>
+            {
+                context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                return Task.CompletedTask;
+            };
         });
 
         // Stripe (licensing): la chiave segreta per le chiamate server (Checkout, webhook). Vuota finche'
@@ -67,13 +83,20 @@ public class Program
             scope.ServiceProvider.GetRequiredService<ApplicationDbContext>().Database.EnsureCreated();
 
         app.UseForwardedHeaders();
+        app.UseDefaultFiles();         // "/" -> wwwroot/index.html
         app.UseStaticFiles();
         app.UseRouting();
         app.UseAuthentication();
         app.UseAuthorization();
 
-        app.MapControllers();          // /account/*, /licensing/* (attribute routing)
-        app.MapControllerRoute("default", "{controller=Home}/{action=Index}/{id?}");
+        app.MapControllers();          // /api/* + download/webhook (attribute routing)
+
+        // Redirect di cortesia: i vecchi URL delle pagine server portano alle statiche.
+        app.MapGet("/licensing", () => Results.Redirect("/licensing.html"));
+        app.MapGet("/licensing/mine", () => Results.Redirect("/licenses.html"));
+        app.MapGet("/account", () => Results.Redirect("/account.html"));
+        app.MapGet("/account/login", () => Results.Redirect("/account.html"));
+
         app.MapDefaultEndpoints();
 
         app.Run();

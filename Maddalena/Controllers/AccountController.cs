@@ -5,158 +5,117 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace Maddalena.Controllers;
 
-// Le pagine account di Maddalena, fatte in casa al posto della UI prefabbricata di
-// ASP.NET Core Identity: login, registrazione, logout e gestione minima (cambio
-// password). Ci arriva chi clicca "log in" dal licensing e chi rimbalza da
-// /connect/authorize senza sessione (il cookie punta qui, vedi Program.cs).
-// Niente 2FA / conferma email / provider esterni: si aggiungono quando servono.
-[Route("account")]
+// Le "funzioni account" di Maddalena come API JSON: login, registrazione, logout,
+// cambio password e "chi sono". La UI sta nei file statici (wwwroot/account.html):
+// il server non produce HTML. La sessione resta il cookie di Identity; contro il
+// CSRF bastano il cookie SameSite e il fatto che qui si accetta solo JSON (un form
+// cross-site non puo' produrre nessuna delle due cose).
+[ApiController]
+[Route("api/account")]
 public sealed class AccountController(
     SignInManager<IdentityUser> signInManager,
-    UserManager<IdentityUser> userManager) : Controller
+    UserManager<IdentityUser> userManager) : ControllerBase
 {
-    [HttpGet("login")]
-    public IActionResult Login(string? returnUrl = null)
-    {
-        if (signInManager.IsSignedIn(User))
-            return SafeRedirect(returnUrl);
-        return View(new LoginModel { ReturnUrl = returnUrl });
-    }
+    // Chi e' l'utente della sessione corrente: { email } oppure 401.
+    // E' la chiamata con cui ogni pagina statica decide cosa mostrare.
+    [HttpGet("me")]
+    public IActionResult Me() =>
+        signInManager.IsSignedIn(User)
+            ? Ok(new { email = User.Identity!.Name })
+            : Unauthorized();
 
     [HttpPost("login")]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Login(LoginModel model)
+    public async Task<IActionResult> Login(LoginRequest request)
     {
-        if (!ModelState.IsValid)
-            return View(model);
-
-        // Stessa ricerca del password grant: l'email e' anche lo username.
-        var user = await userManager.FindByEmailAsync(model.Email)
-            ?? await userManager.FindByNameAsync(model.Email);
+        // Stessa ricerca di sempre: l'email e' anche lo username.
+        var user = await userManager.FindByEmailAsync(request.Email)
+            ?? await userManager.FindByNameAsync(request.Email);
         var result = user is null
             ? Microsoft.AspNetCore.Identity.SignInResult.Failed
-            : await signInManager.PasswordSignInAsync(user, model.Password, model.RememberMe, lockoutOnFailure: true);
+            : await signInManager.PasswordSignInAsync(user, request.Password, request.RememberMe, lockoutOnFailure: true);
 
         if (result.Succeeded)
-            return SafeRedirect(model.ReturnUrl);
+            return NoContent();
 
-        ModelState.AddModelError(string.Empty, result.IsLockedOut
-            ? "Too many failed attempts. Try again in a few minutes."
-            : "Invalid email or password.");
-        return View(model);
-    }
-
-    [HttpGet("register")]
-    public IActionResult Register(string? returnUrl = null)
-    {
-        if (signInManager.IsSignedIn(User))
-            return SafeRedirect(returnUrl);
-        return View(new RegisterModel { ReturnUrl = returnUrl });
+        return Unauthorized(new
+        {
+            message = result.IsLockedOut
+                ? "Too many failed attempts. Try again in a few minutes."
+                : "Invalid email or password.",
+        });
     }
 
     [HttpPost("register")]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Register(RegisterModel model)
+    public async Task<IActionResult> Register(RegisterRequest request)
     {
-        if (!ModelState.IsValid)
-            return View(model);
-
-        var user = new IdentityUser { UserName = model.Email, Email = model.Email };
-        var result = await userManager.CreateAsync(user, model.Password);
+        var user = new IdentityUser { UserName = request.Email, Email = request.Email };
+        var result = await userManager.CreateAsync(user, request.Password);
         if (!result.Succeeded)
-        {
-            foreach (var error in result.Errors)
-                ModelState.AddModelError(string.Empty, error.Description);
-            return View(model);
-        }
+            return IdentityProblem(result);
 
         await signInManager.SignInAsync(user, isPersistent: false);
-        return SafeRedirect(model.ReturnUrl);
+        return NoContent();
     }
 
-    // Il logout del SITO (cookie): i client OIDC invece passano da /connect/logout.
     [HttpPost("logout")]
-    [ValidateAntiForgeryToken]
     public async Task<IActionResult> Logout()
     {
         await signInManager.SignOutAsync();
-        return Redirect("/");
+        return NoContent();
     }
-
-    // La pagina account: email, cambio password, logout.
-    [Authorize]
-    [HttpGet("")]
-    public IActionResult Index() => View(new ChangePasswordModel());
 
     [Authorize]
     [HttpPost("password")]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> ChangePassword(ChangePasswordModel model)
+    public async Task<IActionResult> ChangePassword(ChangePasswordRequest request)
     {
-        if (!ModelState.IsValid)
-            return View("Index", model);
-
         var user = await userManager.GetUserAsync(User);
         if (user is null)
-            return Challenge();
+            return Unauthorized();
 
-        var result = await userManager.ChangePasswordAsync(user, model.CurrentPassword, model.NewPassword);
+        var result = await userManager.ChangePasswordAsync(user, request.CurrentPassword, request.NewPassword);
         if (!result.Succeeded)
-        {
-            foreach (var error in result.Errors)
-                ModelState.AddModelError(string.Empty, error.Description);
-            return View("Index", model);
-        }
+            return IdentityProblem(result);
 
         // Il cambio password invalida il security stamp: si rinnova il cookie per restare loggati.
         await signInManager.RefreshSignInAsync(user);
-        TempData["Message"] = "Password changed.";
-        return RedirectToAction(nameof(Index));
+        return NoContent();
     }
 
-    [HttpGet("denied")]
-    public IActionResult Denied() => View();
-
-    // Solo URL locali: il returnUrl arriva dalla query, mai seguirlo verso host esterni.
-    private IActionResult SafeRedirect(string? returnUrl) =>
-        Url.IsLocalUrl(returnUrl) ? LocalRedirect(returnUrl) : Redirect("/");
+    // Errori di Identity nella stessa forma dei 400 di validazione automatici
+    // ([ApiController]): { errors: { "": [messaggi] } }. Il JS li appiattisce.
+    private IActionResult IdentityProblem(IdentityResult result)
+    {
+        foreach (var error in result.Errors)
+            ModelState.AddModelError(string.Empty, error.Description);
+        return ValidationProblem(ModelState);
+    }
 }
 
-public sealed class LoginModel
+public sealed class LoginRequest
 {
     [Required, EmailAddress]
     public string Email { get; set; } = "";
 
-    [Required, DataType(DataType.Password)]
+    [Required]
     public string Password { get; set; } = "";
 
     public bool RememberMe { get; set; }
-
-    public string? ReturnUrl { get; set; }
 }
 
-public sealed class RegisterModel
+public sealed class RegisterRequest
 {
     [Required, EmailAddress]
     public string Email { get; set; } = "";
 
-    [Required, DataType(DataType.Password), MinLength(8)]
+    [Required, MinLength(8)]
     public string Password { get; set; } = "";
-
-    [DataType(DataType.Password), Compare(nameof(Password), ErrorMessage = "Passwords do not match.")]
-    public string ConfirmPassword { get; set; } = "";
-
-    public string? ReturnUrl { get; set; }
 }
 
-public sealed class ChangePasswordModel
+public sealed class ChangePasswordRequest
 {
-    [Required, DataType(DataType.Password)]
+    [Required]
     public string CurrentPassword { get; set; } = "";
 
-    [Required, DataType(DataType.Password), MinLength(8)]
+    [Required, MinLength(8)]
     public string NewPassword { get; set; } = "";
-
-    [DataType(DataType.Password), Compare(nameof(NewPassword), ErrorMessage = "Passwords do not match.")]
-    public string ConfirmPassword { get; set; } = "";
 }
