@@ -23,6 +23,10 @@ public class Program
         // gli endpoint JSON /api/* dei controller.
         builder.Services.AddControllers();
 
+        // Il contratto delle API, descritto in OpenAPI: servito su /openapi/v1.json.
+        // E' IL documento da dare a chi fa il frontend (insieme a wwwroot).
+        builder.Services.AddOpenApi();
+
         // Dietro Caddy: fidati degli header X-Forwarded-* cosi' Maddalena sa di
         // essere https://maddalena.me. L'emittente (issuer) dei token OIDC deve
         // essere quel nome pubblico, non l'host interno del container.
@@ -90,6 +94,7 @@ public class Program
         app.UseAuthorization();
 
         app.MapControllers();          // /api/* + download/webhook (attribute routing)
+        app.MapOpenApi();              // /openapi/v1.json (il contratto delle API)
 
         // Redirect di cortesia: i vecchi URL delle pagine server portano alle statiche.
         app.MapGet("/licensing", () => Results.Redirect("/licensing.html"));

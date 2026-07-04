@@ -1,5 +1,6 @@
 using System.Text;
 using Maddalena.Data;
+using Maddalena.Model;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -31,6 +32,8 @@ public sealed class LicensingController(
     // Starts a Stripe Checkout and returns its URL: it is the JS that navigates there.
     [Authorize]
     [HttpPost("~/api/licensing/buy")]
+    [ProducesResponseType<BuyResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Buy()
     {
         string userId = users.GetUserId(User)!;
@@ -59,12 +62,14 @@ public sealed class LicensingController(
             CancelUrl = $"{domain}/licensing-cancel.html",
         };
         var session = await new SessionService().CreateAsync(options);
-        return Ok(new { url = session.Url });
+        return Ok(new BuyResponse { Url = session.Url });
     }
 
     // The licenses of the current account, newest first.
     [Authorize]
     [HttpGet("~/api/licensing/mine")]
+    [ProducesResponseType<IEnumerable<LicenseResponse>>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Mine()
     {
         string userId = users.GetUserId(User)!;
@@ -72,13 +77,13 @@ public sealed class LicensingController(
             .Where(l => l.UserId == userId)
             .OrderByDescending(l => l.IssuedAt)
             .ToListAsync();
-        return Ok(mine.Select(l => new
+        return Ok(mine.Select(l => new LicenseResponse
         {
-            l.Id,
-            l.Kind,
-            l.MaxNodes,
-            l.IssuedAt,
-            l.ExpiresAt,
+            Id = l.Id,
+            Kind = l.Kind,
+            MaxNodes = l.MaxNodes,
+            IssuedAt = l.IssuedAt,
+            ExpiresAt = l.ExpiresAt,
             Expired = l.ExpiresAt < DateTime.UtcNow,
             DownloadUrl = $"/licensing/download/{l.Id}",
         }));
@@ -89,13 +94,15 @@ public sealed class LicensingController(
     // moment's lag) ready=false and the page retries.
     [Authorize]
     [HttpGet("~/api/licensing/session")]
+    [ProducesResponseType<CheckoutSessionResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> CheckoutSession(string? session_id)
     {
         string userId = users.GetUserId(User)!;
         var lic = string.IsNullOrEmpty(session_id)
             ? null
             : await db.Licenses.FirstOrDefaultAsync(l => l.StripeSessionId == session_id && l.UserId == userId);
-        return Ok(new
+        return Ok(new CheckoutSessionResponse
         {
             Ready = lic is not null,
             DownloadUrl = lic is null ? null : $"/licensing/download/{lic.Id}",

@@ -16,6 +16,9 @@
   <ItemGroup>
     <PackageReference Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" Version="13.4.6" />
     <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.9" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.9" />
+    <!-- Pin del transitivo: la 2.0.0 portata da AspNetCore.OpenApi ha una CVE nota (GHSA-v5pm-xwqc-g5wc). -->
+    <PackageReference Include="Microsoft.OpenApi" Version="2.7.5" />
     <PackageReference Include="Stripe.net" Version="52.1.0" />
   </ItemGroup>
 

@@ -1,4 +1,4 @@
-using System.ComponentModel.DataAnnotations;
+using Maddalena.Model;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -19,12 +19,16 @@ public sealed class AccountController(
     // Chi e' l'utente della sessione corrente: { email } oppure 401.
     // E' la chiamata con cui ogni pagina statica decide cosa mostrare.
     [HttpGet("me")]
+    [ProducesResponseType<MeResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public IActionResult Me() =>
         signInManager.IsSignedIn(User)
-            ? Ok(new { email = User.Identity!.Name })
+            ? Ok(new MeResponse { Email = User.Identity!.Name! })
             : Unauthorized();
 
     [HttpPost("login")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ErrorResponse>(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Login(LoginRequest request)
     {
         // Stessa ricerca di sempre: l'email e' anche lo username.
@@ -37,15 +41,17 @@ public sealed class AccountController(
         if (result.Succeeded)
             return NoContent();
 
-        return Unauthorized(new
+        return Unauthorized(new ErrorResponse
         {
-            message = result.IsLockedOut
+            Message = result.IsLockedOut
                 ? "Too many failed attempts. Try again in a few minutes."
                 : "Invalid email or password.",
         });
     }
 
     [HttpPost("register")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Register(RegisterRequest request)
     {
         var user = new IdentityUser { UserName = request.Email, Email = request.Email };
@@ -58,6 +64,7 @@ public sealed class AccountController(
     }
 
     [HttpPost("logout")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> Logout()
     {
         await signInManager.SignOutAsync();
@@ -66,6 +73,9 @@ public sealed class AccountController(
 
     [Authorize]
     [HttpPost("password")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> ChangePassword(ChangePasswordRequest request)
     {
         var user = await userManager.GetUserAsync(User);
@@ -89,33 +99,4 @@ public sealed class AccountController(
             ModelState.AddModelError(string.Empty, error.Description);
         return ValidationProblem(ModelState);
     }
-}
-
-public sealed class LoginRequest
-{
-    [Required, EmailAddress]
-    public string Email { get; set; } = "";
-
-    [Required]
-    public string Password { get; set; } = "";
-
-    public bool RememberMe { get; set; }
-}
-
-public sealed class RegisterRequest
-{
-    [Required, EmailAddress]
-    public string Email { get; set; } = "";
-
-    [Required, MinLength(8)]
-    public string Password { get; set; } = "";
-}
-
-public sealed class ChangePasswordRequest
-{
-    [Required]
-    public string CurrentPassword { get; set; } = "";
-
-    [Required, MinLength(8)]
-    public string NewPassword { get; set; } = "";
 }
