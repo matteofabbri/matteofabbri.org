@@ -105,7 +105,6 @@ MAILCOW_HTTP_UPSTREAM=nginx-mailcow:8080  # nginx di mailcow, HTTP
 
 # Licensing (Maddalena, sotto /licensing): senza queste il sito parte lo
 # stesso, ma "Buy" e l'emissione delle chiavi non funzionano.
-OIDC_AUTHORITY=https://maddalena.me      # issuer OIDC di Maddalena (di solito non serve toccarlo)
 STRIPE_PUBLISHABLE=pk_live_...           # dashboard Stripe > Developers > API keys
 STRIPE_SECRET=sk_live_...                # dashboard Stripe > Developers > API keys
 STRIPE_WEBHOOK=whsec_...                 # dashboard Stripe > Developers > Webhooks (endpoint /licensing/sperone/webhook, evento checkout.session.completed)

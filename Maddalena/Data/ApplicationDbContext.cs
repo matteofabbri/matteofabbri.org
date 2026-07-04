@@ -4,9 +4,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Maddalena.Data;
 
-// Un solo contesto EF per Maddalena: gli account ASP.NET Core Identity + le tabelle
-// di OpenIddict (applicazioni client, autorizzazioni, token). Le tabelle OpenIddict
-// vengono registrate nel modello da `options.UseOpenIddict()` nell'AppHost/Program.
+// Un solo contesto EF per Maddalena: gli account ASP.NET Core Identity + le licenze
+// commerciali. (Nel DB di produzione restano tabelle OpenIddict orfane dell'epoca in
+// cui Maddalena era anche provider OIDC: innocue, da droppare a mano volendo.)
 public class ApplicationDbContext : IdentityDbContext<IdentityUser>
 {
     public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)

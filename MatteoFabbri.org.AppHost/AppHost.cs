@@ -54,24 +54,18 @@ var site = builder.AddProject<Projects.MainSite>("site");
 var theqult = builder.AddProject<Projects.TheQult>("theqult");
 
 // --- maddalena.me: progetto MVC ---------------------------------------------
-// Fa da sito principale del dominio; sotto /licensing ospitera' il sito licenze
-// (vedi sotto) e in prospettiva fara' da provider di identita' per i sotto-siti.
+// Fa da sito principale del dominio; sotto /licensing ospita il licensing di
+// Sperone. Account LOCALI (Identity + cookie): niente piu' provider OIDC.
 var maddalena = builder.AddProject<Projects.Maddalena>("maddalena");
 
-// Postgres: gli account di Maddalena (ASP.NET Core Identity) + le tabelle OpenIddict + le licenze
+// Postgres: gli account di Maddalena (ASP.NET Core Identity) + le licenze
 // commerciali comprate (tabella AccountLicense). WithDataVolume => i dati sopravvivono ai riavvii.
 var postgres = builder.AddPostgres("postgres")
     .WithDataVolume();
 
-// DB di Maddalena: account + OpenIddict + licenze. Il licensing vive ORA dentro Maddalena (sotto
+// DB di Maddalena: account + licenze. Il licensing vive ORA dentro Maddalena (sotto
 // /licensing) — niente piu' sito separato ne' Mongo.
 var maddalenaDb = postgres.AddDatabase("maddalenadb");
-
-// L'indirizzo pubblico del provider di identita' (Maddalena): i sotto-siti ci
-// puntano per il login OIDC e per validare i token. Niente slash finale: deve
-// combaciare con l'emittente (iss) che Maddalena mette nei token dietro Caddy.
-var oidcAuthority = builder.AddParameter("oidc-authority",
-    () => builder.Configuration["Parameters:oidc-authority"] ?? "https://maddalena.me");
 
 // Chiavi Stripe (test/sandbox in dev, live in prod). I valori stanno negli user-secrets di QUESTO AppHost
 // come Parameters:stripe-* ; opzionali (default vuoto) cosi' Maddalena parte anche prima di impostarle.
@@ -86,8 +80,8 @@ var stripeWebhook = builder.AddParameter("stripe-webhook", () => builder.Configu
 var licensingPrivateKey = builder.AddParameter("licensing-private-key",
     () => builder.Configuration["Parameters:licensing-private-key"] ?? "", secret: true);
 
-// Maddalena fa da provider OIDC (server OpenIddict) E ospita il licensing: le servono il suo DB, le chiavi
-// Stripe e la chiave privata di firma (Stripe__X -> Stripe:X ; Licensing__X -> Licensing:X).
+// Maddalena ospita il licensing: le servono il suo DB, le chiavi Stripe e la chiave
+// privata di firma (Stripe__X -> Stripe:X ; Licensing__X -> Licensing:X).
 maddalena
     .WithReference(maddalenaDb)
     .WaitFor(maddalenaDb)
@@ -96,14 +90,6 @@ maddalena
     .WithEnvironment("Stripe__WebhookSecret", stripeWebhook)
     .WithEnvironment("Licensing__PrivateKey", licensingPrivateKey)
     .WithEnvironment("Licensing__KeyId", "k1");
-
-// --- Emittente (issuer) OIDC di Maddalena -----------------------------------
-// L'iss dei token deve combaciare con l'authority che i sotto-siti useranno. In PUBBLICAZIONE e' il dominio
-// pubblico; in LOCALE (aspire run) e' l'URL localhost reale che Aspire gia' conosce.
-if (builder.ExecutionContext.IsPublishMode)
-    maddalena.WithEnvironment("Oidc__Issuer", oidcAuthority);
-else
-    maddalena.WithEnvironment("Oidc__Issuer", maddalena.GetEndpoint("http"));
 
 // L'indirizzo interno (host:porta) a cui Caddy inoltra il traffico del sito:
 // deriva dall'endpoint del progetto. HostAndPort restituisce "host:porta" gia'
