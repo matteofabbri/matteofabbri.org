@@ -97,10 +97,11 @@ public class Program
         app.MapOpenApi();              // /openapi/v1.json (il contratto delle API)
 
         // Redirect di cortesia: i vecchi URL delle pagine server portano alle statiche.
-        app.MapGet("/licensing", () => Results.Redirect("/licensing.html"));
-        app.MapGet("/licensing/mine", () => Results.Redirect("/licenses.html"));
-        app.MapGet("/account", () => Results.Redirect("/account.html"));
-        app.MapGet("/account/login", () => Results.Redirect("/account.html"));
+        // ExcludeFromDescription: non sono API, fuori dal contratto OpenAPI.
+        app.MapGet("/licensing", () => Results.Redirect("/licensing.html")).ExcludeFromDescription();
+        app.MapGet("/licensing/mine", () => Results.Redirect("/licenses.html")).ExcludeFromDescription();
+        app.MapGet("/account", () => Results.Redirect("/account.html")).ExcludeFromDescription();
+        app.MapGet("/account/login", () => Results.Redirect("/account.html")).ExcludeFromDescription();
 
         app.MapDefaultEndpoints();
 

@@ -18,6 +18,7 @@ namespace Maddalena.Controllers;
 /// The UI lives in the static pages (wwwroot/licensing*.html, licenses.html): this controller is
 /// JSON endpoints under /api/licensing plus the two non-UI routes (key download, Stripe webhook).
 /// </summary>
+[ApiController]   // anche per l'ApiExplorer: senza, queste rotte non entrano in /openapi/v1.json
 [Route("licensing")]
 public sealed class LicensingController(
     ApplicationDbContext db,
@@ -124,7 +125,9 @@ public sealed class LicensingController(
 
     // Stripe → us: the authoritative "payment happened" signal (server-to-server, signature-verified). On a
     // completed checkout it signs a portable key and stores it on the buyer's account. Anonymous but verified.
+    // Not part of the frontend contract: hidden from the OpenAPI document.
     [AllowAnonymous]
+    [ApiExplorerSettings(IgnoreApi = true)]
     [HttpPost("sperone/webhook")]
     public async Task<IActionResult> Webhook()
     {
@@ -187,6 +190,7 @@ public sealed class LicensingController(
 
     // Dev-only: mint a fresh signing key pair to bootstrap the vendor keys — the PUBLIC half goes into the
     // product (EmbeddedLicenseKeys), the PRIVATE half into Licensing:PrivateKey. Never outside Development.
+    [ApiExplorerSettings(IgnoreApi = true)]
     [HttpGet("keygen")]
     public IActionResult Keygen([FromServices] IWebHostEnvironment env)
     {
