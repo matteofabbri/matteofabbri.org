@@ -39,8 +39,12 @@ foreach ($image in $images) {
     }
 }
 
-# Contesto di build di Caddy accanto al compose (sovrascrive se gia' presente).
-Copy-Item -Recurse -Force "MatteoFabbri.org.AppHost\caddy" (Join-Path $Output "caddy")
+# Contesto di build di Caddy accanto al compose. La destinazione si azzera prima:
+# con -Force su una cartella gia' esistente Copy-Item copierebbe DENTRO di essa
+# (out\caddy\caddy) lasciando al primo livello i file della publish precedente.
+$caddyOut = Join-Path $Output "caddy"
+if (Test-Path $caddyOut) { Remove-Item -Recurse -Force $caddyOut }
+Copy-Item -Recurse "MatteoFabbri.org.AppHost\caddy" $caddyOut
 
 Write-Host ""
 Write-Host "Fatto. Output in: $Output" -ForegroundColor Green
