@@ -27,6 +27,14 @@ public class Program
         // E' IL documento da dare a chi fa il frontend (insieme a wwwroot).
         builder.Services.AddOpenApi();
 
+        // CORS aperto: le API si possono chiamare da qualunque origine. SENZA
+        // credenziali pero' — '*' + cookie non convivono, e' una regola dei browser —
+        // quindi il cookie di sessione non viaggia mai cross-origin e la protezione
+        // CSRF resta intatta. Utile per: contratto OpenAPI da tool esterni, sviluppo
+        // frontend in locale contro le chiamate anonime.
+        builder.Services.AddCors(options => options.AddDefaultPolicy(policy =>
+            policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()));
+
         // Dietro Caddy: fidati degli header X-Forwarded-* cosi' Maddalena sa di
         // essere https://maddalena.me. L'emittente (issuer) dei token OIDC deve
         // essere quel nome pubblico, non l'host interno del container.
@@ -90,6 +98,7 @@ public class Program
         app.UseDefaultFiles();         // "/" -> wwwroot/index.html
         app.UseStaticFiles();
         app.UseRouting();
+        app.UseCors();
         app.UseAuthentication();
         app.UseAuthorization();
 
