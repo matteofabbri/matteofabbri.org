@@ -124,11 +124,14 @@ public sealed class LicensingController(
     }
 
     // Stripe → us: the authoritative "payment happened" signal (server-to-server, signature-verified). On a
-    // completed checkout it signs a portable key and stores it on the buyer's account. Anonymous but verified.
-    // Not part of the frontend contract: hidden from the OpenAPI document.
+    // completed checkout it signs a portable key and stores it on the buyer's account. Anonymous but verified:
+    // Stripe calls it, not the browser. Documented in OpenAPI (every endpoint is), though it takes no JSON body.
     [AllowAnonymous]
-    [ApiExplorerSettings(IgnoreApi = true)]
     [HttpPost("sperone/webhook")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
     public async Task<IActionResult> Webhook()
     {
         string json = await new StreamReader(Request.Body).ReadToEndAsync();
