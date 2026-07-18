@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <!-- The issuer side: key generation and token signing. Vendor-only — referenced by the issuing site
+         (Maddalena), NEVER by a customer-facing product server. BCL only, AOT/trim-safe. It shares the
+         token format with Maddalena.Licensing (verification side). -->
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Maddalena.Licensing\Maddalena.Licensing.csproj" />
+  </ItemGroup>
+
+</Project>

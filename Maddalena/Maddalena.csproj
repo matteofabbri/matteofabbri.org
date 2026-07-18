@@ -8,9 +8,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\MatteoFabbri.org.ServiceDefaults\MatteoFabbri.org.ServiceDefaults.csproj" />
-    <!-- The licensing signing core, from the SPERONE git submodule. Vendor-only (holds the private key);
-         Maddalena mints portable keys on Stripe payment. -->
-    <ProjectReference Include="..\external\SPERONE\LICENSING\Sperone.Licensing.Issuing\Sperone.Licensing.Issuing.csproj" />
+    <!-- The licensing signing core. Vendor-only (holds the private key); Maddalena mints portable keys
+         on Stripe payment. Generic: the same libraries license every product sold on maddalena.me. -->
+    <ProjectReference Include="..\LIBRARIES\MADDALENA\Maddalena.Licensing.Issuing\Maddalena.Licensing.Issuing.csproj" />
   </ItemGroup>
 
   <ItemGroup>

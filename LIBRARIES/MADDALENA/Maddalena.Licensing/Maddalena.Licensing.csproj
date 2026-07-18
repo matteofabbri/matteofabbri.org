@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <!-- Licensing foundation shared between any product server sold on maddalena.me (which VERIFIES)
+         and the issuing site (which SIGNS). BCL only: no dependencies, AOT/trim-safe (ECDSA P-256
+         signatures + source-gen JSON), so it can go into a product's AOT binary too. -->
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The issuer library signs tokens and needs the internal token format (TokenEnvelope, LicensingJson).
+         A product server only references this shared library and gets verification, not signing. -->
+    <InternalsVisibleTo Include="Maddalena.Licensing.Issuing" />
+  </ItemGroup>
+
+</Project>
