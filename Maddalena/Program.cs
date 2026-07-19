@@ -18,13 +18,14 @@ public class Program
         // Telemetria, health check e service discovery condivisi della soluzione.
         builder.AddServiceDefaults();
 
-        // Niente view lato server: il frontend sono i file STATICI in wwwroot
-        // (HTML/CSS/JS puri, sostituibili senza toccare il C#); il backend sono
-        // gli endpoint JSON /api/* dei controller.
+        // Niente view lato server: il frontend e' la SPA React (repo maddelena-FE,
+        // submodule external/maddelena-FE) che la build compila in wwwroot; il
+        // backend sono gli endpoint JSON /api/* dei controller.
         builder.Services.AddControllers();
 
         // Il contratto delle API, descritto in OpenAPI: servito su /openapi/v1.json.
-        // E' IL documento da dare a chi fa il frontend (insieme a wwwroot).
+        // E' IL documento da dare a chi fa il frontend (la SPA ne tiene una copia
+        // in src/openapi.json).
         builder.Services.AddOpenApi();
 
         // CORS aperto: le API si possono chiamare da qualunque origine. SENZA
@@ -84,8 +85,8 @@ public class Program
             .AddDefaultTokenProviders();
 
         // Chi arriva su un [Authorize] senza sessione: le /api/* ricevono un 401
-        // secco (ci pensa il JavaScript della pagina), le navigazioni normali
-        // (es. il link di download licenza) vanno alla pagina statica di login.
+        // secco (ci pensa la SPA), le navigazioni normali (es. il link di download
+        // licenza) vanno alla pagina licensing della SPA, che ha il login.
         builder.Services.ConfigureApplicationCookie(options =>
         {
             options.Events.OnRedirectToLogin = context =>
@@ -93,8 +94,7 @@ public class Program
                 if (context.Request.Path.StartsWithSegments("/api"))
                     context.Response.StatusCode = StatusCodes.Status401Unauthorized;
                 else
-                    context.Response.Redirect("/account.html?return="
-                        + Uri.EscapeDataString(context.Request.Path + context.Request.QueryString));
+                    context.Response.Redirect("/licensing");
                 return Task.CompletedTask;
             };
             options.Events.OnRedirectToAccessDenied = context =>
@@ -126,12 +126,25 @@ public class Program
         app.MapControllers();          // /api/* + download/webhook (attribute routing)
         app.MapOpenApi();              // /openapi/v1.json (il contratto delle API)
 
-        // Redirect di cortesia: i vecchi URL delle pagine server portano alle statiche.
+        // Redirect di cortesia: i vecchi URL (pagine server di ieri, statiche .html
+        // dell'altro ieri) portano ai percorsi della SPA. Servono espliciti perche'
+        // il fallback qui sotto ignora i percorsi con estensione (vincolo :nonfile).
         // ExcludeFromDescription: non sono API, fuori dal contratto OpenAPI.
-        app.MapGet("/licensing", () => Results.Redirect("/licensing.html")).ExcludeFromDescription();
-        app.MapGet("/licensing/mine", () => Results.Redirect("/licenses.html")).ExcludeFromDescription();
-        app.MapGet("/account", () => Results.Redirect("/account.html")).ExcludeFromDescription();
-        app.MapGet("/account/login", () => Results.Redirect("/account.html")).ExcludeFromDescription();
+        app.MapGet("/licensing.html", () => Results.Redirect("/licensing")).ExcludeFromDescription();
+        app.MapGet("/licenses.html", () => Results.Redirect("/licensing")).ExcludeFromDescription();
+        app.MapGet("/licensing/mine", () => Results.Redirect("/licensing")).ExcludeFromDescription();
+        // Il session_id va preservato: un checkout Stripe aperto prima del deploy
+        // torna ancora sul vecchio URL di successo.
+        app.MapGet("/licensing-success.html", (HttpRequest req)
+            => Results.Redirect("/licensing" + req.QueryString)).ExcludeFromDescription();
+        app.MapGet("/licensing-cancel.html", () => Results.Redirect("/licensing")).ExcludeFromDescription();
+        app.MapGet("/account.html", () => Results.Redirect("/")).ExcludeFromDescription();
+        app.MapGet("/account", () => Results.Redirect("/")).ExcludeFromDescription();
+        app.MapGet("/account/login", () => Results.Redirect("/")).ExcludeFromDescription();
+
+        // La SPA fa routing lato client (/licensing, /sperone, ...): ogni percorso
+        // senza estensione non gestito sopra serve index.html e ci pensa React.
+        app.MapFallbackToFile("index.html").ExcludeFromDescription();
 
         app.MapDefaultEndpoints();
 

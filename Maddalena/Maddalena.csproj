@@ -4,7 +4,19 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <!-- Il frontend: la SPA React/Vite nel submodule external/maddelena-FE.
+         La build (target BuildSpa qui sotto) la compila e ne copia la dist in wwwroot. -->
+    <SpaRoot>..\external\maddelena-FE\</SpaRoot>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- wwwroot e' output generato (e ignorato da git): fuori dal glob Content,
+         cosi' la publish non parte da una fotografia stantia — ci pensa PublishSpa. -->
+    <Content Remove="wwwroot\**" />
+    <!-- I sorgenti della SPA che fanno scattare la ricompilazione del frontend. -->
+    <SpaSource Include="$(SpaRoot)src\**" />
+    <SpaSource Include="$(SpaRoot)index.html;$(SpaRoot)package.json;$(SpaRoot)vite.config.ts;$(SpaRoot)tsconfig.json" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\MatteoFabbri.org.ServiceDefaults\MatteoFabbri.org.ServiceDefaults.csproj" />
@@ -21,5 +33,36 @@
     <PackageReference Include="Microsoft.OpenApi" Version="2.7.5" />
     <PackageReference Include="Stripe.net" Version="52.1.0" />
   </ItemGroup>
+
+  <!-- npm install solo se node_modules manca (primo clone): il check a ogni build
+       costerebbe secondi; se cambiano le dipendenze del FE basta cancellarla. -->
+  <Target Name="EnsureNodeModules" Condition="!Exists('$(SpaRoot)node_modules')">
+    <Exec Command="npm install" WorkingDirectory="$(SpaRoot)" />
+  </Target>
+
+  <!-- Compila la SPA e ne copia la dist in wwwroot. Incrementale: se nessun
+       sorgente del FE e' piu' nuovo di wwwroot\index.html non fa nulla,
+       cosi' la F5 da Visual Studio non paga npm a ogni giro. -->
+  <Target Name="BuildSpa" DependsOnTargets="EnsureNodeModules" BeforeTargets="Build"
+          Inputs="@(SpaSource)" Outputs="wwwroot\index.html">
+    <Exec Command="npm run build" WorkingDirectory="$(SpaRoot)" />
+    <RemoveDir Directories="wwwroot" />
+    <ItemGroup>
+      <SpaDist Include="$(SpaRoot)dist\**" />
+    </ItemGroup>
+    <Copy SourceFiles="@(SpaDist)" DestinationFiles="@(SpaDist->'wwwroot\%(RecursiveDir)%(Filename)%(Extension)')" />
+  </Target>
+
+  <!-- La publish porta con se' la wwwroot appena costruita da BuildSpa
+       (il glob Content e' spento sopra, quindi qui non nascono duplicati). -->
+  <Target Name="PublishSpa" AfterTargets="ComputeFilesToPublish">
+    <ItemGroup>
+      <SpaWwwroot Include="wwwroot\**" />
+      <ResolvedFileToPublish Include="@(SpaWwwroot)">
+        <RelativePath>wwwroot\%(RecursiveDir)%(Filename)%(Extension)</RelativePath>
+        <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      </ResolvedFileToPublish>
+    </ItemGroup>
+  </Target>
 
 </Project>

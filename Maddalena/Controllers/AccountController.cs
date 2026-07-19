@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace Maddalena.Controllers;
 
 // Le "funzioni account" di Maddalena come API JSON: login, registrazione, logout,
-// cambio password e "chi sono". La UI sta nei file statici (wwwroot/account.html):
+// cambio password e "chi sono". La UI sta nella SPA React (external/maddelena-FE):
 // il server non produce HTML. La sessione resta il cookie di Identity; contro il
 // CSRF bastano il cookie SameSite e il fatto che qui si accetta solo JSON (un form
 // cross-site non puo' produrre nessuna delle due cose).
@@ -17,7 +17,7 @@ public sealed class AccountController(
     UserManager<IdentityUser> userManager) : ControllerBase
 {
     // Chi e' l'utente della sessione corrente: { email } oppure 401.
-    // E' la chiamata con cui ogni pagina statica decide cosa mostrare.
+    // E' la chiamata con cui la SPA decide cosa mostrare.
     [HttpGet("me")]
     [ProducesResponseType<MeResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]

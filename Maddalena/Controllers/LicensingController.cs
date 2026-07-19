@@ -15,7 +15,7 @@ namespace Maddalena.Controllers;
 /// Licensing, hosted inside maddalena.me under /licensing. A logged-in customer buys a commercial
 /// license via Stripe; the signature-verified webhook SIGNS a portable key and stores it on the
 /// account. Honor model: the key is a receipt, not a machine lock — free users never come here.
-/// The UI lives in the static pages (wwwroot/licensing*.html, licenses.html): this controller is
+/// The UI lives in the React SPA (external/maddelena-FE, built into wwwroot): this controller is
 /// JSON endpoints under /api/licensing plus the two non-UI routes (key download, Stripe webhook).
 /// </summary>
 [ApiController]   // anche per l'ApiExplorer: senza, queste rotte non entrano in /openapi/v1.json
@@ -59,8 +59,10 @@ public sealed class LicensingController(
                     },
                 },
             ],
-            SuccessUrl = $"{domain}/licensing-success.html?session_id={{CHECKOUT_SESSION_ID}}",
-            CancelUrl = $"{domain}/licensing-cancel.html",
+            // Back to the SPA licensing page: it reads session_id from the query
+            // and polls /api/licensing/session until the webhook has minted the key.
+            SuccessUrl = $"{domain}/licensing?session_id={{CHECKOUT_SESSION_ID}}",
+            CancelUrl = $"{domain}/licensing",
         };
         var session = await new SessionService().CreateAsync(options);
         return Ok(new BuyResponse { Url = session.Url });
@@ -111,7 +113,7 @@ public sealed class LicensingController(
     }
 
     // Re-download a key — only if it belongs to the current user. A plain navigable link
-    // (not /api): an anonymous hit gets redirected to the static login page.
+    // (not /api): an anonymous hit gets redirected to the SPA licensing page to log in.
     [Authorize]
     [HttpGet("download/{id:int}")]
     public async Task<IActionResult> Download(int id)

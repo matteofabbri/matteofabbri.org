@@ -7,6 +7,10 @@
 [Oo]ut/
 *.tar
 
+# --- Frontend di Maddalena: wwwroot e' GENERATA dalla build Vite del
+#     submodule external/maddelena-FE (target BuildSpa nel csproj) ---
+Maddalena/wwwroot/
+
 # --- Visual Studio / utente ---
 .vs/
 *.user

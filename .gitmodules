@@ -1,3 +1,6 @@
 [submodule "external/SPERONE"]
 	path = external/SPERONE
 	url = https://github.com/matteofabbri/SPERONE.git
+[submodule "external/maddelena-FE"]
+	path = external/maddelena-FE
+	url = https://github.com/matteofabbri/maddelena-FE.git
