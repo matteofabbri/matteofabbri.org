@@ -7,16 +7,21 @@
     <!-- Il frontend: la SPA React/Vite nel submodule external/maddelena-FE.
          La build (target BuildSpa qui sotto) la compila e ne copia la dist in wwwroot. -->
     <SpaRoot>..\external\maddelena-FE\</SpaRoot>
-    <!-- Pipeline "static web assets" dell'SDK SPENTA: riscopre wwwroot per conto suo
-         e duplicherebbe i file che PublishSpa gia' porta in publish (NETSDK1152 su
-         Linux/CI). Qui i file statici li gestisce SOLO la coppia BuildSpa/PublishSpa. -->
+    <!-- Pipeline "static web assets" dell'SDK SPENTA: fingerprinting e manifest non
+         servono a una SPA gia' compilata da Vite. Qui i file statici li gestisce
+         SOLO la coppia BuildSpa/PublishSpa. -->
     <StaticWebAssetsEnabled>false</StaticWebAssetsEnabled>
+    <!-- wwwroot e' output generato (e ignorato da git): fuori da TUTTI i glob di
+         default. Non solo dal Content di valutazione: anche il target SDK
+         _IncludePrePublishGeneratedContent, che a fine build riscopre wwwroot e la
+         aggiungerebbe alla publish per conto suo, onora questa esclusione. Senza,
+         quando wwwroot nasce durante la build (checkout fresco: CI) i file ci
+         finivano due volte — la sua e quella di PublishSpa — e la publish moriva
+         di NETSDK1152. -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);wwwroot\**</DefaultItemExcludes>
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- wwwroot e' output generato (e ignorato da git): fuori dal glob Content,
-         cosi' la publish non parte da una fotografia stantia — ci pensa PublishSpa. -->
-    <Content Remove="wwwroot\**" />
     <!-- I sorgenti della SPA che fanno scattare la ricompilazione del frontend. -->
     <SpaSource Include="$(SpaRoot)src\**" />
     <SpaSource Include="$(SpaRoot)index.html;$(SpaRoot)package.json;$(SpaRoot)vite.config.ts;$(SpaRoot)tsconfig.json" />
