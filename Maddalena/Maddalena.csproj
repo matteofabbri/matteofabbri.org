@@ -7,6 +7,10 @@
     <!-- Il frontend: la SPA React/Vite nel submodule external/maddelena-FE.
          La build (target BuildSpa qui sotto) la compila e ne copia la dist in wwwroot. -->
     <SpaRoot>..\external\maddelena-FE\</SpaRoot>
+    <!-- Pipeline "static web assets" dell'SDK SPENTA: riscopre wwwroot per conto suo
+         e duplicherebbe i file che PublishSpa gia' porta in publish (NETSDK1152 su
+         Linux/CI). Qui i file statici li gestisce SOLO la coppia BuildSpa/PublishSpa. -->
+    <StaticWebAssetsEnabled>false</StaticWebAssetsEnabled>
   </PropertyGroup>
 
   <ItemGroup>
