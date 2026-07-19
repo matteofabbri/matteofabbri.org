@@ -1,0 +1,90 @@
+# Deploy automatico: a ogni push su main costruisce le immagini dei tre siti e le
+# porta sul server, poi `docker compose up -d` riavvia solo i container cambiati.
+# E' lo stesso flusso manuale (publish.ps1 + docker save/load), automatizzato.
+#
+# NON tocca: docker-compose/.env, Caddy, mailcow — restano manuali (contengono
+# segreti e cambiano di rado). Se cambia l'AppHost/compose, deploy a mano.
+#
+# Segreti usati (impostati via `gh secret set`):
+#   DEPLOY_SSH_KEY   — chiave privata dedicata per ubuntu@server (la pubblica e'
+#                      in authorized_keys sul server; NON e' la chiave .ppk di Matteo)
+#   FE_SUBMODULE_KEY — deploy key read-only del repo privato maddelena-FE,
+#                      serve solo a scaricare il submodule del frontend
+name: deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Mai due deploy sovrapposti; quello in corso finisce, il nuovo aspetta.
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+env:
+  SERVER: ubuntu@ns347806.ip-5-196-91.eu
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      # Il submodule maddelena-FE e' privato: il token del workflow non lo vede,
+      # si scarica via SSH con la sua deploy key. SPERONE non serve (nessuno dei
+      # tre siti lo referenzia), quindi non viene scaricato.
+      - name: Checkout submodule frontend
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.FE_SUBMODULE_KEY }}" > ~/.ssh/fe_key
+          chmod 600 ~/.ssh/fe_key
+          ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
+          git submodule init external/maddelena-FE
+          git config submodule.external/maddelena-FE.url git@github.com:matteofabbri/maddelena-FE.git
+          GIT_SSH_COMMAND="ssh -i ~/.ssh/fe_key -o IdentitiesOnly=yes" \
+            git submodule update external/maddelena-FE
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      # Node per la build Vite del frontend (target BuildSpa nel csproj di
+      # Maddalena: fa da solo npm install + npm run build).
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build immagini
+        run: |
+          dotnet publish MainSite/MainSite.csproj  /t:PublishContainer /p:ContainerRepository=matteofabbri-site     /p:ContainerImageTag=latest
+          dotnet publish TheQult/TheQult.csproj    /t:PublishContainer /p:ContainerRepository=matteofabbri-theqult  /p:ContainerImageTag=latest
+          dotnet publish Maddalena/Maddalena.csproj /t:PublishContainer /p:ContainerRepository=matteofabbri-maddalena /p:ContainerImageTag=latest
+
+      - name: Chiave SSH del server
+        run: |
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          # Host key del server fissata qui (e' pubblica): niente "trust on first use".
+          echo 'ns347806.ip-5-196-91.eu ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDj21IMc/CsStOgBOQY5nsfHbc130zAtzaUBZhVEtVWO' >> ~/.ssh/known_hosts
+
+      - name: Trasferimento immagini
+        run: |
+          for img in matteofabbri-site matteofabbri-theqult matteofabbri-maddalena; do
+            docker save "$img:latest" | gzip | \
+              ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$SERVER" 'gunzip | sudo docker load'
+          done
+
+      # up -d ricrea SOLO i container la cui immagine e' cambiata; il prune butta
+      # le immagini vecchie rimaste senza tag (sennò il disco si riempie).
+      - name: Riavvio container e pulizia
+        run: |
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$SERVER" \
+            'cd /opt/matteofabbri && sudo docker compose up -d && sudo docker image prune -f'
+
+      # Solo maddalena.me: gli altri due domini non hanno ancora il DNS puntato qui.
+      - name: Verifica
+        run: |
+          sleep 5
+          curl -fsS -o /dev/null -w 'maddalena.me %{http_code}\n' https://maddalena.me/
