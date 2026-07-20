@@ -40,6 +40,18 @@ public sealed class LlmOptions
     /// <summary>Passi di Adam per scatto d'ancora.</summary>
     public int PcAnchorBurst { get; set; } = 3;
 
+    /// <summary>iPC: learning-rate del rilassamento dei latenti (prudente = stabile).</summary>
+    public float PcEtaState { get; set; } = 0.1f;
+
+    /// <summary>iPC: learning-rate degli update dei pesi.</summary>
+    public float PcLrWeights { get; set; } = 0.3f;
+
+    /// <summary>iPC: tetto alla norma degli update — guardia dura contro il NaN.</summary>
+    public float PcClipNorm { get; set; } = 1.0f;
+
+    /// <summary>iPC: passi di rilassamento del latente per weight-update (1 = iPC).</summary>
+    public int PcRelaxSteps { get; set; } = 1;
+
     // ── Training di avvio ──
 
     public int Epochs { get; set; } = 2;

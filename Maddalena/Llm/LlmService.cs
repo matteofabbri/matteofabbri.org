@@ -47,9 +47,13 @@ public sealed class LlmService(
     internal void Adopt(PredictiveLlm llm, bool resumed, DateTimeOffset? lastSavedAt)
     {
         _llm = llm;
-        // Ancora Adam del training PC (innocua sul modello backprop): vale anche al resume.
+        // Parametri del training PC (iPC): valgono anche al resume.
         llm.PcAnchorEvery = options.Value.PcAnchorEvery;
         llm.PcAnchorBurst = options.Value.PcAnchorBurst;
+        llm.PcEtaState    = options.Value.PcEtaState;
+        llm.PcLrWeights   = options.Value.PcLrWeights;
+        llm.PcClipNorm    = options.Value.PcClipNorm;
+        llm.PcRelaxSteps  = options.Value.PcRelaxSteps;
         Resumed = resumed;
         LastSavedAt = lastSavedAt;
         State = LlmState.Training;   // adottato ma non ancora esposto: prima il giro di training
