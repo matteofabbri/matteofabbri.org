@@ -67,22 +67,20 @@ public sealed class LlmController(LlmService llm, LlmCrawlStore crawlStore) : Co
 
         return Ok(new LlmOdometerResponse
         {
-            ParameterCount = n.ParameterCount,
             TotalTokens = Digits(total),
             TotalHuman = Human(total),
             Counters =
             [
                 Entry("absorbed", "Imparati dal vivo (crawler + teach)", n.Absorbed, live: true,
-                    "Cresce a ogni pagina crawlata o testo insegnato: è QUI che il modello impara mentre gira."),
+                    "Token letti e imparati mentre gira: pagine dal crawler e testi insegnati."),
                 Entry("evaluated", "Valutati (misura di qualità)", n.Evaluated, live: true,
-                    "Token dati alle prove di perplessità — le sonde prima/dopo di ogni lezione. Sale con l'apprendimento."),
+                    "Token usati per misurare quanto è bravo, prima e dopo ogni lezione."),
                 Entry("trained", "Addestramento d'avvio (una tantum)", n.Trained, live: false,
-                    "Si muove SOLO nel giro di training all'avvio del processo, sul corpus delle datasource. " +
-                    "Poi resta fermo fino al prossimo riavvio: se è bloccato, è NORMALE."),
+                    "L'addestramento fatto una volta sola all'avvio."),
                 Entry("prompted", "Letti come richiesta (generazione)", n.Prompted, live: true,
-                    "Token dei prompt che il modello legge quando qualcuno chiama /generate."),
+                    "Token dei prompt che legge quando generi una risposta."),
                 Entry("generated", "Prodotti (generazione)", n.Generated, live: true,
-                    "Token che il modello ha scritto rispondendo su /generate."),
+                    "Token che scrive generando una risposta."),
             ],
         });
     }

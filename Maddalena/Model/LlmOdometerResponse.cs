@@ -12,13 +12,6 @@ namespace Maddalena.Model;
 /// </summary>
 public sealed class LlmOdometerResponse
 {
-    public long ParameterCount { get; set; }
-
-    /// <summary>Una riga per orientarsi al volo su cosa cresce e cosa no.</summary>
-    public string Note { get; set; } =
-        "\"absorbed\" cresce mentre il modello gira (impara dal crawler). " +
-        "\"trained\" si muove solo al giro di training d'avvio, poi resta fermo: se è bloccato è NORMALE.";
-
     /// <summary>Le voci dell'odometro, la più "viva" per prima.</summary>
     public LlmOdometerEntry[] Counters { get; set; } = [];
 
