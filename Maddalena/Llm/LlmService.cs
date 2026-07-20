@@ -47,6 +47,9 @@ public sealed class LlmService(
     internal void Adopt(PredictiveLlm llm, bool resumed, DateTimeOffset? lastSavedAt)
     {
         _llm = llm;
+        // Ancora Adam del training PC (innocua sul modello backprop): vale anche al resume.
+        llm.PcAnchorEvery = options.Value.PcAnchorEvery;
+        llm.PcAnchorBurst = options.Value.PcAnchorBurst;
         Resumed = resumed;
         LastSavedAt = lastSavedAt;
         State = LlmState.Training;   // adottato ma non ancora esposto: prima il giro di training
@@ -73,21 +76,30 @@ public sealed class LlmService(
         await _gate.WaitAsync(ct);
         try
         {
-            var report = llm.Train(corpus, new TrainingOptions
+            if (options.Value.UsePredictiveCoding)
             {
-                Epochs = options.Value.Epochs,
-                MaxWindows = options.Value.MaxWindows,
-                OnEpochEnd = (epoch, meanLoss) =>
+                ct.ThrowIfCancellationRequested();
+                var r = llm.LearnPc(corpus, steps: options.Value.Epochs, countAsTraining: true);
+                logger.LogInformation("LLM training PC (iPC) finito: sorpresa {Before:F3} -> {After:F3} in {Epochs} epoche",
+                    r.SurpriseBefore, r.SurpriseAfter, r.Steps);
+            }
+            else
+            {
+                var report = llm.Train(corpus, new TrainingOptions
                 {
-                    ct.ThrowIfCancellationRequested();
-                    logger.LogInformation("LLM training: epoca {Epoch}, loss media {Loss:F3}", epoch, meanLoss);
-                },
-            });
+                    Epochs = options.Value.Epochs,
+                    MaxWindows = options.Value.MaxWindows,
+                    OnEpochEnd = (epoch, meanLoss) =>
+                    {
+                        ct.ThrowIfCancellationRequested();
+                        logger.LogInformation("LLM training: epoca {Epoch}, loss media {Loss:F3}", epoch, meanLoss);
+                    },
+                });
+                logger.LogInformation(
+                    "LLM training finito: perplexity {Before:F1} -> {After:F1} in {Steps} passi su {Windows} finestre",
+                    report.PerplexityBefore, report.PerplexityAfter, report.OptimizerSteps, report.TrainWindows);
+            }
             CorpusSummary = corpusSummary;
-            logger.LogInformation(
-                "LLM training finito: perplexity {Before:F1} -> {After:F1} in {Steps} passi su {Windows} finestre",
-                report.PerplexityBefore, report.PerplexityAfter, report.OptimizerSteps, report.TrainWindows);
-
             SaveToDisk(llm);
         }
         finally
@@ -125,7 +137,9 @@ public sealed class LlmService(
         await _gate.WaitAsync(ct);
         try
         {
-            var report = llm.Learn(text, options.Value.TeachSteps, options.Value.TeachLearningRate);
+            var report = options.Value.UsePredictiveCoding
+                ? llm.LearnPc(text, options.Value.TeachSteps)
+                : llm.Learn(text, options.Value.TeachSteps, options.Value.TeachLearningRate);
             SaveToDisk(llm);
             return report;
         }
@@ -151,7 +165,10 @@ public sealed class LlmService(
         await _gate.WaitAsync(ct);
         try
         {
-            llm.Learn(text, options.Value.CrawlLearnSteps, options.Value.TeachLearningRate);
+            if (options.Value.UsePredictiveCoding)
+                llm.LearnPc(text, options.Value.CrawlLearnSteps);
+            else
+                llm.Learn(text, options.Value.CrawlLearnSteps, options.Value.TeachLearningRate);
             _dirty = true;
         }
         finally

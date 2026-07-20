@@ -63,10 +63,12 @@ public sealed partial class LlmWorker(
 
             if (!TryResume())
             {
-                var llm = PredictiveLlm.Create2026(o.Dim, o.Blocks, o.Heads, o.FfDim, o.MaxSeq, o.Seed);
+                var llm = o.UsePredictiveCoding
+                    ? PredictiveLlm.CreatePc(o.Dim, o.Blocks, o.Heads, o.FfDim, o.MaxSeq, o.Seed)
+                    : PredictiveLlm.Create2026(o.Dim, o.Blocks, o.Heads, o.FfDim, o.MaxSeq, o.Seed);
                 service.Adopt(llm, resumed: false, lastSavedAt: null);
-                logger.LogInformation("LLM nuovo: {Parameters:N0} parametri (dim {Dim}, {Blocks} blocchi)",
-                    llm.ParameterCount, o.Dim, o.Blocks);
+                logger.LogInformation("LLM nuovo: {Parameters:N0} parametri (dim {Dim}, {Blocks} blocchi, {Mode})",
+                    llm.ParameterCount, o.Dim, o.Blocks, o.UsePredictiveCoding ? "predictive-coding/iPC" : "backprop");
             }
 
             if (o.TrainOnStartup)

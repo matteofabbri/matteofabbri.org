@@ -40,6 +40,19 @@ public sealed class LlmOptions
 
     public int Seed { get; set; } = 42;
 
+    /// <summary>
+    /// Allena il modello in PREDICTIVE CODING (iPC, apprendimento locale) invece
+    /// che backprop. Richiede un modello DENSO (CreatePc: RMSNorm+RoPE, niente
+    /// MoE/loop) — vale alla PRIMA creazione, come le dimensioni.
+    /// </summary>
+    public bool UsePredictiveCoding { get; set; } = true;
+
+    /// <summary>Ancora Adam nel training PC: ogni quanti step PC un burst di backprop che "rimette in riga" (0 = spenta).</summary>
+    public int PcAnchorEvery { get; set; } = 0;
+
+    /// <summary>Passi di Adam per scatto d'ancora.</summary>
+    public int PcAnchorBurst { get; set; } = 3;
+
     // ── Datasources (PredictiveCoding.Data) da cui il worker pesca il corpus ──
 
     /// <summary>Voci Wikipedia di cui scaricare l'estratto integrale ([] = fonte spenta).</summary>
