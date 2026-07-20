@@ -100,9 +100,13 @@ public sealed class LlmService(
     {
         var llm = ReadyLlm();
         await _gate.WaitAsync(ct);
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         try
         {
-            return llm.GenerateDetailed(prompt, maxNewTokens);
+            var result = llm.GenerateDetailed(prompt, maxNewTokens);
+            logger.LogInformation("Generate: prompt {PromptChars} char -> {Forwards} forward in {Ms} ms",
+                prompt?.Length ?? 0, result.Forwards, sw.ElapsedMilliseconds);
+            return result;
         }
         finally
         {
@@ -125,6 +129,8 @@ public sealed class LlmService(
         {
             var report = llm.LearnPc(text, options.Value.TeachSteps);
             SaveToDisk(llm);
+            logger.LogInformation("Teach: {Chars} char, sorpresa {Before:F3} -> {After:F3} in {Steps} step",
+                text?.Length ?? 0, report.SurpriseBefore, report.SurpriseAfter, report.Steps);
             return report;
         }
         finally
@@ -156,7 +162,8 @@ public sealed class LlmService(
         {
             _gate.Release();
         }
-        Interlocked.Increment(ref _pagesLearned);
+        var pages = Interlocked.Increment(ref _pagesLearned);
+        logger.LogInformation("Impara dal crawler: {Chars} char (pagine totali {Pages})", text?.Length ?? 0, pages);
     }
 
     /// <summary>Il salvataggio del timer: scrive solo se c'e' qualcosa di nuovo. True se ha scritto.</summary>

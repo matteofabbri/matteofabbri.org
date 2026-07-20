@@ -79,6 +79,14 @@ public class Program
         builder.Services.AddSingleton<LlmService>();
         builder.Services.AddHostedService<LlmWorker>();
 
+        // Log dell'LLM su Postgres (tabella llm_log) + un provider di logging che
+        // cattura tutte le categorie "Maddalena.Llm.*" e le persiste. Visibili su
+        // GET /api/llm/logs. Il flush gira come hosted service (stessa istanza).
+        builder.Services.AddSingleton<LlmLogStore>();
+        builder.Services.AddHostedService(sp => sp.GetRequiredService<LlmLogStore>());
+        builder.Services.AddSingleton<ILoggerProvider>(sp =>
+            new PostgresLlmLoggerProvider(sp.GetRequiredService<LlmLogStore>()));
+
         // Dietro Caddy: fidati degli header X-Forwarded-* cosi' Maddalena sa di
         // essere https://maddalena.me. L'emittente (issuer) dei token OIDC deve
         // essere quel nome pubblico, non l'host interno del container.

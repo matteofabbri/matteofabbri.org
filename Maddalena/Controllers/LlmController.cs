@@ -12,7 +12,7 @@ namespace Maddalena.Controllers;
 // e' un modello che chiunque puo' avvelenare.
 [ApiController]
 [Route("api/llm")]
-public sealed class LlmController(LlmService llm, LlmCrawlStore crawlStore) : ControllerBase
+public sealed class LlmController(LlmService llm, LlmCrawlStore crawlStore, LlmLogStore logStore) : ControllerBase
 {
     // Dove sta l'LLM adesso: stato, salvataggi, corpus dell'ultimo training,
     // odometro e coda del crawler. E' la chiamata con cui la SPA decide cosa mostrare.
@@ -84,6 +84,18 @@ public sealed class LlmController(LlmService llm, LlmCrawlStore crawlStore) : Co
             ],
         });
     }
+
+    // I log dell'LLM (tabella llm_log su Postgres): gli ultimi eventi, il piu'
+    // recente per primo. Filtri opzionali: ?limit=200&level=Error|Warning|Information.
+    // Cattura avvio/training/resume/reset/pronto/errori (dai log del sottosistema)
+    // piu' le metriche di generate/teach/impara-dal-crawler.
+    [HttpGet("logs")]
+    [ProducesResponseType<IReadOnlyList<LlmLogRow>>(StatusCodes.Status200OK)]
+    public async Task<IReadOnlyList<LlmLogRow>> Logs(
+        [FromQuery] int limit = 200,
+        [FromQuery] string? level = null,
+        CancellationToken cancellationToken = default)
+        => await logStore.GetRecentAsync(limit, level, cancellationToken);
 
     // BigInteger -> cifre decimali pure, cultura invariante (niente separatori).
     private static string Digits(System.Numerics.BigInteger value) =>
