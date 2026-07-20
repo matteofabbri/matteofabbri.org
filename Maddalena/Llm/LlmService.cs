@@ -48,7 +48,8 @@ public sealed class LlmService(
     {
         _llm = llm;
         // Parametri del training PC (iPC): valgono anche al resume.
-        llm.PcAnchorEvery = options.Value.PcAnchorEvery;
+        if (options.Value.PcAnchorEvery is { } anchorEvery)
+            llm.PcAnchorEvery = anchorEvery;   // null = tieni il default (unico) della libreria
         llm.PcAnchorBurst = options.Value.PcAnchorBurst;
         llm.PcEtaState    = options.Value.PcEtaState;
         llm.PcLrWeights   = options.Value.PcLrWeights;

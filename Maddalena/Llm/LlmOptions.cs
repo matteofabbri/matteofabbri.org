@@ -34,8 +34,12 @@ public sealed class LlmOptions
 
     public int Seed { get; set; } = 42;
 
-    /// <summary>Ancora Adam nel training PC: ogni quanti step PC un burst di backprop che "rimette in riga" (0 = spenta).</summary>
-    public int PcAnchorEvery { get; set; } = 0;
+    /// <summary>
+    /// Override OPZIONALE della cadenza dell'ancora Adam (ogni quanti step PC un
+    /// burst). null = usa il default della libreria, che è l'unica sorgente del
+    /// numero (<see cref="PredictiveCoding.LLM.Training.PcDecoderTrainer.DefaultAnchorEvery"/>).
+    /// </summary>
+    public int? PcAnchorEvery { get; set; }
 
     /// <summary>Passi di Adam per scatto d'ancora.</summary>
     public int PcAnchorBurst { get; set; } = 3;
