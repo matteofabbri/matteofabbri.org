@@ -63,7 +63,9 @@ public sealed class LlmController(LlmService llm, LlmCrawlStore crawlStore) : Co
             return NotReady(new LlmNotReadyException(llm.State));
 
         var n = numbers.Value;
-        var total = n.Trained + n.Evaluated + n.Absorbed + n.Prompted + n.Generated;
+        // Niente Trained: l'addestramento d'avvio una-tantum non e' "strada percorsa",
+        // fuori dall'odometro. Il totale e' la somma delle sole voci mostrate.
+        var total = n.Absorbed + n.Evaluated + n.Prompted + n.Generated;
 
         return Ok(new LlmOdometerResponse
         {
@@ -75,8 +77,6 @@ public sealed class LlmController(LlmService llm, LlmCrawlStore crawlStore) : Co
                     "Token letti e imparati mentre gira: pagine dal crawler e testi insegnati."),
                 Entry("evaluated", "Valutati (misura di qualità)", n.Evaluated, live: true,
                     "Token usati per misurare quanto è bravo, prima e dopo ogni lezione."),
-                Entry("trained", "Addestramento d'avvio (una tantum)", n.Trained, live: false,
-                    "L'addestramento fatto una volta sola all'avvio."),
                 Entry("prompted", "Letti come richiesta (generazione)", n.Prompted, live: true,
                     "Token dei prompt che legge quando generi una risposta."),
                 Entry("generated", "Prodotti (generazione)", n.Generated, live: true,
