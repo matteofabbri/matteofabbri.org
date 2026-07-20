@@ -24,6 +24,7 @@ public sealed class LlmController(LlmService llm, LlmCrawlStore crawlStore) : Co
         var response = new LlmStatusResponse
         {
             State = llm.State.ToString().ToLowerInvariant(),
+            Backend = PredictiveCoding.Device.DeviceRegistry.CudaEnabled ? "cuda" : "cpu",
             Resumed = llm.Resumed,
             LastSavedAt = llm.LastSavedAt,
             CorpusSummary = llm.CorpusSummary,

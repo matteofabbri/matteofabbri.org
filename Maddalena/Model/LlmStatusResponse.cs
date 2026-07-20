@@ -15,6 +15,9 @@ public sealed class LlmStatusResponse
 
     public string? LastError { get; set; }
 
+    /// <summary>Backend di calcolo attivo: "cuda" se una GPU NVIDIA e' in uso, "cpu" altrimenti.</summary>
+    public string Backend { get; set; } = "cpu";
+
     public long? ParameterCount { get; set; }
 
     // L'odometro del modello: token macinati in tutta la sua vita, per attivita'.

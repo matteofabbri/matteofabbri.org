@@ -37,6 +37,10 @@
          maddelena-FE: il CI lo scarica con la sua deploy key (secret PC_SUBMODULE_KEY). -->
     <ProjectReference Include="..\external\PredicitiveCoding\PredictiveCoding.LLM\PredictiveCoding.LLM.csproj" />
     <ProjectReference Include="..\external\PredicitiveCoding\PredictiveCoding.Data\PredictiveCoding.Data.csproj" />
+    <!-- Backend GPU opzionale: cuBLAS via P/Invoke. Con AutoSelect() (Program.cs) usa
+         la GPU NVIDIA se c'e' (GPU + CUDA Toolkit), altrimenti CPU. Dormiente sul
+         server (AMD, niente CUDA); utile in locale su macchine con GPU NVIDIA. -->
+    <ProjectReference Include="..\external\PredicitiveCoding\PredictiveCoding.Device\PredictiveCoding.Device.csproj" />
   </ItemGroup>
 
   <ItemGroup>

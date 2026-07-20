@@ -2,6 +2,7 @@ using Maddalena.Data;
 using Maddalena.Llm;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
+using PredictiveCoding.Device;
 
 namespace Maddalena;
 
@@ -14,6 +15,12 @@ public class Program
 {
     public static void Main(string[] args)
     {
+        // Sceglie il backend di calcolo dell'LLM una volta all'avvio: se la macchina
+        // ha una GPU NVIDIA col CUDA Toolkit, le matmul vanno su cuBLAS; altrimenti
+        // resta la CPU (SIMD+multithread). Il rilevamento fallisce in silenzio senza
+        // le librerie CUDA, quindi sul server (AMD, niente CUDA) e' un no-op -> CPU.
+        DeviceRegistry.AutoSelect();
+
         var builder = WebApplication.CreateBuilder(args);
 
         // Telemetria, health check e service discovery condivisi della soluzione.
