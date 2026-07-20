@@ -63,21 +63,62 @@ public sealed class LlmController(LlmService llm, LlmCrawlStore crawlStore) : Co
             return NotReady(new LlmNotReadyException(llm.State));
 
         var n = numbers.Value;
+        var total = n.Trained + n.Evaluated + n.Absorbed + n.Prompted + n.Generated;
+
         return Ok(new LlmOdometerResponse
         {
             ParameterCount = n.ParameterCount,
-            Trained = Digits(n.Trained),
-            Evaluated = Digits(n.Evaluated),
-            Absorbed = Digits(n.Absorbed),
-            Prompted = Digits(n.Prompted),
-            Generated = Digits(n.Generated),
-            Total = Digits(n.Trained + n.Evaluated + n.Absorbed + n.Prompted + n.Generated),
+            TotalTokens = Digits(total),
+            TotalHuman = Human(total),
+            Counters =
+            [
+                Entry("absorbed", "Imparati dal vivo (crawler + teach)", n.Absorbed, live: true,
+                    "Cresce a ogni pagina crawlata o testo insegnato: è QUI che il modello impara mentre gira."),
+                Entry("evaluated", "Valutati (misura di qualità)", n.Evaluated, live: true,
+                    "Token dati alle prove di perplessità — le sonde prima/dopo di ogni lezione. Sale con l'apprendimento."),
+                Entry("trained", "Addestramento d'avvio (una tantum)", n.Trained, live: false,
+                    "Si muove SOLO nel giro di training all'avvio del processo, sul corpus delle datasource. " +
+                    "Poi resta fermo fino al prossimo riavvio: se è bloccato, è NORMALE."),
+                Entry("prompted", "Letti come richiesta (generazione)", n.Prompted, live: true,
+                    "Token dei prompt che il modello legge quando qualcuno chiama /generate."),
+                Entry("generated", "Prodotti (generazione)", n.Generated, live: true,
+                    "Token che il modello ha scritto rispondendo su /generate."),
+            ],
         });
     }
 
     // BigInteger -> cifre decimali pure, cultura invariante (niente separatori).
     private static string Digits(System.Numerics.BigInteger value) =>
         value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+    // Costruisce una voce dell'odometro autoesplicativa (valore preciso + leggibile).
+    private static LlmOdometerEntry Entry(
+        string key, string label, System.Numerics.BigInteger tokens, bool live, string explanation) =>
+        new()
+        {
+            Key = key,
+            Label = label,
+            Tokens = Digits(tokens),
+            TokensHuman = Human(tokens),
+            Live = live,
+            Explanation = explanation,
+        };
+
+    // BigInteger -> stringa breve per l'occhio: "1.234", "45,6 mila", "101,6 mln", "1,2 mld".
+    private static string Human(System.Numerics.BigInteger v)
+    {
+        (long Div, string Unit)[] scales =
+        [
+            (1_000_000_000_000L, "bln"),
+            (1_000_000_000L,     "mld"),
+            (1_000_000L,         "mln"),
+            (1_000L,             "mila"),
+        ];
+        foreach (var (div, unit) in scales)
+            if (v >= div)
+                return $"{(double)v / div:0.0} {unit}".Replace('.', ',');
+        return v.ToString(System.Globalization.CultureInfo.InvariantCulture);
+    }
 
     // Interroga: prompt dentro, continuazione fuori (decodifica greedy,
     // self-speculative quando il modello ha la testa t+2).
