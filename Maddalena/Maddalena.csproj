@@ -28,15 +28,19 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\PredicitiveCoding\PredictiveCoding.Data\PredictiveCoding.Data.csproj" />
-    <ProjectReference Include="..\..\..\PredicitiveCoding\PredictiveCoding.LLM\PredictiveCoding.LLM.csproj" />
     <ProjectReference Include="..\MatteoFabbri.org.ServiceDefaults\MatteoFabbri.org.ServiceDefaults.csproj" />
     <!-- The licensing signing core. Vendor-only (holds the private key); Maddalena mints portable keys
          on Stripe payment. Generic: the same libraries license every product sold on maddalena.me. -->
     <ProjectReference Include="..\LIBRARIES\MADDALENA\Maddalena.Licensing.Issuing\Maddalena.Licensing.Issuing.csproj" />
+    <!-- L'LLM di predictive coding e le sue datasources (LlmWorker/LlmService, /api/llm).
+         Vive nel submodule external/PredicitiveCoding (repo privato omonimo), come
+         maddelena-FE: il CI lo scarica con la sua deploy key (secret PC_SUBMODULE_KEY). -->
+    <ProjectReference Include="..\external\PredicitiveCoding\PredictiveCoding.LLM\PredictiveCoding.LLM.csproj" />
+    <ProjectReference Include="..\external\PredicitiveCoding\PredictiveCoding.Data\PredictiveCoding.Data.csproj" />
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Abot" Version="2.0.70" />
     <PackageReference Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" Version="13.4.6" />
     <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.10" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.10" />

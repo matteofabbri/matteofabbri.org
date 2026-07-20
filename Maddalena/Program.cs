@@ -1,4 +1,5 @@
 using Maddalena.Data;
+using Maddalena.Llm;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 
@@ -56,6 +57,20 @@ public class Program
         // Cache in memoria: l'elenco dei download tiene l'ultima release di GitHub per 15 minuti,
         // cosi' non si chiama l'API a ogni visita (che ha un rate limit).
         builder.Services.AddMemoryCache();
+
+        // L'LLM di predictive coding (librerie PredictiveCoding.LLM/.Data del repo
+        // PredicitiveCoding accanto a questo): LlmWorker lo riprende dalla cartella
+        // di stato (in prod il volume docker maddalena-llm) o lo crea, lo traina
+        // dalle datasources e lo consegna al singleton LlmService; LlmController
+        // lo espone su /api/llm come interroga/istruisci/stato. Configurazione:
+        // sezione "Llm" (env Llm__*).
+        // In piu' il worker tiene vivo un crawler Abot (coda su Postgres, tabella
+        // llm_crawl_queue) che nutre l'LLM di pagine web, e un timer che ne salva
+        // lo stato ogni Llm__SaveEveryMinutes minuti.
+        builder.Services.Configure<LlmOptions>(builder.Configuration.GetSection("Llm"));
+        builder.Services.AddSingleton<LlmCrawlStore>();
+        builder.Services.AddSingleton<LlmService>();
+        builder.Services.AddHostedService<LlmWorker>();
 
         // Dietro Caddy: fidati degli header X-Forwarded-* cosi' Maddalena sa di
         // essere https://maddalena.me. L'emittente (issuer) dei token OIDC deve

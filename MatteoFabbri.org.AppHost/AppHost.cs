@@ -14,6 +14,10 @@ var builder = DistributedApplication.CreateBuilder(args);
 // anche il nome da usare in `docker network create matteo-shared`.
 const string SharedNetworkKey = "matteo-shared";
 
+// Il volume dello stato dell'LLM di Maddalena (pesi + ottimizzatore + odometro):
+// il container e' usa-e-getta a ogni deploy, il volume no.
+const string LlmVolumeName = "maddalena-llm";
+
 builder.AddDockerComposeEnvironment("matteofabbri")
     .ConfigureComposeFile(file =>
     {
@@ -22,6 +26,7 @@ builder.AddDockerComposeEnvironment("matteofabbri")
             Name = SharedNetworkKey,
             External = true,
         };
+        file.Volumes[LlmVolumeName] = new Volume { Name = LlmVolumeName, Driver = "local" };
     });
 
 // --- Parametri configurabili (niente segreti hardcoded) ---------------------
@@ -89,7 +94,26 @@ maddalena
     .WithEnvironment("Stripe__SecretKey", stripeSecret)
     .WithEnvironment("Stripe__WebhookSecret", stripeWebhook)
     .WithEnvironment("Licensing__PrivateKey", licensingPrivateKey)
-    .WithEnvironment("Licensing__KeyId", "k1");
+    .WithEnvironment("Licensing__KeyId", "k1")
+    // L'LLM salva/riprende lo stato dal volume. Solo in publish: in dev il
+    // progetto gira come processo e usa il default (ContentRoot/llm-state).
+    .PublishAsDockerComposeService((_, service) =>
+    {
+        service.AddVolume(new Volume
+        {
+            Name = LlmVolumeName,
+            Type = "volume",
+            Source = LlmVolumeName,
+            Target = "/state",
+            ReadOnly = false,
+        });
+        // Un volume nuovo nasce di root, ma l'immagine .NET gira come utente
+        // 1654 (non-root) e su /state non potrebbe scrivere: root SOLO qui.
+        service.User = "root";
+    });
+
+if (builder.ExecutionContext.IsPublishMode)
+    maddalena.WithEnvironment("Llm__StateDir", "/state/llm");
 
 // L'indirizzo interno (host:porta) a cui Caddy inoltra il traffico del sito:
 // deriva dall'endpoint del progetto. HostAndPort restituisce "host:porta" gia'

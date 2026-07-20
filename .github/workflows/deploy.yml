@@ -10,6 +10,8 @@
 #                      in authorized_keys sul server; NON e' la chiave .ppk di Matteo)
 #   FE_SUBMODULE_KEY — deploy key read-only del repo privato maddelena-FE,
 #                      serve solo a scaricare il submodule del frontend
+#   PC_SUBMODULE_KEY — deploy key read-only del repo privato PredicitiveCoding
+#                      (le librerie LLM/Data che Maddalena referenzia)
 name: deploy
 
 on:
@@ -45,6 +47,18 @@ jobs:
           git config submodule.external/maddelena-FE.url git@github.com:matteofabbri/maddelena-FE.git
           GIT_SSH_COMMAND="ssh -i ~/.ssh/fe_key -o IdentitiesOnly=yes" \
             git submodule update external/maddelena-FE
+
+      # Anche PredicitiveCoding e' privato e ha la sua deploy key: sono le librerie
+      # LLM/Data che Maddalena referenzia. Stessa meccanica del frontend, chiave a parte
+      # (una deploy key vale per un solo repo). SPERONE resta non scaricato.
+      - name: Checkout submodule PredicitiveCoding
+        run: |
+          echo "${{ secrets.PC_SUBMODULE_KEY }}" > ~/.ssh/pc_key
+          chmod 600 ~/.ssh/pc_key
+          git submodule init external/PredicitiveCoding
+          git config submodule.external/PredicitiveCoding.url git@github.com:matteofabbri/PredicitiveCoding.git
+          GIT_SSH_COMMAND="ssh -i ~/.ssh/pc_key -o IdentitiesOnly=yes" \
+            git submodule update external/PredicitiveCoding
 
       - uses: actions/setup-dotnet@v4
         with:

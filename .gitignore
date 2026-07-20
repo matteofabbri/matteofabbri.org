@@ -11,6 +11,9 @@
 #     submodule external/maddelena-FE (target BuildSpa nel csproj) ---
 Maddalena/wwwroot/
 
+# --- Stato dell'LLM di Maddalena in dev (in prod sta nel volume docker) ---
+Maddalena/llm-state*/
+
 # --- Visual Studio / utente ---
 .vs/
 *.user

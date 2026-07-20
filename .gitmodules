@@ -4,3 +4,6 @@
 [submodule "external/maddelena-FE"]
 	path = external/maddelena-FE
 	url = https://github.com/matteofabbri/maddelena-FE.git
+[submodule "external/PredicitiveCoding"]
+	path = external/PredicitiveCoding
+	url = https://github.com/matteofabbri/PredicitiveCoding.git
