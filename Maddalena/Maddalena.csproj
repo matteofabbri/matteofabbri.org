@@ -44,6 +44,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Corpus-seme (riassunti Wikipedia) embeddato nell'assembly: il training
+         d'avvio dell'LLM parte da qui, senza fetch di rete. Vedi LlmWorker.LoadSeedCorpus. -->
+    <EmbeddedResource Include="Llm\SeedCorpus.txt" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Abot" Version="2.0.70" />
     <PackageReference Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" Version="13.4.6" />
     <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.10" />

@@ -9,19 +9,13 @@ namespace Maddalena.Llm;
 // PRIMA creazione: da li' in poi comanda lo snapshot salvato su Postgres.
 public sealed class LlmOptions
 {
-    /// <summary>Spegne tutto il sottosistema LLM (il worker esce subito, le API rispondono 503).</summary>
-    public bool Enabled { get; set; } = true;
-
-    /// <summary>Se rifare un giro di training dalle datasources a ogni avvio (lifelong learning).</summary>
-    public bool TrainOnStartup { get; set; } = true;
-
     /// <summary>
     /// Cartella dove il modello si salva e riprende. Vuota = ContentRoot/llm-state
     /// (dev). In produzione l'AppHost la punta al volume docker: /state/llm.
     /// </summary>
     public string? StateDir { get; set; }
 
-    // ── Dimensioni del modello (solo prima creazione; preset Create2026, byte tokenizer) ──
+    // ── Dimensioni del modello (solo prima creazione; preset CreatePc denso RMSNorm+RoPE, byte tokenizer) ──
 
     public int Dim { get; set; } = 64;
     public int Blocks { get; set; } = 4;
@@ -40,40 +34,11 @@ public sealed class LlmOptions
 
     public int Seed { get; set; } = 42;
 
-    /// <summary>
-    /// Allena il modello in PREDICTIVE CODING (iPC, apprendimento locale) invece
-    /// che backprop. Richiede un modello DENSO (CreatePc: RMSNorm+RoPE, niente
-    /// MoE/loop) — vale alla PRIMA creazione, come le dimensioni.
-    /// </summary>
-    public bool UsePredictiveCoding { get; set; } = true;
-
     /// <summary>Ancora Adam nel training PC: ogni quanti step PC un burst di backprop che "rimette in riga" (0 = spenta).</summary>
     public int PcAnchorEvery { get; set; } = 0;
 
     /// <summary>Passi di Adam per scatto d'ancora.</summary>
     public int PcAnchorBurst { get; set; } = 3;
-
-    // ── Datasources (PredictiveCoding.Data) da cui il worker pesca il corpus ──
-
-    /// <summary>Voci Wikipedia di cui scaricare l'estratto integrale ([] = fonte spenta).</summary>
-    public string[] WikipediaTitles { get; set; } =
-        ["Predictive coding", "Free energy principle", "Large language model"];
-
-    public string WikipediaLanguage { get; set; } = "en";
-
-    /// <summary>Quante storie in cima a Hacker News leggere (0 = fonte spenta).</summary>
-    public int HackerNewsStories { get; set; } = 10;
-
-    /// <summary>Query arXiv per gli abstract (vuota = fonte spenta).</summary>
-    public string ArxivQuery { get; set; } = "all:\"predictive coding\"";
-
-    public int ArxivResults { get; set; } = 10;
-
-    /// <summary>URL di feed RSS/Atom da leggere ([] = fonte spenta).</summary>
-    public string[] RssFeeds { get; set; } = [];
-
-    /// <summary>Quanti item per feed RSS entrano nel corpus.</summary>
-    public int RssItemsPerFeed { get; set; } = 20;
 
     // ── Training di avvio ──
 

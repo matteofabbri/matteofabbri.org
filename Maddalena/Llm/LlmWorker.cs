@@ -48,12 +48,6 @@ public sealed partial class LlmWorker(
         await Task.Yield();
 
         var o = options.Value;
-        if (!o.Enabled)
-        {
-            service.MarkOff();
-            logger.LogInformation("LLM spento da configurazione (Llm__Enabled=false)");
-            return;
-        }
 
         try
         {
@@ -63,19 +57,17 @@ public sealed partial class LlmWorker(
 
             if (!TryResume())
             {
-                var llm = o.UsePredictiveCoding
-                    ? PredictiveLlm.CreatePc(o.Dim, o.Blocks, o.Heads, o.FfDim, o.MaxSeq, o.Seed)
-                    : PredictiveLlm.Create2026(o.Dim, o.Blocks, o.Heads, o.FfDim, o.MaxSeq, o.Seed);
+                var llm = PredictiveLlm.CreatePc(o.Dim, o.Blocks, o.Heads, o.FfDim, o.MaxSeq, o.Seed);
                 service.Adopt(llm, resumed: false, lastSavedAt: null);
-                logger.LogInformation("LLM nuovo: {Parameters:N0} parametri (dim {Dim}, {Blocks} blocchi, {Mode})",
-                    llm.ParameterCount, o.Dim, o.Blocks, o.UsePredictiveCoding ? "predictive-coding/iPC" : "backprop");
+                logger.LogInformation("LLM nuovo: {Parameters:N0} parametri (dim {Dim}, {Blocks} blocchi, predictive-coding/iPC)",
+                    llm.ParameterCount, o.Dim, o.Blocks);
             }
 
-            if (o.TrainOnStartup)
+            // Giro di training d'avvio (lifelong learning): sempre.
             {
                 try
                 {
-                    var (corpus, summary) = await FetchCorpusAsync(o, stoppingToken);
+                    var (corpus, summary) = LoadSeedCorpus();
                     // Sotto le due finestre di training non c'e' niente da imparare.
                     if (Encoding.UTF8.GetByteCount(corpus) >= 2048)
                     {
@@ -305,109 +297,27 @@ public sealed partial class LlmWorker(
         }
     }
 
-    // ── Il corpus dalle datasources ──────────────────────────────────────────
+    // ── Il corpus-seme (riassunti Wikipedia, embeddato nell'assembly) ─────────
 
-    private async Task<(string Corpus, string Summary)> FetchCorpusAsync(LlmOptions o, CancellationToken ct)
+    // Il training d'avvio parte da un corpus statico e CURATO: niente fetch di
+    // rete all'avvio (fragile, fuori dal nostro controllo). Il testo vive in
+    // Llm/SeedCorpus.txt, embeddato come risorsa (vedi Maddalena.csproj), cosi'
+    // viaggia dentro l'immagine docker senza dipendere da percorsi su disco.
+    private static (string Corpus, string Summary) LoadSeedCorpus()
     {
-        var sb = new StringBuilder();
-        int wiki = 0, hn = 0, arxiv = 0, rss = 0;
+        var asm = typeof(LlmWorker).Assembly;
+        string? name = asm.GetManifestResourceNames()
+            .FirstOrDefault(n => n.EndsWith("SeedCorpus.txt", StringComparison.Ordinal));
+        if (name is null)
+            return ("", "corpus-seme: risorsa SeedCorpus.txt non trovata");
 
-        // Wikipedia: l'estratto integrale in testo piano delle voci configurate.
-        if (o.WikipediaTitles.Length > 0)
-        {
-            try
-            {
-                using var source = new WikipediaSource(language: o.WikipediaLanguage);
-                foreach (string title in o.WikipediaTitles)
-                {
-                    string extract = await source.GetExtractAsync(title, ct);
-                    if (string.IsNullOrWhiteSpace(extract)) continue;
-                    sb.AppendLine(extract).AppendLine();
-                    wiki++;
-                }
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                logger.LogWarning(ex, "LLM datasource Wikipedia fallita");
-            }
-        }
-
-        // Hacker News: titolo (+ testo per gli Ask HN) delle storie in cima.
-        if (o.HackerNewsStories > 0)
-        {
-            try
-            {
-                using var source = new HackerNewsSource();
-                var ids = await source.GetTopStoryIdsAsync(ct);
-                foreach (long id in ids.Take(o.HackerNewsStories))
-                {
-                    var item = await source.GetItemAsync(id, ct);
-                    string text = string.Join("\n",
-                        new[] { item.Title, StripHtml(item.Text) }.Where(p => !string.IsNullOrWhiteSpace(p)));
-                    if (text.Length == 0) continue;
-                    sb.AppendLine(text).AppendLine();
-                    hn++;
-                }
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                logger.LogWarning(ex, "LLM datasource Hacker News fallita");
-            }
-        }
-
-        // arXiv: titolo + abstract dei risultati della query configurata.
-        if (!string.IsNullOrWhiteSpace(o.ArxivQuery) && o.ArxivResults > 0)
-        {
-            try
-            {
-                using var source = new ArxivSource();
-                foreach (var entry in await source.SearchAsync(o.ArxivQuery, o.ArxivResults, ct))
-                {
-                    sb.AppendLine(entry.Title).AppendLine(entry.Summary).AppendLine();
-                    arxiv++;
-                }
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                logger.LogWarning(ex, "LLM datasource arXiv fallita");
-            }
-        }
-
-        // RSS/Atom: titolo + contenuto dei primi item di ogni feed configurato.
-        foreach (string url in o.RssFeeds)
-        {
-            try
-            {
-                var feed = await PredictiveCoding.Data.Rss.RssFeeds.ReadAsync(url, ct);
-                foreach (var item in feed.Items.Take(o.RssItemsPerFeed))
-                {
-                    string text = StripHtml(item.Text);
-                    if (string.IsNullOrWhiteSpace(text)) continue;
-                    sb.AppendLine(text).AppendLine();
-                    rss++;
-                }
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                logger.LogWarning(ex, "LLM datasource RSS fallita: {Url}", url);
-            }
-        }
-
-        string corpus = sb.ToString();
-        string summary = $"wikipedia:{wiki} hackernews:{hn} arxiv:{arxiv} rss:{rss} — {Encoding.UTF8.GetByteCount(corpus) / 1024} KB";
+        using var stream = asm.GetManifestResourceStream(name)!;
+        using var reader = new StreamReader(stream, Encoding.UTF8);
+        string corpus  = reader.ReadToEnd();
+        int    docs    = corpus.Split("\n\n", StringSplitOptions.RemoveEmptyEntries).Length;
+        string summary = $"corpus-seme: {docs} documenti, {Encoding.UTF8.GetByteCount(corpus) / 1024} KB";
         return (corpus, summary);
     }
-
-    // I testi di HN/RSS arrivano come HTML: via i tag, giu' le entita', e il
-    // byte tokenizer riceve prosa invece di markup.
-    private static string StripHtml(string? html)
-    {
-        if (string.IsNullOrWhiteSpace(html)) return "";
-        return WebUtility.HtmlDecode(TagRegex().Replace(html, " ")).Trim();
-    }
-
-    [GeneratedRegex("<[^>]+>")]
-    private static partial Regex TagRegex();
 
     [GeneratedRegex(@"\s+")]
     private static partial Regex SpaceRegex();
