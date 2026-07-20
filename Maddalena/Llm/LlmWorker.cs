@@ -281,6 +281,12 @@ public sealed partial class LlmWorker(
         try
         {
             var llm = PredictiveLlm.Load(stateDir);
+            // Un checkpoint con pesi NaN/Inf (training andato instabile) si carica
+            // senza errori ma poi genera solo token 0 ('\0'): lo trattiamo come
+            // corrotto cosi' il ramo sotto lo mette da parte e si riparte freschi.
+            if (!llm.WeightsAreFinite())
+                throw new InvalidDataException(
+                    "checkpoint con pesi non finiti (NaN/Inf): stato avvelenato da un training instabile.");
             service.Adopt(llm, resumed: true, lastSavedAt: File.GetLastWriteTimeUtc(marker));
             logger.LogInformation("LLM ripreso dallo stato in {StateDir} (salvato il {SavedAt:u})",
                 stateDir, File.GetLastWriteTimeUtc(marker));
