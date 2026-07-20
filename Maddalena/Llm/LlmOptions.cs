@@ -15,12 +15,16 @@ public sealed class LlmOptions
     /// </summary>
     public string? StateDir { get; set; }
 
-    // ── Dimensioni del modello (solo prima creazione; preset CreatePc denso RMSNorm+RoPE, byte tokenizer) ──
-
-    public int Dim { get; set; } = 64;
-    public int Blocks { get; set; } = 4;
-    public int Heads { get; set; } = 4;
-    public int FfDim { get; set; } = 128;
+    // ── Dimensioni del modello (preset CreatePc denso RMSNorm+RoPE, byte tokenizer) ──
+    // Valgono alla creazione. Se le cambi, al riavvio il LlmWorker vede che lo stato
+    // salvato ha un'altra taglia, lo mette da parte e ricostruisce il modello a queste
+    // dimensioni (niente da fare a mano sul server).
+    // Taglia attuale = dimensioni di Qwen2.5-0.5B (896/24/14/4864): ~287M parametri
+    // sulla nostra architettura (MHA piena + FFN a 2 matrici, vocab byte 260).
+    public int Dim { get; set; } = 896;
+    public int Blocks { get; set; } = 24;
+    public int Heads { get; set; } = 14;    // 896 / 14 = 64 per testa (pari, ok per RoPE)
+    public int FfDim { get; set; } = 4864;
 
     /// <summary>
     /// La finestra di contesto, in token (= byte col tokenizer di default).

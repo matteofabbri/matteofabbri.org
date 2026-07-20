@@ -270,8 +270,9 @@ public sealed partial class LlmWorker(
     }
 
     // Riprende il modello dalla cartella di stato, se c'e' e si fa leggere.
-    // Una cartella illeggibile (deploy interrotto a meta' Save, file corrotti)
-    // non blocca il sito: finisce da parte in *.corrotto e si riparte da zero.
+    // Uno stato non riutilizzabile (file corrotti / deploy interrotto a meta' Save,
+    // pesi NaN, o taglia del modello cambiata in config) non blocca il sito:
+    // finisce da parte in *.corrotto e si riparte da zero alla config attuale.
     private bool TryResume()
     {
         string stateDir = service.StateDir;
@@ -287,6 +288,18 @@ public sealed partial class LlmWorker(
             if (!llm.WeightsAreFinite())
                 throw new InvalidDataException(
                     "checkpoint con pesi non finiti (NaN/Inf): stato avvelenato da un training instabile.");
+
+            // Se hai cambiato la taglia del modello in config, i vecchi pesi non
+            // entrano nella nuova architettura: mettiamo da parte lo stato e
+            // ripartiamo freschi alla taglia nuova (stessa magia del guard NaN).
+            var o = options.Value;
+            var c = llm.Config;
+            if (c.Dim != o.Dim || c.NumBlocks != o.Blocks || c.NumHeads != o.Heads ||
+                c.FfDim != o.FfDim || c.MaxSeq != o.MaxSeq)
+                throw new InvalidDataException(
+                    $"architettura cambiata: stato salvato [dim {c.Dim}, blocks {c.NumBlocks}, heads {c.NumHeads}, ff {c.FfDim}, seq {c.MaxSeq}] " +
+                    $"!= config [dim {o.Dim}, blocks {o.Blocks}, heads {o.Heads}, ff {o.FfDim}, seq {o.MaxSeq}]. Riparto fresco alla taglia nuova.");
+
             service.Adopt(llm, resumed: true, lastSavedAt: File.GetLastWriteTimeUtc(marker));
             logger.LogInformation("LLM ripreso dallo stato in {StateDir} (salvato il {SavedAt:u})",
                 stateDir, File.GetLastWriteTimeUtc(marker));
@@ -297,7 +310,7 @@ public sealed partial class LlmWorker(
             string aside = stateDir + ".corrotto";
             if (Directory.Exists(aside)) Directory.Delete(aside, recursive: true);
             Directory.Move(stateDir, aside);
-            logger.LogError(ex, "LLM: stato in {StateDir} illeggibile, messo da parte in {Aside}; si riparte da zero",
+            logger.LogWarning(ex, "LLM: stato in {StateDir} non riutilizzabile, messo da parte in {Aside}; si riparte da zero",
                 stateDir, aside);
             return false;
         }
