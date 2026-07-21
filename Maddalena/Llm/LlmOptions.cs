@@ -285,11 +285,78 @@ public sealed class LlmOptions
     /// <summary>Sotto questa lunghezza il testo estratto non insegna niente (menu, pagine vuote).</summary>
     public int CrawlLearnMinChars { get; set; } = 200;
 
-    /// <summary>Tetto al testo per pagina dato in pasto a Learn (tiene corta l'attesa sotto il semaforo).</summary>
-    public int CrawlLearnMaxChars { get; set; } = 32 * 1024 * 1024;
+    /// <summary>
+    /// Tetto al testo per pagina dato in pasto a Learn. Col tokenizer a byte un
+    /// carattere e' un token: 64 KB sono 64.000 token di discesa per una pagina
+    /// sola, gia' parecchi minuti di CPU. (Era 32 MB — un valore che, se una
+    /// pagina grossa fosse passata, avrebbe tenuto lo scrittore occupato per
+    /// giorni su un singolo articolo.)
+    /// </summary>
+    public int CrawlLearnMaxChars { get; set; } = 64 * 1024;
+
+    /// <summary>
+    /// Il boccone: la pagina si impara a blocchi di questa lunghezza, e tra un
+    /// blocco e l'altro il semaforo dello scrittore si rilascia. Non serve alle
+    /// generazioni (quelle leggono la copia congelata e non passano dal
+    /// semaforo), ma a lasciare una fessura a teach, salvataggio e shutdown.
+    /// </summary>
+    public int CrawlLearnChunkChars { get; set; } = 4096;
+
+    /// <summary>
+    /// Quante righe gia' viste ricordare per non insegnarle due volte (0 =
+    /// spento). ParseBlocks toglie menu e footer, ma restano le frasi che ogni
+    /// sito ripete su ogni pagina — "leggi anche", "condividi", disclaimer,
+    /// sigle d'agenzia. Su migliaia di pagine il modello le vedrebbe piu' di
+    /// qualunque frase vera, e diventerebbero l'unica cosa che sa dire bene.
+    /// Il CORPUS su disco le scrive lo stesso: la ripetizione e' un dato, e in
+    /// lettura si dedupla comunque. Un milione di impronte costa ~30 MB.
+    /// </summary>
+    public int CrawlDedupWindow { get; set; } = 1_000_000;
+
+    /// <summary>
+    /// Quante generazioni in parallelo al massimo. Non e' mutua esclusione — la
+    /// copia congelata regge quanti lettori si vuole — ma un tetto: ogni forward
+    /// alloca il proprio nastro di attivazioni, e mille richieste insieme
+    /// finirebbero la RAM prima della CPU. 0 = meta' dei core.
+    /// </summary>
+    public int MaxConcurrentGenerations { get; set; }
+
+    // ── Il corpus che il crawler sedimenta ──────────────────────────────────
+    //
+    // Fino a ieri il crawler imparava una pagina e la buttava. Il testo passava
+    // una volta sola davanti al modello e spariva — e senza un corpus su disco
+    // non si puo' fare nessuna delle due cose che servono davvero: addestrare
+    // un tokenizer BPE (che ha bisogno di vedere MOLTO testo per capire quali
+    // pezzi di parola ricorrono) e fare un pretraining vero sulla 4070.
+    // Adesso ogni pagina buona finisce anche in una cartella di shard di testo,
+    // e quella cartella e' l'unica cosa che cresce per sempre.
+
+    public bool CorpusEnabled { get; set; } = true;
+
+    /// <summary>
+    /// Dove si accumulano gli shard. Vuota (il default) = la cartella SORELLA
+    /// di StateDir, che e' quello che si vuole quasi sempre: in produzione
+    /// StateDir e' /state/llm e il volume docker sta su /state, quindi il
+    /// corpus finisce in /state/llm-corpus — persistente senza configurare
+    /// niente; in dev diventa ContentRoot/llm-corpus.
+    /// Sorella e non figlia per un motivo preciso: il salvataggio del modello
+    /// CANCELLA e ricrea StateDir, e un corpus li' dentro sparirebbe a ogni
+    /// scrittura. Da valorizzare solo per spostarlo altrove (un disco piu'
+    /// capiente, un'altra macchina).
+    /// </summary>
+    public string? CorpusDir { get; set; }
+
+    /// <summary>Quanto pesa uno shard prima che se ne apra un altro.</summary>
+    public long CorpusShardMaxBytes { get; set; } = 64L * 1024 * 1024;
 
     // ── Salvataggio periodico ──
 
-    /// <summary>Ogni quanti minuti il timer scrive su disco lo stato, se e' cambiato.</summary>
-    public int SaveEveryMinutes { get; set; } = 5;
+    /// <summary>
+    /// Ogni quanti minuti il timer scrive su disco lo stato, se e' cambiato (e
+    /// riallinea il lettore). Un checkpoint pesa quanto i pesi — oltre un GB
+    /// alla taglia attuale — quindi scriverlo di continuo e' I/O sprecato:
+    /// il modello impara a passi piccoli, mezz'ora di apprendimento e' poca
+    /// roba da rischiare in un crash e molto disco risparmiato.
+    /// </summary>
+    public int SaveEveryMinutes { get; set; } = 30;
 }

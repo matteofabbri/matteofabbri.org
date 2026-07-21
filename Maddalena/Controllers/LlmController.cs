@@ -35,6 +35,8 @@ public sealed class LlmController(LlmService llm, LlmCrawlStore crawlStore, LlmL
             TokensPrompted = numbers is { } n3 ? Digits(n3.Prompted) : null,
             TokensGenerated = numbers is { } n4 ? Digits(n4.Generated) : null,
             PagesLearned = llm.PagesLearned,
+            CorpusBytes = llm.CorpusBytes,
+            CorpusDocuments = llm.CorpusDocuments,
         };
 
         // La coda vive su Postgres: se la tabella non c'e' ancora (crawler

@@ -38,4 +38,10 @@ public sealed class LlmStatusResponse
     public long? QueuePending { get; set; }
 
     public long? QueueKnown { get; set; }
+
+    // Il corpus sedimentato su disco: quanto testo il crawler ha messo da parte
+    // per il futuro (tokenizer BPE, pretraining). Cresce sempre, non si svuota.
+    public long? CorpusBytes { get; set; }
+
+    public long? CorpusDocuments { get; set; }
 }
