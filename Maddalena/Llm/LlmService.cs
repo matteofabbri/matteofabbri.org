@@ -155,7 +155,9 @@ public sealed class LlmService(
         await _gate.WaitAsync(ct);
         try
         {
-            llm.LearnPc(text, options.Value.CrawlLearnSteps);
+            // measureSurprise:false -> niente forward before/after (il crawler scarta
+            // il report): ~1/3 di lavoro in meno per pagina.
+            llm.LearnPc(text, options.Value.CrawlLearnSteps, measureSurprise: false);
             _dirty = true;
         }
         finally

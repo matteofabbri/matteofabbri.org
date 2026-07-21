@@ -39,6 +39,15 @@ public sealed class LlmOptions
     public int Seed { get; set; } = 42;
 
     /// <summary>
+    /// Giro di training BATCH sul corpus-seme all'avvio. true = comportamento
+    /// storico. false = Predictive Coding puro: il modello parte vergine e impara
+    /// SOLO dallo stream online (crawler/teach), con l'ancora Adam ogni
+    /// PcAnchorEvery step a rimetterlo in riga. In locale l'AppHost lo mette a
+    /// false (prova in PC puro); in prod resta true.
+    /// </summary>
+    public bool StartupCorpusTraining { get; set; } = true;
+
+    /// <summary>
     /// Override OPZIONALE della cadenza dell'ancora Adam (ogni quanti step PC un
     /// burst). null = usa il default della libreria, che è l'unica sorgente del
     /// numero (<see cref="PredictiveCoding.LLM.Training.PcDecoderTrainer.DefaultAnchorEvery"/>).

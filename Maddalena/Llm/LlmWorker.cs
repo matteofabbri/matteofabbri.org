@@ -63,7 +63,11 @@ public sealed partial class LlmWorker(
                     llm.ParameterCount, o.Dim, o.Blocks);
             }
 
-            // Giro di training d'avvio (lifelong learning): sempre.
+            // Giro di training BATCH sul corpus-seme all'avvio. Si puo' spegnere
+            // (Llm__StartupCorpusTraining=false, default in dev) per un test in
+            // PC puro: il modello parte vergine e impara SOLO dallo stream online
+            // (crawler/teach) con l'ancora ogni PcAnchorEvery step.
+            if (o.StartupCorpusTraining)
             {
                 try
                 {

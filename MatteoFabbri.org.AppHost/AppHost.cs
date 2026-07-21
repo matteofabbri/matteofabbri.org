@@ -115,6 +115,12 @@ maddalena
 if (builder.ExecutionContext.IsPublishMode)
     maddalena.WithEnvironment("Llm__StateDir", "/state/llm");
 
+// PROVA in PC puro (solo in locale): niente training batch all'avvio, il modello
+// impara solo dallo stream online (crawler/teach) + ancora. In prod resta il
+// default (true), quindi il comportamento pubblicato non cambia.
+if (!builder.ExecutionContext.IsPublishMode)
+    maddalena.WithEnvironment("Llm__StartupCorpusTraining", "false");
+
 // L'indirizzo interno (host:porta) a cui Caddy inoltra il traffico del sito:
 // deriva dall'endpoint del progetto. HostAndPort restituisce "host:porta" gia'
 // risolti e si adatta da solo alla modalita': in pubblicazione diventa "site:8080",
