@@ -11,8 +11,9 @@
 # Segreti usati (impostati via `gh secret set`):
 #   DEPLOY_SSH_KEY   — chiave privata dedicata per ubuntu@server (la pubblica e'
 #                      in authorized_keys sul server; NON e' la chiave .ppk di Matteo)
-#   FE_SUBMODULE_KEY — deploy key read-only del repo privato maddelena-FE,
-#                      serve solo a scaricare il submodule del frontend
+#   FE_SUBMODULE_KEY — deploy key read-only del repo privato matteofabbri.org-FE
+#                      (ex maddelena-FE, ricreato il 2026-07-24), serve solo a
+#                      scaricare il submodule del frontend
 #   PC_SUBMODULE_KEY — deploy key read-only del repo privato PredicitiveCoding
 #                      (le librerie LLM/Data che Maddalena referenzia)
 name: deploy
@@ -47,7 +48,7 @@ jobs:
           chmod 600 ~/.ssh/fe_key
           ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
           git submodule init external/maddelena-FE
-          git config submodule.external/maddelena-FE.url git@github.com:matteofabbri/maddelena-FE.git
+          git config submodule.external/maddelena-FE.url git@github.com:matteofabbri/matteofabbri.org-FE.git
           GIT_SSH_COMMAND="ssh -i ~/.ssh/fe_key -o IdentitiesOnly=yes" \
             git submodule update external/maddelena-FE
 
