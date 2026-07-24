@@ -14,6 +14,9 @@
 # la transizione, mail.theqult.org, ...) NON richiede di toccare questo file.
 # Si fa tutto lato mailcow (ADDITIONAL_SAN in mailcow.conf + DNS).
 # Questo file si tocca solo per aggiungere/togliere un SITO WEB.
+# Eccezione dichiarata: autoconfig./autodiscover.maddalena.me hanno un forward
+# ESPLICITO verso mailcow (matcher @mailauto in :443 e :80), per non dipendere
+# dal catch-all.
 #
 # Variabili (impostate dall'AppHost Aspire / file .env del compose):
 #   SITE_DOMAIN           -> dominio del sito personale   (es. matteofabbri.org)
@@ -49,6 +52,17 @@
 					upstream 127.0.0.1:8443
 				}
 			}
+			# Autoconfigurazione dei client di posta (Thunderbird = autoconfig,
+			# Outlook = autodiscover): forward ESPLICITO a mailcow, TLS sigillato
+			# (il certificato per questi nomi se lo fa mailcow, che li include da
+			# solo nel suo cert). Passerebbero comunque dal catch-all qui sotto:
+			# dichiararli li rende garantiti anche se il catch-all cambia.
+			@mailauto tls sni autoconfig.{$MADDALENA_DOMAIN} autodiscover.{$MADDALENA_DOMAIN}
+			route @mailauto {
+				proxy {
+					upstream {$MAILCOW_TLS_UPSTREAM}
+				}
+			}
 			# Tutto il resto (posta: mail.*, autodiscover, autoconfig,
 			# nome OVH di transizione, ...): TLS sigillato a mailcow.
 			route {
@@ -67,6 +81,15 @@
 					upstream 127.0.0.1:8080
 				}
 			}
+			# Autoconfigurazione client di posta anche in chiaro: Thunderbird
+			# prova autoconfig pure su http, e da qui passano le sfide
+			# Let's Encrypt di questi due nomi.
+			@mailauto http host autoconfig.{$MADDALENA_DOMAIN} autodiscover.{$MADDALENA_DOMAIN}
+			route @mailauto {
+				proxy {
+					upstream {$MAILCOW_HTTP_UPSTREAM}
+				}
+			}
 			# Tutto il resto a mailcow: cosi' le sfide Let's Encrypt dei
 			# nomi di posta (qualunque essi siano) gli arrivano da sole.
 			route {
@@ -78,10 +101,32 @@
 	}
 }
 
+# --- Header comuni a tutti i siti (importati con "import secure_headers") ----
+# Sicurezza in piu', informazioni in meno:
+#   - HSTS: il browser memorizza "questo sito solo in https" per un anno.
+#     Niente includeSubDomains: i sottodomini (mail.*, autoconfig.*, ...) li
+#     serve mailcow o il vecchio server, non vincoliamo casa d'altri.
+#   - X-Frame-Options: la pagina non e' incorniciabile da siti terzi (clickjacking).
+#   - Referrer-Policy: ai link esterni arriva solo il dominio, non l'URL intero.
+#   - -Server/-Via: non riveliamo che dietro ci sono Kestrel e Caddy
+#     (le rimozioni Caddy le applica a fine risposta, quindi valgono anche
+#     sugli header aggiunti dal reverse_proxy e dall'upstream).
+(secure_headers) {
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Frame-Options "SAMEORIGIN"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+		-Via
+	}
+}
+
 # --- Sito personale (TLS terminato da Caddy) ---------------------------------
 # Include anche www.: serve solo per il certificato + redirect alla versione
 # senza www (es. se il registrar crea un www. accanto al record principale).
 {$SITE_DOMAIN}, www.{$SITE_DOMAIN} {
+	import secure_headers
+
 	@www host www.{$SITE_DOMAIN}
 	redir @www https://{$SITE_DOMAIN}{uri} permanent
 
@@ -99,6 +144,8 @@
 
 # --- theqult.org (API) -------------------------------------------------------
 {$THEQULT_DOMAIN}, www.{$THEQULT_DOMAIN} {
+	import secure_headers
+
 	@www host www.{$THEQULT_DOMAIN}
 	redir @www https://{$THEQULT_DOMAIN}{uri} permanent
 
@@ -116,6 +163,8 @@
 
 # --- maddalena.me (sito MVC) -------------------------------------------------
 {$MADDALENA_DOMAIN}, www.{$MADDALENA_DOMAIN} {
+	import secure_headers
+
 	@www host www.{$MADDALENA_DOMAIN}
 	redir @www https://{$MADDALENA_DOMAIN}{uri} permanent
 

@@ -14,9 +14,12 @@ per nome:
 Tutti e tre i SITI hanno il TLS terminato da Caddy (certificati Let's Encrypt).
 
 La regola d'oro: Caddy conosce solo i SITI. I nomi della posta
-(`mail.maddalena.me`, `autodiscover.`, `autoconfig.`, domini futuri) NON vanno
-dichiarati in Caddy: ci passano da soli. Per quelli si lavora solo lato
-mailcow e DNS (vedi sezione 4).
+(`mail.maddalena.me`, domini futuri) NON vanno dichiarati in Caddy: ci passano
+da soli. Per quelli si lavora solo lato mailcow e DNS (vedi sezione 4).
+Unica eccezione, dichiarata: `autoconfig.maddalena.me` e
+`autodiscover.maddalena.me` hanno un forward esplicito verso mailcow nel
+Caddyfile (matcher `@mailauto`, sia su 443 che su 80) — sempre in passthrough,
+il certificato resta di mailcow.
 
 Le porte della posta vera (SMTP 25/465/587, IMAP 143/993, POP 110/995, sieve
 4190) le pubblica mailcow direttamente verso l'esterno: NON passano da Caddy.
