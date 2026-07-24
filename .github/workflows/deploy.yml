@@ -2,7 +2,10 @@
 # porta sul server, poi `docker compose up -d` riavvia solo i container cambiati.
 # E' lo stesso flusso manuale (publish.ps1 + docker save/load), automatizzato.
 #
-# NON tocca: docker-compose/.env, Caddy, mailcow — restano manuali (contengono
+# Porta anche il contesto di build di Caddy (Dockerfile + Caddyfile): il
+# `--build` del riavvio ricostruisce l'immagine solo se e' cambiato qualcosa.
+#
+# NON tocca: docker-compose/.env e mailcow — restano manuali (contengono
 # segreti e cambiano di rado). Se cambia l'AppHost/compose, deploy a mano.
 #
 # Segreti usati (impostati via `gh secret set`):
@@ -90,12 +93,22 @@ jobs:
               ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$SERVER" 'gunzip | sudo docker load'
           done
 
-      # up -d ricrea SOLO i container la cui immagine e' cambiata; il prune butta
-      # le immagini vecchie rimaste senza tag (sennò il disco si riempie).
+      # Il contesto di Caddy passa dalla home (ubuntu non scrive in /opt):
+      # scp li', poi sudo lo mette al suo posto accanto al compose.
+      - name: Aggiornamento contesto Caddy
+        run: |
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$SERVER" 'rm -rf ~/caddy-new'
+          scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -r MatteoFabbri.org.AppHost/caddy "$SERVER:~/caddy-new"
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$SERVER" \
+            'sudo mkdir -p /opt/matteofabbri/caddy && sudo cp -r ~/caddy-new/. /opt/matteofabbri/caddy/ && rm -rf ~/caddy-new'
+
+      # up -d --build ricrea SOLO i container cambiati (immagine nuova o contesto
+      # Caddy cambiato); il prune butta le immagini vecchie rimaste senza tag
+      # (sennò il disco si riempie).
       - name: Riavvio container e pulizia
         run: |
           ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$SERVER" \
-            'cd /opt/matteofabbri && sudo docker compose up -d && sudo docker image prune -f'
+            'cd /opt/matteofabbri && sudo docker compose up -d --build && sudo docker image prune -f'
 
       # Solo maddalena.me: gli altri due domini non hanno ancora il DNS puntato qui.
       - name: Verifica
