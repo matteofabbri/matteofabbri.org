@@ -2,7 +2,7 @@
 # porta sul server, poi `docker compose up -d` riavvia solo i container cambiati.
 # E' lo stesso flusso manuale (publish.ps1 + docker save/load), automatizzato.
 #
-# Porta anche il contesto di build di Caddy (Dockerfile + Caddyfile): il
+# Porta anche i contesti di build che stanno nel repo (Caddy e tileserver): il
 # `--build` del riavvio ricostruisce l'immagine solo se e' cambiato qualcosa.
 #
 # NON tocca: docker-compose/.env e mailcow — restano manuali (contengono
@@ -80,14 +80,19 @@ jobs:
               ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$SERVER" 'gunzip | sudo docker load'
           done
 
-      # Il contesto di Caddy passa dalla home (ubuntu non scrive in /opt):
-      # scp li', poi sudo lo mette al suo posto accanto al compose.
-      - name: Aggiornamento contesto Caddy
+      # I contesti di build che vivono nel repo: Caddy e tileserver (quest'ultimo
+      # e' l'immagine che si scarica la mappa del mondo da sola all'avvio).
+      # Passano dalla home perche' ubuntu non scrive in /opt, poi sudo li mette
+      # al loro posto accanto al compose.
+      - name: Aggiornamento contesti di build
         run: |
-          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$SERVER" 'rm -rf ~/caddy-new'
-          scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -r MatteoFabbri.org.AppHost/caddy "$SERVER:~/caddy-new"
-          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$SERVER" \
-            'sudo mkdir -p /opt/matteofabbri/caddy && sudo cp -r ~/caddy-new/. /opt/matteofabbri/caddy/ && rm -rf ~/caddy-new'
+          for ctx in caddy tileserver; do
+            ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$SERVER" "rm -rf ~/$ctx-new"
+            scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -r \
+              "MatteoFabbri.org.AppHost/$ctx" "$SERVER:~/$ctx-new"
+            ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$SERVER" \
+              "sudo mkdir -p /opt/matteofabbri/$ctx && sudo cp -r ~/$ctx-new/. /opt/matteofabbri/$ctx/ && rm -rf ~/$ctx-new"
+          done
 
       # up -d --build ricrea SOLO i container cambiati (immagine nuova o contesto
       # Caddy cambiato); il prune butta le immagini vecchie rimaste senza tag

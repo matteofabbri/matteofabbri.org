@@ -123,14 +123,24 @@ var valhalla = builder.AddContainer("valhalla", "ghcr.io/nilsnolde/docker-valhal
     // L'altimetria no: pesa parecchi GB e serve solo a ciclismo e pedonale.
     .WithEnvironment("build_elevation", "False");
 
-// tileserver-gl NON scarica niente da solo: vuole un .mbtiles gia' pronto nel
-// suo volume. Si popola una volta, da fuori, per esempio:
-//   docker run --rm -v matteofabbri_tileserver-data:/data alpine \
-//     wget -O /data/italy.mbtiles <url-del-tuo-mbtiles>
-// Finche' il volume e' vuoto il container parte e non serve nessuna mappa.
-var tileserver = builder.AddContainer("tileserver", "maptiler/tileserver-gl", "v5.6.0")
+// Quale mappa del mondo scaricare. Vuoto = l'ultima pubblicata: Protomaps ne
+// sforna una al giorno col nome fatto di data (20260731.pmtiles) e tiene online
+// solo l'ultima settimana, quindi un indirizzo fisso "l'ultimo" non esiste e lo
+// script d'avvio va a ritroso dall'oggi finche' non ne trova uno. Si valorizza
+// nel .env solo per inchiodare una versione precisa.
+var planetUrl = builder.AddParameter("planet-url",
+    () => builder.Configuration["Parameters:planet-url"] ?? "");
+
+// A differenza dell'immagine ufficiale, questa si SCARICA DA SOLA la mappa del
+// mondo (~137 GB) e i font al primo avvio, dentro il volume: vedi
+// ./tileserver/prepara-mappe.sh. Nessun file da portare a mano sul server, come
+// gia' fa Valhalla coi suoi dati. Il primo avvio dura quanto il download; nel
+// frattempo /tiles risponde 502.
+var tileserver = builder.AddDockerfile("tileserver", "tileserver")
+    // La mappa scaricata. Senza volume ogni riavvio rifarebbe i 137 GB.
     .WithVolume("tileserver-data", "/data")
     .WithEndpoint(targetPort: 8080, scheme: "http", name: "http")
+    .WithEnvironment("PLANET_URL", planetUrl)
     // Indispensabile dietro a un prefisso di percorso: tileserver-gl scrive gli
     // indirizzi delle tiles DENTRO il JSON dello stile che serve. Senza questo
     // li scriverebbe come /data/... e il client li chiederebbe alla radice del

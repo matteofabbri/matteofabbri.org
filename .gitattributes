@@ -1,0 +1,8 @@
+# Gli script di shell e i file letti da Docker DEVONO avere fine-riga in stile
+# Unix (LF). Con i fine-riga di Windows (CRLF) Linux legge la prima riga come
+# "/bin/bash^M" e risponde "bad interpreter": lo script non parte, e l'errore
+# non lascia capire il perche'.
+*.sh text eol=lf
+Dockerfile text eol=lf
+Caddyfile text eol=lf
+docker-entrypoint* text eol=lf
