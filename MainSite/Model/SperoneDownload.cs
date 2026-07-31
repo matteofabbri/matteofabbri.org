@@ -1,7 +1,7 @@
-namespace Maddalena.Model;
+namespace MainSite.Model;
 
 // Un singolo pacchetto scaricabile di Sperone. Url punta al NOSTRO proxy (/download/sperone/...),
-// non a GitHub: il download passa sempre da maddalena.me.
+// non a GitHub: il download passa sempre dal sito.
 public sealed class SperoneDownload
 {
     public string Platform { get; set; } = "";   // win | linux | mac

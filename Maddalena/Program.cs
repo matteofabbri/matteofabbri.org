@@ -1,26 +1,24 @@
 using Maddalena.Data;
-using Maddalena.Llm;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
-using PredictiveCoding.Device;
 
 namespace Maddalena;
 
 // Il sito MVC di maddalena.me. Caddy gli inoltra tutto il dominio, tranne /mail (webmail
-// mailcow). Ospita anche il LICENSING sotto /licensing (compra + webhook Stripe + le mie
+// mailcow). Ospita il LICENSING sotto /licensing (compra + webhook Stripe + le mie
 // licenze). Gli account sono LOCALI (ASP.NET Core Identity + cookie): il ruolo di
 // provider OIDC e' stato rimosso quando il licensing e' entrato in Maddalena e nessun
 // altro sito lo usava piu'.
+//
+// IN RIFACIMENTO: i progetti stanno traslocando su MainSite (i download di Sperone sono
+// gia' li'), mentre le API account (login/registrazione/password) e TUTTO l'LLM di
+// predictive coding — controller, worker, crawler, librerie PredictiveCoding — sono
+// stati rimossi. Resta il solo LicensingController; l'Identity sotto e' quello che il
+// licensing usa per legare una licenza a un account.
 public class Program
 {
     public static void Main(string[] args)
     {
-        // Sceglie il backend di calcolo dell'LLM una volta all'avvio: se la macchina
-        // ha una GPU NVIDIA col CUDA Toolkit, le matmul vanno su cuBLAS; altrimenti
-        // resta la CPU (SIMD+multithread). Il rilevamento fallisce in silenzio senza
-        // le librerie CUDA, quindi sul server (AMD, niente CUDA) e' un no-op -> CPU.
-        DeviceRegistry.AutoSelect();
-
         var builder = WebApplication.CreateBuilder(args);
 
         // Telemetria, health check e service discovery condivisi della soluzione.
@@ -44,49 +42,6 @@ public class Program
         builder.Services.AddCors(options => options.AddDefaultPolicy(policy =>
             policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()));
 
-        // DownloadController (proxy dei download di Sperone). Due client GitHub distinti:
-        //  - "github-releases": scarica gli asset binari via l'URL stabile /releases/latest/download/…
-        //    (niente API, niente rate limit). Timeout largo: i pacchetti pesano ~60-100 MB.
-        //  - "github-api": legge l'API release per versione e dimensioni (serve l'header Accept di GitHub).
-        // Entrambi mandano uno User-Agent, che GitHub pretende; i redirect verso il CDN li seguono da soli.
-        builder.Services.AddHttpClient("github-releases", client =>
-        {
-            client.DefaultRequestHeaders.UserAgent.ParseAdd("maddalena.me-sperone-download");
-            client.Timeout = TimeSpan.FromMinutes(10);
-        });
-        builder.Services.AddHttpClient("github-api", client =>
-        {
-            client.BaseAddress = new Uri("https://api.github.com/");
-            client.DefaultRequestHeaders.UserAgent.ParseAdd("maddalena.me-sperone-download");
-            client.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
-        });
-
-        // Cache in memoria: l'elenco dei download tiene l'ultima release di GitHub per 15 minuti,
-        // cosi' non si chiama l'API a ogni visita (che ha un rate limit).
-        builder.Services.AddMemoryCache();
-
-        // L'LLM di predictive coding (librerie PredictiveCoding.LLM/.Data del repo
-        // PredicitiveCoding accanto a questo): LlmWorker lo riprende dalla cartella
-        // di stato (in prod il volume docker maddalena-llm) o lo crea, lo traina
-        // dalle datasources e lo consegna al singleton LlmService; LlmController
-        // lo espone su /api/llm come interroga/istruisci/stato. Configurazione:
-        // sezione "Llm" (env Llm__*).
-        // In piu' il worker tiene vivo un crawler Abot (coda su Postgres, tabella
-        // llm_crawl_queue) che nutre l'LLM di pagine web, e un timer che ne salva
-        // lo stato ogni Llm__SaveEveryMinutes minuti.
-        builder.Services.Configure<LlmOptions>(builder.Configuration.GetSection("Llm"));
-        builder.Services.AddSingleton<LlmCrawlStore>();
-        builder.Services.AddSingleton<LlmService>();
-        builder.Services.AddHostedService<LlmWorker>();
-
-        // Log dell'LLM su Postgres (tabella llm_log) + un provider di logging che
-        // cattura tutte le categorie "Maddalena.Llm.*" e le persiste. Visibili su
-        // GET /api/llm/logs. Il flush gira come hosted service (stessa istanza).
-        builder.Services.AddSingleton<LlmLogStore>();
-        builder.Services.AddHostedService(sp => sp.GetRequiredService<LlmLogStore>());
-        builder.Services.AddSingleton<ILoggerProvider>(sp =>
-            new PostgresLlmLoggerProvider(sp.GetRequiredService<LlmLogStore>()));
-
         // Dietro Caddy: fidati degli header X-Forwarded-* cosi' Maddalena sa di
         // essere https://maddalena.me. L'emittente (issuer) dei token OIDC deve
         // essere quel nome pubblico, non l'host interno del container.
@@ -103,8 +58,10 @@ public class Program
         // PostgreSQL (Aspire): un solo contesto per gli account Identity + le licenze.
         builder.AddNpgsqlDbContext<ApplicationDbContext>("maddalenadb");
 
-        // Identity SENZA la UI prefabbricata (niente pacchetto Identity.UI): le pagine
-        // account (login, registrazione, gestione) sono nostre, in AccountController.
+        // Identity SENZA la UI prefabbricata (niente pacchetto Identity.UI). ATTENZIONE:
+        // con AccountController rimosso non c'e' piu' NESSUN endpoint di login o
+        // registrazione — restano solo gli account gia' in tabella, che il licensing
+        // usa come proprietari delle licenze. Da ridisegnare col resto di Maddalena.
         builder.Services
             .AddIdentity<IdentityUser, IdentityRole>(options =>
             {
@@ -153,7 +110,7 @@ public class Program
         app.UseAuthentication();
         app.UseAuthorization();
 
-        app.MapControllers();          // /api/* + download/webhook (attribute routing)
+        app.MapControllers();          // /api/licensing/* + download licenza/webhook (attribute routing)
         app.MapOpenApi();              // /openapi/v1.json (il contratto delle API)
 
         // Redirect di cortesia: i vecchi URL (pagine server di ieri, statiche .html

@@ -7,6 +7,8 @@ per nome:
 - `matteofabbri.org` (`SITE_DOMAIN`) → sito personale (progetto `site`)
 - `theqult.org` (`THEQULT_DOMAIN`)   → API `TheQult`
 - `maddalena.me` (`MADDALENA_DOMAIN`) → sito MVC `Maddalena` (include `/licensing`)
+- `maddalena.me/osm`                 → Valhalla, calcolo dei percorsi
+- `maddalena.me/tiles`               → tileserver-gl, immagine della mappa
 - `<dominio>/mail` (tutti e tre)     → redirect a `https://<WEBMAIL_HOST>`
 - **qualunque altro nome**           → mailcow (TLS **passato sigillato**: il
   certificato se lo fa mailcow)
@@ -127,6 +129,65 @@ Avvia (la prima volta costruisce l'immagine Caddy su misura, col modulo layer4):
 cd out
 docker compose up -d --build
 ```
+
+---
+
+## 2-bis. Le mappe: Valhalla e tileserver-gl
+
+Due servizi distinti, e la distinzione è la cosa da tenere a mente: **Valhalla
+calcola i percorsi, tileserver-gl serve l'immagine della mappa**. Nessuno dei
+due fa il lavoro dell'altro, e servono entrambi per una navigazione funzionante.
+Restano interni: fuori ci arriva solo Caddy, su `maddalena.me/osm` e
+`maddalena.me/tiles`.
+
+### Valhalla — si popola da solo, ma ci mette un po'
+
+Nel `.env`, `VALHALLA_TILE_URLS` è l'estratto OpenStreetMap da cui costruire il
+grafo dei percorsi:
+
+```ini
+VALHALLA_TILE_URLS=https://download.geofabrik.de/europe/italy-latest.osm.pbf
+```
+
+Al **primo avvio** scarica l'estratto e costruisce il grafo. È un'operazione
+lunga — decine di minuti per l'Italia — e affamata di RAM. Succede una volta
+sola: il risultato resta nel volume `valhalla-tiles` e i riavvii successivi
+partono subito. Nel frattempo `/osm` risponde con errori: è normale, non è rotto.
+
+Per cambiare regione: cambia l'URL e riavvia con `force_rebuild` a `True` una
+volta sola (poi rimettilo a `False`, altrimenti ricostruisce a ogni riavvio).
+
+Prova che funzioni:
+
+```bash
+curl "https://maddalena.me/osm/status"
+```
+
+### tileserver-gl — questo il file glielo devi dare tu
+
+**Non scarica niente da solo**: vuole un `.mbtiles` già pronto nel volume
+`tileserver-data`. Finché il volume è vuoto il container parte e non serve
+nessuna mappa. Si popola una volta, da fuori:
+
+```bash
+docker run --rm -v matteofabbri_tileserver-data:/data alpine \
+  wget -O /data/italy.mbtiles <url-del-tuo-mbtiles>
+```
+
+Il nome del volume ha il prefisso del progetto compose: verifica il tuo con
+`docker volume ls`.
+
+Prova che funzioni:
+
+```bash
+curl "https://maddalena.me/tiles/"
+```
+
+> `--public_url` è impostato dall'AppHost a `https://<MADDALENA_DOMAIN>/tiles/`
+> e non è un dettaglio: tileserver-gl scrive gli indirizzi delle tiles **dentro**
+> il JSON dello stile che serve, in forma assoluta. Se non concorda col percorso
+> reale, il client chiede le tiles alla radice del dominio e trova il sito
+> Maddalena invece della mappa.
 
 ---
 

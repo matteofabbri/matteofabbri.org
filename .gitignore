@@ -11,7 +11,8 @@
 #     submodule external/maddelena-FE (target BuildSpa nel csproj) ---
 Maddalena/wwwroot/
 
-# --- Stato dell'LLM di Maddalena in dev (in prod sta nel volume docker) ---
+# --- Residuo: lo stato dell'LLM in dev. Il motore LLM e' stato rimosso da
+#     Maddalena; la regola resta finche' non si cancellano a mano le cartelle. ---
 Maddalena/llm-state*/
 
 # --- Visual Studio / utente ---

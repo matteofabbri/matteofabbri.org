@@ -50,6 +50,8 @@ Write-Host ""
 Write-Host "Fatto. Output in: $Output" -ForegroundColor Green
 Write-Host "Prossimi passi:"
 Write-Host "  1. compila $Output\.env (SITE_IMAGE/THEQULT_IMAGE/MADDALENA_IMAGE=matteofabbri-*:latest, *_PORT=8080, ...)"
+Write-Host "     fra questi VALHALLA_TILE_URLS: l'estratto OSM da cui costruire i percorsi,"
+Write-Host "     es. https://download.geofabrik.de/europe/italy-latest.osm.pbf (lasciarlo vuoto = nessun percorso)"
 Write-Host "  2. porta le tre immagini sul server se e' remoto:"
 Write-Host "       docker save matteofabbri-site matteofabbri-theqult matteofabbri-maddalena | ssh server docker load"
 Write-Host "  3. sul server:  docker compose up -d --build"

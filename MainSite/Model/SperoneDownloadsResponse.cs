@@ -1,4 +1,4 @@
-namespace Maddalena.Model;
+namespace MainSite.Model;
 
 // L'elenco dei download di Sperone: la versione dell'ultima release e un pacchetto per piattaforma.
 // Lo produce DownloadController leggendo l'ultima release da GitHub (in cache); serve alle pagine

@@ -1,16 +1,16 @@
 using System.Text.Json;
-using Maddalena.Model;
+using MainSite.Model;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Memory;
 
-namespace Maddalena.Controllers;
+namespace MainSite.Controllers;
 
 // Download di Sperone sotto il NOSTRO dominio. Due endpoint:
 //  - GET /api/download/sperone      elenco JSON (versione + pacchetti + dimensioni), per le pagine statiche;
 //  - GET /download/sperone/{platform} proxy binario: scarica l'asset da GitHub e lo ripassa in streaming.
 // Il proxy usa l'URL stabile /releases/latest/download/<file> (niente API GitHub, niente rate limit),
 // mentre l'elenco legge l'API GitHub una volta e la tiene in cache (per versione e dimensioni non c'e'
-// scorciatoia). Cosi' il pulsante "Scarica" punta a maddalena.me e segue sempre l'ultima release.
+// scorciatoia). Cosi' il pulsante "Scarica" punta al sito e segue sempre l'ultima release.
 [ApiController]
 [Route("download/sperone")]
 public sealed class DownloadController(IHttpClientFactory httpClientFactory, IMemoryCache cache) : ControllerBase

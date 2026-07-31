@@ -14,10 +14,6 @@ var builder = DistributedApplication.CreateBuilder(args);
 // anche il nome da usare in `docker network create matteo-shared`.
 const string SharedNetworkKey = "matteo-shared";
 
-// Il volume dello stato dell'LLM di Maddalena (pesi + ottimizzatore + odometro):
-// il container e' usa-e-getta a ogni deploy, il volume no.
-const string LlmVolumeName = "maddalena-llm";
-
 builder.AddDockerComposeEnvironment("matteofabbri")
     .ConfigureComposeFile(file =>
     {
@@ -26,7 +22,6 @@ builder.AddDockerComposeEnvironment("matteofabbri")
             Name = SharedNetworkKey,
             External = true,
         };
-        file.Volumes[LlmVolumeName] = new Volume { Name = LlmVolumeName, Driver = "local" };
     });
 
 // --- Parametri configurabili (niente segreti hardcoded) ---------------------
@@ -94,32 +89,53 @@ maddalena
     .WithEnvironment("Stripe__SecretKey", stripeSecret)
     .WithEnvironment("Stripe__WebhookSecret", stripeWebhook)
     .WithEnvironment("Licensing__PrivateKey", licensingPrivateKey)
-    .WithEnvironment("Licensing__KeyId", "k1")
-    // L'LLM salva/riprende lo stato dal volume. Solo in publish: in dev il
-    // progetto gira come processo e usa il default (ContentRoot/llm-state).
-    .PublishAsDockerComposeService((_, service) =>
-    {
-        service.AddVolume(new Volume
-        {
-            Name = LlmVolumeName,
-            Type = "volume",
-            Source = LlmVolumeName,
-            Target = "/state",
-            ReadOnly = false,
-        });
-        // Un volume nuovo nasce di root, ma l'immagine .NET gira come utente
-        // 1654 (non-root) e su /state non potrebbe scrivere: root SOLO qui.
-        service.User = "root";
-    });
+    .WithEnvironment("Licensing__KeyId", "k1");
 
-if (builder.ExecutionContext.IsPublishMode)
-    maddalena.WithEnvironment("Llm__StateDir", "/state/llm");
+// --- Mappe: calcolo percorsi e tiles ----------------------------------------
+// Due servizi distinti, e la distinzione conta: Valhalla calcola i PERCORSI,
+// tileserver-gl serve l'IMMAGINE della mappa. Nessuno dei due fa il lavoro
+// dell'altro. Vivono sotto maddalena.me: /osm il primo, /tiles il secondo.
+// Entrambi restano interni: fuori ci arriva solo Caddy.
 
-// PROVA in PC puro (solo in locale): niente training batch all'avvio, il modello
-// impara solo dallo stream online (crawler/teach) + ancora. In prod resta il
-// default (true), quindi il comportamento pubblicato non cambia.
-if (!builder.ExecutionContext.IsPublishMode)
-    maddalena.WithEnvironment("Llm__StartupCorpusTraining", "false");
+// Da dove Valhalla prende i dati OpenStreetMap. Al primo avvio scarica questo
+// estratto e ne costruisce il grafo di navigazione: e' un'operazione LUNGA
+// (decine di minuti per l'Italia) e affamata di RAM, ma succede una volta sola
+// perche' il risultato resta nel volume. Cambiare regione = cambiare questo
+// parametro nel .env e riavviare con force_rebuild a True.
+var valhallaTileUrls = builder.AddParameter("valhalla-tile-urls",
+    () => builder.Configuration["Parameters:valhalla-tile-urls"]
+        ?? "https://download.geofabrik.de/europe/italy-latest.osm.pbf");
+
+var valhalla = builder.AddContainer("valhalla", "ghcr.io/nilsnolde/docker-valhalla/valhalla", "3.5.1")
+    // Il grafo costruito. Senza volume ogni riavvio rifarebbe da capo il lavoro
+    // di cui sopra.
+    .WithVolume("valhalla-tiles", "/custom_files")
+    .WithEndpoint(targetPort: 8002, scheme: "http", name: "http")
+    .WithEnvironment("tile_urls", valhallaTileUrls)
+    // Serve appena il grafo e' pronto, e non lo ricostruisce a ogni avvio.
+    .WithEnvironment("serve_tiles", "True")
+    .WithEnvironment("force_rebuild", "False")
+    // Confini amministrativi e fusi orari: servono per le istruzioni di svolta
+    // ("entri in Francia") e per gli orari di arrivo corretti. Costano tempo di
+    // costruzione una volta sola.
+    .WithEnvironment("build_admins", "True")
+    .WithEnvironment("build_time_zones", "True")
+    // L'altimetria no: pesa parecchi GB e serve solo a ciclismo e pedonale.
+    .WithEnvironment("build_elevation", "False");
+
+// tileserver-gl NON scarica niente da solo: vuole un .mbtiles gia' pronto nel
+// suo volume. Si popola una volta, da fuori, per esempio:
+//   docker run --rm -v matteofabbri_tileserver-data:/data alpine \
+//     wget -O /data/italy.mbtiles <url-del-tuo-mbtiles>
+// Finche' il volume e' vuoto il container parte e non serve nessuna mappa.
+var tileserver = builder.AddContainer("tileserver", "maptiler/tileserver-gl", "v5.6.0")
+    .WithVolume("tileserver-data", "/data")
+    .WithEndpoint(targetPort: 8080, scheme: "http", name: "http")
+    // Indispensabile dietro a un prefisso di percorso: tileserver-gl scrive gli
+    // indirizzi delle tiles DENTRO il JSON dello stile che serve. Senza questo
+    // li scriverebbe come /data/... e il client li chiederebbe alla radice del
+    // dominio, dove non c'e' niente.
+    .WithArgs("--public_url", ReferenceExpression.Create($"https://{maddalenaDomain}/tiles/"));
 
 // L'indirizzo interno (host:porta) a cui Caddy inoltra il traffico del sito:
 // deriva dall'endpoint del progetto. HostAndPort restituisce "host:porta" gia'
@@ -132,6 +148,10 @@ var thequltUpstream = ReferenceExpression.Create(
     $"{theqult.GetEndpoint("http").Property(EndpointProperty.HostAndPort)}");
 var maddalenaUpstream = ReferenceExpression.Create(
     $"{maddalena.GetEndpoint("http").Property(EndpointProperty.HostAndPort)}");
+var valhallaUpstream = ReferenceExpression.Create(
+    $"{valhalla.GetEndpoint("http").Property(EndpointProperty.HostAndPort)}");
+var tileserverUpstream = ReferenceExpression.Create(
+    $"{tileserver.GetEndpoint("http").Property(EndpointProperty.HostAndPort)}");
 
 // --- Caddy: la "portineria" sulle porte 80/443 ------------------------------
 // Immagine su misura (Caddy ufficiale + modulo layer4), costruita dal
@@ -154,6 +174,8 @@ var caddy = builder.AddDockerfile("caddy", "caddy")
     .WithEnvironment("SITE_UPSTREAM", siteUpstream)
     .WithEnvironment("THEQULT_UPSTREAM", thequltUpstream)
     .WithEnvironment("MADDALENA_UPSTREAM", maddalenaUpstream)
+    .WithEnvironment("VALHALLA_UPSTREAM", valhallaUpstream)
+    .WithEnvironment("TILESERVER_UPSTREAM", tileserverUpstream)
     .WithEnvironment("MAILCOW_TLS_UPSTREAM", mailcowTlsUpstream)
     .WithEnvironment("MAILCOW_HTTP_UPSTREAM", mailcowHttpUpstream)
     // Aggancia Caddy alla rete condivisa (per raggiungere mailcow per nome) e

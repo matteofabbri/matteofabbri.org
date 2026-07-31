@@ -1,8 +1,6 @@
 <Solution>
   <Folder Name="/LIBRARIES/">
     <Project Path="LIBRARIES/MADDALENA/Maddalena.Licensing/Maddalena.Licensing.csproj" />
-    <Project Path="external/PredicitiveCoding/PredictiveCoding.Data/PredictiveCoding.Data.csproj" />
-    <Project Path="external/PredicitiveCoding/PredictiveCoding.LLM/PredictiveCoding.LLM.csproj" />
     <Project Path="LIBRARIES/MADDALENA/Maddalena.Licensing.Issuing/Maddalena.Licensing.Issuing.csproj" />
     <Project Path="LIBRARIES/MADDALENA/Maddalena.Licensing.Tests/Maddalena.Licensing.Tests.csproj" />
   </Folder>

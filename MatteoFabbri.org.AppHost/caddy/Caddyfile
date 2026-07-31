@@ -28,6 +28,8 @@
 #   SITE_UPSTREAM         -> backend del sito personale   (es. site:8080)
 #   THEQULT_UPSTREAM      -> backend dell'API TheQult      (es. theqult:8080)
 #   MADDALENA_UPSTREAM    -> backend del sito Maddalena    (es. maddalena:8080)
+#   VALHALLA_UPSTREAM     -> calcolo percorsi              (es. valhalla:8002)
+#   TILESERVER_UPSTREAM   -> tiles della mappa             (es. tileserver:8080)
 #   MAILCOW_TLS_UPSTREAM  -> nginx di mailcow, HTTPS       (es. nginx-mailcow:8443)
 #   MAILCOW_HTTP_UPSTREAM -> nginx di mailcow, HTTP        (es. nginx-mailcow:8080)
 {
@@ -172,6 +174,28 @@
 	redir /mail /mail/
 	handle_path /mail/* {
 		redir https://{$WEBMAIL_HOST}/ permanent
+	}
+
+	# /osm -> Valhalla, il calcolo dei percorsi. handle_path (non handle) perche'
+	# TOGLIE il prefisso: /osm/route arriva a Valhalla come /route, che e' l'unica
+	# cosa a cui risponde. Valhalla parla JSON e non scrive mai indirizzi propri
+	# nelle risposte, quindi non ha bisogno di sapere di stare sotto un prefisso.
+	# Il default dopo i due punti copre il compose vecchio che la variabile non
+	# ce l'ha: senza, Caddy leggerebbe un upstream vuoto e NON PARTIREBBE,
+	# buttando giu' tutti i siti. Cosi' invece al peggio /osm fa 502.
+	handle_path /osm/* {
+		reverse_proxy {$VALHALLA_UPSTREAM:valhalla:8002}
+	}
+
+	# /tiles -> tileserver-gl, l'immagine della mappa. Stesso taglio del prefisso,
+	# ma qui il server DEVE sapere dove sta: gli indirizzi delle tiles finiscono
+	# dentro il JSON dello stile che serve, e li scrive assoluti. Glielo dice
+	# --public_url, impostato nell'AppHost; se le due cose non concordano il
+	# client chiede le tiles alla radice del dominio e trova il sito Maddalena.
+	# Default come per /osm: compose vecchio senza la variabile = 502 qui, non
+	# Caddy morto.
+	handle_path /tiles/* {
+		reverse_proxy {$TILESERVER_UPSTREAM:tileserver:8080}
 	}
 
 	# Tutto il resto (incluso /licensing, ora servito da Maddalena) -> il sito Maddalena.
