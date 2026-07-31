@@ -127,14 +127,24 @@ var valhalla = builder.AddContainer("valhalla", "ghcr.io/nilsnolde/docker-valhal
     .WithEnvironment("build_time_zones", "True")
     // L'altimetria no: sul planet vale CENTINAIA di GB in piu' e serve solo a
     // ciclismo e pedonale.
-    .WithEnvironment("build_elevation", "False");
+    .WithEnvironment("build_elevation", "False")
+    // TETTO AI FILE APERTI — senza, Valhalla MUORE. Durante la costruzione tiene
+    // aperti contemporaneamente migliaia di file (una tessera per file) e il
+    // limite di default di un container, spesso 1024, non basta: il processo
+    // termina con "Too many open files (src/epoll.cpp:38)". E' il flag che
+    // Matteo ricordava di aver dovuto scoprire a mano un paio d'anni fa
+    // (docker-valhalla issue #176). Su un'area grande e' quasi garantito.
+    // Sicuro da cablare qui: e' un numero fisso, non dipende dalla macchina.
+    .PublishAsDockerComposeService((_, service) =>
+    {
+        service.Ulimits["nofile"] = new Ulimit { Soft = 65536, Hard = 65536 };
+    });
 
-// NB: due leve di protezione NON sono cablate qui apposta — un tetto alla
-// memoria (deploy.resources.limits.memory) e un tetto ai thread
-// (server_threads). Cablarle con un valore vuoto rischia di impedire l'avvio a
-// TUTTO il compose, e il valore giusto dipende dalla RAM della macchina, che da
-// qui non si conosce. Si aggiungono a mano al compose: lo snippet pronto e il
-// perche' stanno in deploy/README.md, sezione Valhalla.
+// NB: altre due leve NON sono cablate apposta — un tetto alla memoria
+// (deploy.resources.limits.memory) e un tetto ai thread (server_threads).
+// Quelle dipendono dalla RAM della macchina, che da qui non si conosce, e
+// scritte con un valore vuoto rischiano di impedire l'avvio a TUTTO il compose.
+// Si aggiungono a mano: snippet pronto in deploy/README.md, sezione Valhalla.
 
 // Quale mappa del mondo scaricare. Vuoto = l'ultima pubblicata: Protomaps ne
 // sforna una al giorno col nome fatto di data (20260731.pmtiles) e tiene online
@@ -158,7 +168,21 @@ var tileserver = builder.AddDockerfile("tileserver", "tileserver")
     // indirizzi delle tiles DENTRO il JSON dello stile che serve. Senza questo
     // li scriverebbe come /data/... e il client li chiederebbe alla radice del
     // dominio, dove non c'e' niente.
-    .WithArgs("--public_url", ReferenceExpression.Create($"https://{maddalenaDomain}/tiles/"));
+    .WithArgs("--public_url", ReferenceExpression.Create($"https://{maddalenaDomain}/tiles/"))
+    // Come per Caddy: senza questo il compose uscirebbe con
+    // `image: ${TILESERVER_IMAGE}` — cioe' PRETENDEREBBE un'immagine gia'
+    // costruita altrove, e sul server (dove quella variabile e' vuota) il
+    // container non partirebbe affatto. E' il comportamento di default di
+    // Aspire per AddDockerfile; va corretto a mano per ogni immagine su misura.
+    .PublishAsDockerComposeService((_, service) =>
+    {
+        service.Image = null;
+        service.Build = new Build
+        {
+            Context = "./tileserver",
+            Dockerfile = "Dockerfile",
+        };
+    });
 
 // L'indirizzo interno (host:porta) a cui Caddy inoltra il traffico del sito:
 // deriva dall'endpoint del progetto. HostAndPort restituisce "host:porta" gia'
