@@ -22,6 +22,17 @@ builder.AddDockerComposeEnvironment("matteofabbri")
             Name = SharedNetworkKey,
             External = true,
         };
+
+        // RIAVVIO AUTOMATICO per tutti i servizi. Di suo Aspire non ne mette
+        // nessuno (`restart-policy=no`), e le conseguenze sono due, entrambe
+        // viste dal vivo: un container che esce per un errore passeggero — una
+        // rete che cade a meta' di un download di ore — resta giu' per sempre,
+        // e dopo un riavvio della macchina NON torna su niente, siti compresi.
+        // "unless-stopped" riavvia sempre, tranne se l'ho fermato io a mano.
+        foreach (var servizio in file.Services.Values)
+        {
+            servizio.Restart = "unless-stopped";
+        }
     });
 
 // --- Parametri configurabili (niente segreti hardcoded) ---------------------

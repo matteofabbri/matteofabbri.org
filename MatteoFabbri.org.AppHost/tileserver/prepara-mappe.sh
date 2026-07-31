@@ -44,20 +44,29 @@ if [ ! -f "$PLANET" ]; then
 
     log "scarico la mappa del mondo: $url"
     log "sono circa 137 GB, la prima volta ci vuole parecchio."
-    log "Se il container viene fermato, il download RIPRENDE da dove era."
 
-    # -C - riprende il file parziale invece di ricominciare. Il rinomino finale
-    # avviene solo a download completo: cosi' un'interruzione non lascia mai un
-    # file monco che SEMBRA una mappa buona.
-    if curl -L -C - --retry 10 --retry-delay 15 --retry-connrefused \
-            -o "$PARZIALE" "$url"; then
-        mv "$PARZIALE" "$PLANET"
-        log "mappa pronta: $(du -h "$PLANET" | cut -f1)"
-    else
-        log "ERRORE: download interrotto. Riprendo al prossimo riavvio."
-        sleep 30
-        exit 1
-    fi
+    # Il download di 137 GB dura ore e la rete, in tutto quel tempo, cade: il
+    # primo tentativo reale e' morto a 50 GB con "HTTP/2 stream not closed
+    # cleanly". Quindi:
+    #  --http1.1  perche' e' proprio HTTP/2 a rompersi sui trasferimenti lunghi;
+    #  -C -       riprende il file parziale invece di ricominciare da zero;
+    #  il ciclo   riprova da se', SENZA contare sul riavvio del container (che
+    #             non arriverebbe: docker compose qui non ha restart automatico).
+    # Il rinomino finale avviene solo a download completo, cosi' un'interruzione
+    # non lascia mai un file monco che SEMBRA una mappa buona.
+    tentativo=1
+    while [ ! -f "$PLANET" ]; do
+        if curl -L -C - --http1.1 --retry 5 --retry-delay 10 --retry-connrefused \
+                -o "$PARZIALE" "$url"; then
+            mv "$PARZIALE" "$PLANET"
+            log "mappa pronta: $(du -h "$PLANET" | cut -f1)"
+        else
+            fatti=$(du -h "$PARZIALE" 2>/dev/null | cut -f1)
+            log "download interrotto a ${fatti:-0} (tentativo $tentativo). Riprendo fra 30s."
+            tentativo=$((tentativo + 1))
+            sleep 30
+        fi
+    done
 fi
 
 # --- 2. Font e icone ---------------------------------------------------------
