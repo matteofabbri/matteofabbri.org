@@ -98,13 +98,18 @@ maddalena
 // Entrambi restano interni: fuori ci arriva solo Caddy.
 
 // Da dove Valhalla prende i dati OpenStreetMap. Al primo avvio scarica questo
-// estratto e ne costruisce il grafo di navigazione: e' un'operazione LUNGA
-// (decine di minuti per l'Italia) e affamata di RAM, ma succede una volta sola
-// perche' il risultato resta nel volume. Cambiare regione = cambiare questo
-// parametro nel .env e riavviare con force_rebuild a True.
+// estratto e ne COSTRUISCE il grafo di navigazione. Attenzione: le mappe si
+// scaricano gia' pronte, il grafo no, e il conto e' tutt'altro — il planet e'
+// 94 GB di dati grezzi, ~400 GB di spazio di lavoro e 20-60 ore di elaborazione
+// (misure del progetto Valhalla, vedi deploy/README.md). Succede una volta sola:
+// il risultato resta nel volume. Cambiare regione = cambiare questo parametro
+// nel .env e riavviare con force_rebuild a True.
+//
+// IL MONDO E' UNA SCELTA ESPLICITA DI MATTEO (2026-07-31), presa dopo aver visto
+// i numeri: non ridurla a un estratto piu' piccolo "per prudenza".
 var valhallaTileUrls = builder.AddParameter("valhalla-tile-urls",
     () => builder.Configuration["Parameters:valhalla-tile-urls"]
-        ?? "https://download.geofabrik.de/europe/italy-latest.osm.pbf");
+        ?? "https://planet.openstreetmap.org/pbf/planet-latest.osm.pbf");
 
 var valhalla = builder.AddContainer("valhalla", "ghcr.io/nilsnolde/docker-valhalla/valhalla", "3.5.1")
     // Il grafo costruito. Senza volume ogni riavvio rifarebbe da capo il lavoro
@@ -117,11 +122,19 @@ var valhalla = builder.AddContainer("valhalla", "ghcr.io/nilsnolde/docker-valhal
     .WithEnvironment("force_rebuild", "False")
     // Confini amministrativi e fusi orari: servono per le istruzioni di svolta
     // ("entri in Francia") e per gli orari di arrivo corretti. Costano tempo di
-    // costruzione una volta sola.
+    // costruzione una volta sola — sul planet i soli confini valgono ore.
     .WithEnvironment("build_admins", "True")
     .WithEnvironment("build_time_zones", "True")
-    // L'altimetria no: pesa parecchi GB e serve solo a ciclismo e pedonale.
+    // L'altimetria no: sul planet vale CENTINAIA di GB in piu' e serve solo a
+    // ciclismo e pedonale.
     .WithEnvironment("build_elevation", "False");
+
+// NB: due leve di protezione NON sono cablate qui apposta — un tetto alla
+// memoria (deploy.resources.limits.memory) e un tetto ai thread
+// (server_threads). Cablarle con un valore vuoto rischia di impedire l'avvio a
+// TUTTO il compose, e il valore giusto dipende dalla RAM della macchina, che da
+// qui non si conosce. Si aggiungono a mano al compose: lo snippet pronto e il
+// perche' stanno in deploy/README.md, sezione Valhalla.
 
 // Quale mappa del mondo scaricare. Vuoto = l'ultima pubblicata: Protomaps ne
 // sforna una al giorno col nome fatto di data (20260731.pmtiles) e tiene online

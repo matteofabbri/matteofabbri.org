@@ -143,11 +143,16 @@ Restano interni: fuori ci arriva solo Caddy, su `maddalena.me/osm` e
 ### Valhalla — si popola da solo, ma ci mette un po'
 
 Nel `.env`, `VALHALLA_TILE_URLS` è l'estratto OpenStreetMap da cui costruire il
-grafo dei percorsi:
+grafo dei percorsi. **Il default è il mondo intero** (scelta esplicita del
+2026-07-31, presa dopo aver visto i numeri più sotto):
 
 ```ini
-VALHALLA_TILE_URLS=https://download.geofabrik.de/europe/italy-latest.osm.pbf
+VALHALLA_TILE_URLS=https://planet.openstreetmap.org/pbf/planet-latest.osm.pbf
 ```
+
+Per un'area più piccola basta cambiare l'URL, per esempio
+`https://download.geofabrik.de/europe-latest.osm.pbf` (Europa) o
+`.../europe/italy-latest.osm.pbf` (Italia).
 
 Al **primo avvio** scarica l'estratto e costruisce il grafo. È un'operazione
 lunga — decine di minuti per l'Italia — e affamata di RAM. Succede una volta
@@ -200,6 +205,37 @@ leggera e probabilmente sufficiente), oppure costruire il grafo **altrove** —
 una macchina affittata a ore — e portare qui solo il risultato: il container
 sa caricare un `valhalla_tiles.tar` già pronto messo in `/custom_files`, con
 `use_tiles_ignore_pbf=True` e `force_rebuild=False`.
+
+#### Le due leve per non far male al resto del server
+
+Non sono cablate nell'AppHost apposta: un valore vuoto lì dentro rischia di
+impedire l'avvio a **tutto** il compose, e il numero giusto dipende dalla RAM
+della macchina. Si aggiungono a mano al servizio `valhalla` nel compose, e
+valgono finché non lo si rigenera.
+
+```yaml
+  valhalla:
+    # ... quello che c'è già ...
+    environment:
+      # Quanti thread usa per costruire e servire. Senza, se li prende tutti e
+      # per un giorno intero i siti e la posta arrancano. Con 16 thread
+      # disponibili, 8 è un compromesso: dimezza il carico, allunga la build.
+      server_threads: "8"
+    deploy:
+      resources:
+        limits:
+          # Il tetto di memoria. Non serve a far riuscire la build — serve a
+          # decidere CHI muore se va male: con il tetto muore Valhalla, senza
+          # sceglie il kernel, e può prendersela con Postgres o con la posta.
+          # Metti circa il 70% della RAM totale (con 32 GB → 22g).
+          memory: 22g
+```
+
+Verifica prima quanta RAM c'è davvero, il numero qui sopra è un esempio:
+
+```bash
+free -g
+```
 
 ### tileserver-gl — si scarica il mondo da solo
 
