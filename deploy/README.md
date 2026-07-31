@@ -163,6 +163,44 @@ Prova che funzioni:
 curl "https://maddalena.me/osm/status"
 ```
 
+#### Attenzione a ingrandire l'area: qui non vale la regola delle mappe
+
+Le mappe (tileserver) si **scaricano** già pronte, quindi il mondo costa solo
+tempo di rete. I percorsi no: il grafo di navigazione va **costruito**, ed è un
+lavoro che cresce molto più in fretta dell'area. Dati misurati il 2026-07-31:
+
+| Area | Dati grezzi da scaricare |
+|---|---|
+| Italia (quello configurato oggi) | 2,2 GB |
+| Europa | 34,7 GB |
+| Mondo | 94,1 GB |
+
+E costruire il grafo del **mondo** richiede, secondo le misure riportate dal
+progetto Valhalla:
+
+- **64 GB di RAM raccomandati.** Con 32 GB una build reale è **fallita per
+  esaurimento memoria dopo 20 ore** (il processo era arrivato a ~23 GB).
+- **~400 GB di spazio di lavoro**, oltre al risultato finale.
+- **20-60 ore** di elaborazione, a seconda del disco (gli SSD NVMe contano più
+  della CPU).
+- Tile del mondo già pronte da scaricare **non esistono pubblicamente**: i
+  manutentori stessi sconsigliano di partire dal planet.
+
+Il punto delicato non è solo che possa fallire: **questo server ospita anche i
+tre siti, Postgres e mailcow**. Una build che satura memoria e disco per giorni
+può farli cadere, e quando la memoria finisce il kernel non uccide
+necessariamente il colpevole. Prima di ingrandire l'area, controlla cosa c'è:
+
+```bash
+free -g; df -h /
+```
+
+Se il mondo non ci sta, le strade sono due: fermarsi all'**Europa** (molto più
+leggera e probabilmente sufficiente), oppure costruire il grafo **altrove** —
+una macchina affittata a ore — e portare qui solo il risultato: il container
+sa caricare un `valhalla_tiles.tar` già pronto messo in `/custom_files`, con
+`use_tiles_ignore_pbf=True` e `force_rebuild=False`.
+
 ### tileserver-gl — si scarica il mondo da solo
 
 Non c'è niente da portare a mano. L'immagine è nostra (contesto
