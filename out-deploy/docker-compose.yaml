@@ -1,0 +1,174 @@
+services:
+  matteofabbri-dashboard:
+    image: "mcr.microsoft.com/dotnet/nightly/aspire-dashboard:latest"
+    ports:
+      - "18888"
+    expose:
+      - "18889"
+      - "18890"
+    networks:
+      - "aspire"
+    restart: "unless-stopped"
+  site:
+    image: "${SITE_IMAGE}"
+    environment:
+      OTEL_DOTNET_EXPERIMENTAL_OTLP_RETRY: "in_memory"
+      ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
+      HTTP_PORTS: "${SITE_PORT}"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://matteofabbri-dashboard:18889"
+      OTEL_EXPORTER_OTLP_PROTOCOL: "grpc"
+      OTEL_SERVICE_NAME: "site"
+    expose:
+      - "${SITE_PORT}"
+    networks:
+      - "aspire"
+    restart: "unless-stopped"
+  theqult:
+    image: "${THEQULT_IMAGE}"
+    environment:
+      OTEL_DOTNET_EXPERIMENTAL_OTLP_RETRY: "in_memory"
+      ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
+      HTTP_PORTS: "${THEQULT_PORT}"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://matteofabbri-dashboard:18889"
+      OTEL_EXPORTER_OTLP_PROTOCOL: "grpc"
+      OTEL_SERVICE_NAME: "theqult"
+    expose:
+      - "${THEQULT_PORT}"
+    networks:
+      - "aspire"
+    restart: "unless-stopped"
+  maddalena:
+    image: "${MADDALENA_IMAGE}"
+    environment:
+      OTEL_DOTNET_EXPERIMENTAL_OTLP_RETRY: "in_memory"
+      ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
+      HTTP_PORTS: "${MADDALENA_PORT}"
+      ConnectionStrings__maddalenadb: "Host=postgres;Port=5432;Username=postgres;Password=${POSTGRES_PASSWORD};Database=maddalenadb"
+      MADDALENADB_HOST: "postgres"
+      MADDALENADB_PORT: "5432"
+      MADDALENADB_USERNAME: "postgres"
+      MADDALENADB_PASSWORD: "${POSTGRES_PASSWORD}"
+      MADDALENADB_URI: "postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/maddalenadb"
+      MADDALENADB_JDBCCONNECTIONSTRING: "jdbc:postgresql://postgres:5432/maddalenadb"
+      MADDALENADB_DATABASENAME: "maddalenadb"
+      Stripe__PublishableKey: "${STRIPE_PUBLISHABLE}"
+      Stripe__SecretKey: "${STRIPE_SECRET}"
+      Stripe__WebhookSecret: "${STRIPE_WEBHOOK}"
+      Licensing__PrivateKey: "${LICENSING_PRIVATE_KEY}"
+      Licensing__KeyId: "k1"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://matteofabbri-dashboard:18889"
+      OTEL_EXPORTER_OTLP_PROTOCOL: "grpc"
+      OTEL_SERVICE_NAME: "maddalena"
+    expose:
+      - "${MADDALENA_PORT}"
+    depends_on:
+      postgres:
+        condition: "service_started"
+    networks:
+      - "aspire"
+    restart: "unless-stopped"
+  postgres:
+    image: "docker.io/library/postgres:18.3"
+    environment:
+      POSTGRES_HOST_AUTH_METHOD: "scram-sha-256"
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --auth-local=scram-sha-256"
+      POSTGRES_USER: "postgres"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+    expose:
+      - "5432"
+    volumes:
+      - type: "volume"
+        target: "/var/lib/postgresql"
+        source: "matteofabbri.org.apphost-443a6aed0c-postgres-data"
+        read_only: false
+    networks:
+      - "aspire"
+    restart: "unless-stopped"
+  valhalla:
+    build:
+      context: "./valhalla"
+      dockerfile: "Dockerfile"
+    environment:
+      PBF_URL: "${VALHALLA_TILE_URLS}"
+    expose:
+      - "8002"
+    volumes:
+      - type: "volume"
+        target: "/custom_files"
+        source: "valhalla-tiles"
+        read_only: false
+    networks:
+      - "aspire"
+    restart: "unless-stopped"
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+  tileserver:
+    build:
+      context: "./tileserver"
+      dockerfile: "Dockerfile"
+    command:
+      - "--public_url"
+      - "https://${MADDALENA_DOMAIN}/tiles/"
+    environment:
+      PLANET_URL: "${PLANET_URL}"
+    expose:
+      - "8080"
+    volumes:
+      - type: "volume"
+        target: "/data"
+        source: "tileserver-data"
+        read_only: false
+    networks:
+      - "aspire"
+    restart: "unless-stopped"
+  caddy:
+    build:
+      context: "./caddy"
+      dockerfile: "Dockerfile"
+    environment:
+      ACME_EMAIL: "${ACME_EMAIL}"
+      SITE_DOMAIN: "${SITE_DOMAIN}"
+      THEQULT_DOMAIN: "${THEQULT_DOMAIN}"
+      MADDALENA_DOMAIN: "${MADDALENA_DOMAIN}"
+      WEBMAIL_HOST: "${WEBMAIL_HOST}"
+      SITE_UPSTREAM: "site:${SITE_PORT}"
+      THEQULT_UPSTREAM: "theqult:${THEQULT_PORT}"
+      MADDALENA_UPSTREAM: "maddalena:${MADDALENA_PORT}"
+      VALHALLA_UPSTREAM: "valhalla:8002"
+      TILESERVER_UPSTREAM: "tileserver:8080"
+      MAILCOW_TLS_UPSTREAM: "${MAILCOW_TLS_UPSTREAM}"
+      MAILCOW_HTTP_UPSTREAM: "${MAILCOW_HTTP_UPSTREAM}"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - type: "volume"
+        target: "/data"
+        source: "caddy-data"
+        read_only: false
+      - type: "volume"
+        target: "/config"
+        source: "caddy-config"
+        read_only: false
+    networks:
+      - "aspire"
+      - "matteo-shared"
+    restart: "unless-stopped"
+networks:
+  aspire:
+    driver: "bridge"
+  matteo-shared:
+    external: true
+volumes:
+  matteofabbri.org.apphost-443a6aed0c-postgres-data:
+    driver: "local"
+  valhalla-tiles:
+    driver: "local"
+  tileserver-data:
+    driver: "local"
+  caddy-data:
+    driver: "local"
+  caddy-config:
+    driver: "local"

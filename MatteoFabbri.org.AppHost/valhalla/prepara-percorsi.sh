@@ -20,7 +20,36 @@ log() { echo "[percorsi] $*"; }
 
 mkdir -p "$D"
 
-# --- 0. Grafo gia' pronto? Allora si serve e basta ---------------------------
+# --- 0. La configurazione, RIGENERATA A OGNI AVVIO ---------------------------
+# Costa un istante e non tocca il grafo: cosi' un cambio di limiti si applica
+# riavviando il container, senza ricostruire nulla.
+#
+# I TETTI DI DISTANZA sono la ragione per cui sta qui sopra. Di suo Valhalla
+# ferma moto e bici a 500 km e i pedoni a 250, e su un viaggio piu' lungo
+# risponde "Path distance exceeds the max distance limit" — che dall'app si
+# legge solo come "percorso non calcolato". Qui viaggiamo anche 6000 km, quindi
+# 20.000 km per tutti: piu' del massimo possibile in Europa (Lisbona-Mosca sono
+# ~4.000), cosi' il limite non si incontra mai. Costa solo qualche secondo di
+# calcolo in piu' sulle richieste davvero lunghe.
+LIMITE=20000000   # 20.000 km, in metri
+log "genero la configurazione (tetto di distanza: $((LIMITE / 1000)) km per ogni mezzo)"
+valhalla_build_config \
+    --mjolnir-tile-dir "$TILEDIR" \
+    --mjolnir-tile-extract "$TAR" \
+    --mjolnir-timezone "$D/timezones.sqlite" \
+    --mjolnir-admin "$D/admins.sqlite" \
+    --service-limits-auto-max-distance "$LIMITE" \
+    --service-limits-motorcycle-max-distance "$LIMITE" \
+    --service-limits-motor-scooter-max-distance "$LIMITE" \
+    --service-limits-bicycle-max-distance "$LIMITE" \
+    --service-limits-pedestrian-max-distance "$LIMITE" \
+    --service-limits-truck-max-distance "$LIMITE" \
+    --service-limits-bus-max-distance "$LIMITE" \
+    --service-limits-taxi-max-distance "$LIMITE" \
+    --service-limits-multimodal-max-distance "$LIMITE" \
+    > "$CONFIG"
+
+# --- 0-bis. Grafo gia' pronto? Allora si serve e basta ------------------------
 if [ -f "$TAR" ] && [ -f "$D/.grafo-completo" ]; then
     log "grafo gia' pronto, avvio il servizio"
     exec valhalla_service "$CONFIG" "$THREADS"
@@ -46,18 +75,7 @@ if [ ! -f "$PBF" ]; then
     log "dati scaricati: $(du -h "$PBF" | cut -f1)"
 fi
 
-# --- 2. La configurazione ----------------------------------------------------
-if [ ! -f "$CONFIG" ]; then
-    log "genero la configurazione"
-    valhalla_build_config \
-        --mjolnir-tile-dir "$TILEDIR" \
-        --mjolnir-tile-extract "$TAR" \
-        --mjolnir-timezone "$D/timezones.sqlite" \
-        --mjolnir-admin "$D/admins.sqlite" \
-        > "$CONFIG"
-fi
-
-# --- 3. Fusi orari e confini -------------------------------------------------
+# --- 2. Fusi orari e confini -------------------------------------------------
 # Servono per gli orari di arrivo corretti e per le istruzioni di svolta che
 # nominano il paese ("entri in Francia"). Sono anche il pezzo che faceva
 # esplodere la 3.5.1: qui girano sulla 3.8.3, che ha il fix.
@@ -71,7 +89,7 @@ if [ ! -f "$D/.confini-fatti" ]; then
     valhalla_build_admins -c "$CONFIG" "$PBF" && touch "$D/.confini-fatti"
 fi
 
-# --- 4. Il grafo vero --------------------------------------------------------
+# --- 3. Il grafo vero --------------------------------------------------------
 # E' il passo lungo: ore. Se fallisce NON si prosegue, altrimenti si finirebbe
 # a servire un grafo monco che risponde "nessuna strada qui" a ogni richiesta —
 # esattamente come e' andata la prima volta.
@@ -88,7 +106,7 @@ if [ ! -f "$D/.tessere-fatte" ]; then
     fi
 fi
 
-# --- 5. Impacchettamento -----------------------------------------------------
+# --- 4. Impacchettamento -----------------------------------------------------
 # Il servizio legge piu' in fretta da un solo archivio che da centomila file.
 # Fatto il tar, la cartella delle tessere e' ridondante e vale un centinaio di
 # GB: si butta.
