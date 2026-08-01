@@ -43,7 +43,7 @@ foreach ($image in $images) {
 # scarica la mappa del mondo da sola). La destinazione si azzera prima: con
 # -Force su una cartella gia' esistente Copy-Item copierebbe DENTRO di essa
 # (out\caddy\caddy) lasciando al primo livello i file della publish precedente.
-foreach ($ctx in @("caddy", "tileserver")) {
+foreach ($ctx in @("caddy", "tileserver", "valhalla")) {
     $ctxOut = Join-Path $Output $ctx
     if (Test-Path $ctxOut) { Remove-Item -Recurse -Force $ctxOut }
     Copy-Item -Recurse (Join-Path "MatteoFabbri.org.AppHost" $ctx) $ctxOut

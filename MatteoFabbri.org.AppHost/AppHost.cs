@@ -128,23 +128,19 @@ var valhallaTileUrls = builder.AddParameter("valhalla-tile-urls",
     () => builder.Configuration["Parameters:valhalla-tile-urls"]
         ?? "https://download.geofabrik.de/europe-latest.osm.pbf");
 
-var valhalla = builder.AddContainer("valhalla", "ghcr.io/nilsnolde/docker-valhalla/valhalla", "3.5.1")
+// Immagine NOSTRA (contesto ./valhalla), sull'ufficiale 3.8.3. Prima si usava
+// ghcr.io/nilsnolde/docker-valhalla 3.5.1, comoda perche' pilotata da variabili
+// d'ambiente, ma quel repo e' archiviato dal marzo 2026 e la 3.5.1 ha un bug
+// che ci ha bruciato una notte: costruendo l'Europa e' morta con "double free
+// or corruption" lasciando un grafo senza autostrade, che rispondeva "No
+// suitable edges" a ogni percorso (valhalla#4904, fix nella PR #5005 del
+// dicembre 2024). Vedi ./valhalla/prepara-percorsi.sh per i passi.
+var valhalla = builder.AddDockerfile("valhalla", "valhalla")
     // Il grafo costruito. Senza volume ogni riavvio rifarebbe da capo il lavoro
     // di cui sopra.
     .WithVolume("valhalla-tiles", "/custom_files")
     .WithEndpoint(targetPort: 8002, scheme: "http", name: "http")
-    .WithEnvironment("tile_urls", valhallaTileUrls)
-    // Serve appena il grafo e' pronto, e non lo ricostruisce a ogni avvio.
-    .WithEnvironment("serve_tiles", "True")
-    .WithEnvironment("force_rebuild", "False")
-    // Confini amministrativi e fusi orari: servono per le istruzioni di svolta
-    // ("entri in Francia") e per gli orari di arrivo corretti. Costano tempo di
-    // costruzione una volta sola — sul planet i soli confini valgono ore.
-    .WithEnvironment("build_admins", "True")
-    .WithEnvironment("build_time_zones", "True")
-    // L'altimetria no: sul planet vale CENTINAIA di GB in piu' e serve solo a
-    // ciclismo e pedonale.
-    .WithEnvironment("build_elevation", "False")
+    .WithEnvironment("PBF_URL", valhallaTileUrls)
     // TETTO AI FILE APERTI — senza, Valhalla MUORE. Durante la costruzione tiene
     // aperti contemporaneamente migliaia di file (una tessera per file) e il
     // limite di default di un container, spesso 1024, non basta: il processo
@@ -155,10 +151,19 @@ var valhalla = builder.AddContainer("valhalla", "ghcr.io/nilsnolde/docker-valhal
     .PublishAsDockerComposeService((_, service) =>
     {
         service.Ulimits["nofile"] = new Ulimit { Soft = 65536, Hard = 65536 };
+        // Come per Caddy e tileserver: senza, il compose PRETENDEREBBE
+        // un'immagine gia' costruita altrove e il container non partirebbe.
+        service.Image = null;
+        service.Build = new Build
+        {
+            Context = "./valhalla",
+            Dockerfile = "Dockerfile",
+        };
     });
 
 // NB: altre due leve NON sono cablate apposta — un tetto alla memoria
-// (deploy.resources.limits.memory) e un tetto ai thread (server_threads).
+// (deploy.resources.limits.memory) e un tetto ai thread (env BUILD_THREADS,
+// che lo script passa a valhalla_build_tiles).
 // Quelle dipendono dalla RAM della macchina, che da qui non si conosce, e
 // scritte con un valore vuoto rischiano di impedire l'avvio a TUTTO il compose.
 // Si aggiungono a mano: snippet pronto in deploy/README.md, sezione Valhalla.
