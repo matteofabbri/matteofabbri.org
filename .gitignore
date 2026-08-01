@@ -21,3 +21,7 @@ Maddalena/llm-state*/
 
 # --- Test ---
 [Tt]est[Rr]esults/
+
+# --- Output di publish.ps1 / aspire publish (compose + .env generati) ---
+out/
+out-deploy/
