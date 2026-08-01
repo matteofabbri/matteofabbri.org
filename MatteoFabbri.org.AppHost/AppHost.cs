@@ -116,11 +116,17 @@ maddalena
 // il risultato resta nel volume. Cambiare regione = cambiare questo parametro
 // nel .env e riavviare con force_rebuild a True.
 //
-// IL MONDO E' UNA SCELTA ESPLICITA DI MATTEO (2026-07-31), presa dopo aver visto
-// i numeri: non ridurla a un estratto piu' piccolo "per prudenza".
+// EUROPA, non il mondo — e non e' prudenza, e' una MISURA. Il planet e' stato
+// provato davvero la notte dell'1/8/2026 ed e' finito male: il grafo era a
+// 226 GB di tessere ANCORA INCOMPLETE quando il disco da 467 GB e' arrivato a
+// zero, con dentro anche i 128 GB delle mappe e i 94 del pbf. La costruzione e'
+// morta, e il disco pieno ha corrotto tre container di mailcow lasciando la
+// webmail giu' per ore. Su QUESTA macchina il mondo dei percorsi non ci sta
+// accanto al mondo delle mappe: l'Europa e' 34,7 GB di dati grezzi contro 94.
+// Per tornare al mondo serve un disco piu' grande, non un parametro diverso.
 var valhallaTileUrls = builder.AddParameter("valhalla-tile-urls",
     () => builder.Configuration["Parameters:valhalla-tile-urls"]
-        ?? "https://planet.openstreetmap.org/pbf/planet-latest.osm.pbf");
+        ?? "https://download.geofabrik.de/europe-latest.osm.pbf");
 
 var valhalla = builder.AddContainer("valhalla", "ghcr.io/nilsnolde/docker-valhalla/valhalla", "3.5.1")
     // Il grafo costruito. Senza volume ogni riavvio rifarebbe da capo il lavoro
