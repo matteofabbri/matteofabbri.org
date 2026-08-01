@@ -30,6 +30,7 @@
 #   MADDALENA_UPSTREAM    -> backend del sito Maddalena    (es. maddalena:8080)
 #   VALHALLA_UPSTREAM     -> calcolo percorsi              (es. valhalla:8002)
 #   TILESERVER_UPSTREAM   -> tiles della mappa             (es. tileserver:8080)
+#   LUOGHI_UPSTREAM       -> ricerca di posti per nome     (es. luoghi:8090)
 #   MAILCOW_TLS_UPSTREAM  -> nginx di mailcow, HTTPS       (es. nginx-mailcow:8443)
 #   MAILCOW_HTTP_UPSTREAM -> nginx di mailcow, HTTP        (es. nginx-mailcow:8080)
 {
@@ -196,6 +197,18 @@
 	# Caddy morto.
 	handle_path /tiles/* {
 		reverse_proxy {$TILESERVER_UPSTREAM:tileserver:8080}
+	}
+
+	# /luoghi -> ricerca di un posto per nome ("madrid" -> coordinate). E' il
+	# terzo pezzo della navigazione: le tessere disegnano, Valhalla porta,
+	# questo TROVA. Senza, un'app puo' cercare solo fra le tessere che ha gia'
+	# scaricato, cioe' quelle intorno a dove si trova.
+	#   /luoghi/cerca?q=madrid   -> i risultati
+	#   /luoghi/stato            -> quanti luoghi conosce
+	# Stesso default innocuo delle altre due, per non far cadere Caddy se il
+	# compose e' piu' vecchio del Caddyfile.
+	handle_path /luoghi/* {
+		reverse_proxy {$LUOGHI_UPSTREAM:luoghi:8090}
 	}
 
 	# Tutto il resto (incluso /licensing, ora servito da Maddalena) -> il sito Maddalena.

@@ -206,6 +206,26 @@ var tileserver = builder.AddDockerfile("tileserver", "tileserver")
         };
     });
 
+// --- Ricerca di luoghi per nome ---------------------------------------------
+// Il terzo pezzo, e il meno ovvio: le mappe sanno DISEGNARE Madrid, Valhalla sa
+// PORTARCI, ma nessuno dei due sa TROVARLA partendo dalla parola "madrid".
+// Senza, un'app puo' cercare solo fra le tessere che ha gia' scaricato, cioe'
+// quelle intorno a dove si trova: Grenoble a 267 km si', Madrid a 1400 no.
+// Sono ~170.000 centri abitati da GeoNames in uno SQLite: 10 MB, si scarica da
+// solo al primo avvio come fanno gli altri due.
+var luoghi = builder.AddDockerfile("luoghi", "luoghi")
+    .WithVolume("luoghi-dati", "/dati")
+    .WithEndpoint(targetPort: 8090, scheme: "http", name: "http")
+    .PublishAsDockerComposeService((_, service) =>
+    {
+        service.Image = null;
+        service.Build = new Build
+        {
+            Context = "./luoghi",
+            Dockerfile = "Dockerfile",
+        };
+    });
+
 // L'indirizzo interno (host:porta) a cui Caddy inoltra il traffico del sito:
 // deriva dall'endpoint del progetto. HostAndPort restituisce "host:porta" gia'
 // risolti e si adatta da solo alla modalita': in pubblicazione diventa "site:8080",
@@ -221,6 +241,8 @@ var valhallaUpstream = ReferenceExpression.Create(
     $"{valhalla.GetEndpoint("http").Property(EndpointProperty.HostAndPort)}");
 var tileserverUpstream = ReferenceExpression.Create(
     $"{tileserver.GetEndpoint("http").Property(EndpointProperty.HostAndPort)}");
+var luoghiUpstream = ReferenceExpression.Create(
+    $"{luoghi.GetEndpoint("http").Property(EndpointProperty.HostAndPort)}");
 
 // --- Caddy: la "portineria" sulle porte 80/443 ------------------------------
 // Immagine su misura (Caddy ufficiale + modulo layer4), costruita dal
@@ -245,6 +267,7 @@ var caddy = builder.AddDockerfile("caddy", "caddy")
     .WithEnvironment("MADDALENA_UPSTREAM", maddalenaUpstream)
     .WithEnvironment("VALHALLA_UPSTREAM", valhallaUpstream)
     .WithEnvironment("TILESERVER_UPSTREAM", tileserverUpstream)
+    .WithEnvironment("LUOGHI_UPSTREAM", luoghiUpstream)
     .WithEnvironment("MAILCOW_TLS_UPSTREAM", mailcowTlsUpstream)
     .WithEnvironment("MAILCOW_HTTP_UPSTREAM", mailcowHttpUpstream)
     // Aggancia Caddy alla rete condivisa (per raggiungere mailcow per nome) e
