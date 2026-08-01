@@ -25,9 +25,37 @@ from urllib.parse import urlparse, parse_qs
 DATI = os.environ.get("DATI_DIR", "/dati")
 DB = os.path.join(DATI, "luoghi.sqlite")
 URL = os.environ.get(
-    "GEONAMES_URL", "https://download.geonames.org/export/dump/cities1000.zip"
+    "GEONAMES_URL", "https://download.geonames.org/export/dump/allCountries.zip"
 )
 PORTA = int(os.environ.get("PORTA", "8090"))
+
+# QUALI LUOGHI TENERE, e quanto pesano nell'ordine dei risultati.
+# L'elenco completo di GeoNames ha 12 milioni di voci e comprende ogni chiesa,
+# hotel e vigneto: cercare "san" restituirebbe mille cappelle. Qui si tiene solo
+# cio' che puo' essere la META di un viaggio, e il peso decide chi viene prima
+# quando due posti si chiamano uguale.
+#
+# I centri abitati (P.*) non sono in questa tabella: per loro il peso e' il
+# numero di abitanti, che e' un ordinamento naturale — Milano prima di Milano
+# Marittima. Gli altri un peso "vero" non ce l'hanno, quindi glielo diamo noi:
+# un passo alpino conta piu' di una cima qualsiasi, una regione piu' di un lago.
+PESI = {
+    "PCLI": 50_000_000,   # stato
+    "ADM1": 5_000_000,    # regione
+    "ADM2": 800_000,      # provincia
+    "AIRP": 300_000,      # aeroporto
+    "PASS": 120_000,      # PASSO DI MONTAGNA: per chi va in moto e' una meta
+    "CAPE": 100_000,      # capo/promontorio (Capo Nord)
+    "VLC": 90_000,        # vulcano
+    "ISL": 80_000,        # isola
+    "PRK": 60_000,        # parco
+    "LK": 50_000,         # lago
+    "BAY": 40_000,        # baia
+    "PK": 30_000,         # cima
+    "MT": 25_000,         # monte
+    "BCH": 20_000,        # spiaggia
+    "VAL": 15_000,        # valle
+}
 
 
 def normalizza(s):
@@ -52,23 +80,66 @@ def costruisci():
         return
 
     print(f"[luoghi] scarico l'elenco dei luoghi da {URL}", flush=True)
-    with urllib.request.urlopen(URL, timeout=300) as r:
-        grezzo = r.read()
-    print(f"[luoghi] scaricati {len(grezzo)/1e6:.1f} MB, costruisco l'indice", flush=True)
+    zip_tmp = os.path.join(DATI, "geonames.in-arrivo")
+    with urllib.request.urlopen(URL, timeout=900) as r, open(zip_tmp, "wb") as f:
+        while blocco := r.read(1 << 20):
+            f.write(blocco)
+    print(f"[luoghi] scaricati {os.path.getsize(zip_tmp)/1e6:.1f} MB, "
+          f"costruisco l'indice (qualche minuto)", flush=True)
 
-    posti, nomi = [], []
-    with zipfile.ZipFile(io.BytesIO(grezzo)) as z:
-        txt = [n for n in z.namelist() if n.endswith(".txt")][0]
+    parziale = DB + ".in-arrivo"
+    if os.path.exists(parziale):
+        os.remove(parziale)
+    con = sqlite3.connect(parziale)
+    con.execute("PRAGMA journal_mode=OFF")
+    con.execute("PRAGMA synchronous=OFF")
+    con.execute("CREATE TABLE posti (id INTEGER PRIMARY KEY, nome TEXT, "
+                "lat REAL, lon REAL, paese TEXT, peso INTEGER, tipo TEXT)")
+    con.execute("CREATE TABLE nomi (posto INTEGER, cercabile TEXT, mostrato TEXT)")
+
+    # Si scrive a blocchi invece di tenere 12 milioni di righe in memoria:
+    # l'elenco completo, caricato tutto insieme, si mangerebbe qualche GB.
+    posti, nomi, n_posti, n_nomi = [], [], 0, 0
+
+    def svuota():
+        nonlocal posti, nomi
+        if posti:
+            con.executemany("INSERT INTO posti VALUES (?,?,?,?,?,?,?)", posti)
+            con.executemany("INSERT INTO nomi VALUES (?,?,?)", nomi)
+            posti, nomi = [], []
+
+    with zipfile.ZipFile(zip_tmp) as z:
+        # Il file dei dati e' il .txt piu' grande: nello zip completo ci sono
+        # anche readme e simili.
+        txt = max((i for i in z.infolist() if i.filename.endswith(".txt")),
+                  key=lambda i: i.file_size).filename
         for riga in io.TextIOWrapper(z.open(txt), encoding="utf-8"):
             c = riga.split("\t")
             if len(c) < 15:
                 continue
+            classe, codice = c[6], c[7]
             try:
-                lat, lon, abitanti = float(c[4]), float(c[5]), int(c[14] or 0)
+                abitanti = int(c[14] or 0)
+            except ValueError:
+                abitanti = 0
+
+            # Il filtro: centri abitati sempre, il resto solo se e' nell'elenco
+            # dei tipi che possono essere una meta.
+            if classe == "P":
+                peso = abitanti
+            elif codice in PESI:
+                peso = PESI[codice]
+            else:
+                continue
+
+            try:
+                lat, lon = float(c[4]), float(c[5])
             except ValueError:
                 continue
-            id_, principale, paese = len(posti), c[1], c[8]
-            posti.append((id_, principale, lat, lon, paese, abitanti))
+
+            id_, principale, paese = n_posti, c[1], c[8]
+            n_posti += 1
+            posti.append((id_, principale, lat, lon, paese, peso, codice))
 
             # UNA RIGA PER OGNI NOME, non una stringa unica con tutto dentro.
             # E' la differenza fra trovare Milano e trovare Milanowek: cercando
@@ -86,23 +157,22 @@ def costruisci():
                     # Si conserva anche la forma con gli accenti: cosi' a chi
                     # cerca "firenze" si risponde "Firenze", non "Florence".
                     nomi.append((id_, n, nome))
+                    n_nomi += 1
 
-    parziale = DB + ".in-arrivo"
-    if os.path.exists(parziale):
-        os.remove(parziale)
-    con = sqlite3.connect(parziale)
-    con.execute("CREATE TABLE posti (id INTEGER PRIMARY KEY, nome TEXT, "
-                "lat REAL, lon REAL, paese TEXT, abitanti INTEGER)")
-    con.execute("CREATE TABLE nomi (posto INTEGER, cercabile TEXT, mostrato TEXT)")
-    con.executemany("INSERT INTO posti VALUES (?,?,?,?,?,?)", posti)
-    con.executemany("INSERT INTO nomi VALUES (?,?,?)", nomi)
+            if len(posti) >= 50_000:
+                svuota()
+
+    svuota()
+    print(f"[luoghi] {n_posti} luoghi e {n_nomi} nomi: creo l'indice", flush=True)
     con.execute("CREATE INDEX i_nomi ON nomi (cercabile)")
     con.commit()
+    con.execute("VACUUM")
     con.close()
+    os.remove(zip_tmp)
     # Nome definitivo solo a lavoro finito: un'interruzione non lascia un
     # indice monco che sembra buono.
     os.rename(parziale, DB)
-    print(f"[luoghi] indice pronto: {len(posti)} luoghi, {len(nomi)} nomi", flush=True)
+    print(f"[luoghi] indice pronto: {os.path.getsize(DB)/1e6:.0f} MB", flush=True)
 
 
 # L'ordine dei risultati e' tutto. Chi cerca "roma" vuole Roma, non Roman;
@@ -110,16 +180,25 @@ def costruisci():
 # prima il nome IDENTICO, poi quello che COMINCIA cosi', infine quello che lo
 # contiene; a parita', il centro piu' popoloso.
 QUERY = """
-SELECT p.nome, n.mostrato, p.lat, p.lon, p.paese, p.abitanti,
+SELECT p.nome, n.mostrato, p.lat, p.lon, p.paese, p.peso, p.tipo,
        MIN(CASE WHEN n.cercabile = :q THEN 0
                 WHEN n.cercabile LIKE :inizio THEN 1
                 ELSE 2 END) AS bonta
 FROM nomi n JOIN posti p ON p.id = n.posto
 WHERE n.cercabile LIKE :dentro
 GROUP BY p.id
-ORDER BY bonta, p.abitanti DESC
+ORDER BY bonta, p.peso DESC
 LIMIT :quanti
 """
+
+# Come si chiama, in italiano, il tipo di posto: l'app puo' mostrarlo accanto
+# al nome per distinguere il Passo dello Stelvio dal paese omonimo.
+TIPI = {
+    "PASS": "passo", "CAPE": "capo", "VLC": "vulcano", "ISL": "isola",
+    "PRK": "parco", "LK": "lago", "BAY": "baia", "PK": "cima", "MT": "monte",
+    "BCH": "spiaggia", "VAL": "valle", "AIRP": "aeroporto",
+    "PCLI": "stato", "ADM1": "regione", "ADM2": "provincia",
+}
 
 
 class Servizio(BaseHTTPRequestHandler):
@@ -149,8 +228,8 @@ class Servizio(BaseHTTPRequestHandler):
             # "nome" e' quello che combacia con cio' che hai digitato (Firenze),
             # "nome_base" quello di riferimento di GeoNames (Florence).
             {"nome": mostrato, "nome_base": base, "lat": la, "lon": lo,
-             "paese": paese, "abitanti": ab}
-            for base, mostrato, la, lo, paese, ab, _ in righe
+             "paese": paese, "tipo": TIPI.get(tipo, "citta"), "peso": peso}
+            for base, mostrato, la, lo, paese, peso, tipo, _ in righe
         ]})
 
     def con(self):
