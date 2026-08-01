@@ -47,6 +47,16 @@ valhalla_build_config \
     --service-limits-bus-max-distance "$LIMITE" \
     --service-limits-taxi-max-distance "$LIMITE" \
     --service-limits-multimodal-max-distance "$LIMITE" \
+    `# Percorsi alternativi: di suo ne offre 2, che su un viaggio lungo sono` \
+    `# pochi per scegliere. 4 e' il massimo utile — oltre, si somigliano.` \
+    --service-limits-max-alternates 4 \
+    `# ISOCRONE = "fin dove arrivo con un pieno / in tot ore". I default sono` \
+    `# tarati sulla citta' (25 km, 2 ore, un punto solo) e per una moto da` \
+    `# viaggio non servono a niente: qui 800 km, 12 ore e fino a 5 punti.` \
+    --service-limits-isochrone-max-distance 800000 \
+    --service-limits-isochrone-max-distance-contour 800 \
+    --service-limits-isochrone-max-time-contour 720 \
+    --service-limits-isochrone-max-locations 5 \
     > "$CONFIG"
 
 # --- 0-bis. Grafo gia' pronto? Allora si serve e basta ------------------------
