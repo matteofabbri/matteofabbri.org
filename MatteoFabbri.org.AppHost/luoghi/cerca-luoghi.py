@@ -6,8 +6,9 @@ nessuno dei due sa TROVARLA partendo dal nome. Senza questo pezzo un'app puo'
 cercare solo fra le tessere che ha gia' scaricato, cioe' quelle intorno a dove
 sei: ecco perche' trovava Grenoble a 267 km e non Madrid a 1400.
 
-I dati sono GeoNames (cities1000: ogni centro abitato sopra i mille abitanti,
-~170.000 voci, 10 MB) in uno SQLite. Si scarica da solo al primo avvio, come
+I dati sono l'elenco completo di GeoNames (420 MB, 12 milioni di voci) filtrato
+a cio' che puo' essere la meta di un viaggio: paesi e citta', ma anche passi,
+capi, vulcani, laghi, parchi e regioni. Si scarica da solo al primo avvio, come
 fanno mappe e percorsi.
 
 Solo libreria standard: nessuna dipendenza da installare ne' da aggiornare.
@@ -40,21 +41,21 @@ PORTA = int(os.environ.get("PORTA", "8090"))
 # Marittima. Gli altri un peso "vero" non ce l'hanno, quindi glielo diamo noi:
 # un passo alpino conta piu' di una cima qualsiasi, una regione piu' di un lago.
 PESI = {
-    "PCLI": 50_000_000,   # stato
-    "ADM1": 5_000_000,    # regione
-    "ADM2": 800_000,      # provincia
+    "PCLI": 5_000_000,    # stato
+    "ADM1": 500_000,      # regione
+    "ADM2": 200_000,      # provincia
     "AIRP": 300_000,      # aeroporto
-    "PASS": 120_000,      # PASSO DI MONTAGNA: per chi va in moto e' una meta
-    "CAPE": 100_000,      # capo/promontorio (Capo Nord)
-    "VLC": 90_000,        # vulcano
-    "ISL": 80_000,        # isola
-    "PRK": 60_000,        # parco
-    "LK": 50_000,         # lago
-    "BAY": 40_000,        # baia
-    "PK": 30_000,         # cima
-    "MT": 25_000,         # monte
-    "BCH": 20_000,        # spiaggia
-    "VAL": 15_000,        # valle
+    "PASS": 400_000,      # PASSO: per chi gira in moto e' LA meta, pesa piu' di tutti
+    "CAPE": 300_000,      # capo/promontorio (Nordkapp)
+    "VLC": 250_000,       # vulcano
+    "ISL": 200_000,       # isola
+    "PRK": 150_000,       # parco
+    "LK": 120_000,        # lago
+    "BAY": 80_000,        # baia
+    "PK": 60_000,         # cima
+    "MT": 50_000,         # monte
+    "BCH": 40_000,        # spiaggia
+    "VAL": 30_000,        # valle
 }
 
 
@@ -175,19 +176,32 @@ def costruisci():
     print(f"[luoghi] indice pronto: {os.path.getsize(DB)/1e6:.0f} MB", flush=True)
 
 
-# L'ordine dei risultati e' tutto. Chi cerca "roma" vuole Roma, non Roman;
-# chi cerca "mila" mentre digita vuole Milano, non Mila in Algeria. Quindi:
-# prima il nome IDENTICO, poi quello che COMINCIA cosi', infine quello che lo
-# contiene; a parita', il centro piu' popoloso.
+# L'ordine dei risultati e' tutto, e ci sono voluti tre tentativi.
+# Mettere prima i nomi identici non basta: cosi' un paesino di mille anime
+# chiamato "Stelvio" batteva il Passo dello Stelvio. Ma nemmeno pesare solo
+# "quanto conta il posto" funziona: cercando "etna" saltava fuori il ViETNAm,
+# che e' uno stato e quindi pesa moltissimo.
+# La chiave e' distinguere la PAROLA INTERA dal frammento: "stelvio" dentro
+# "Passo dello Stelvio" e' una parola vera, "etna" dentro "Vietnam" e' un pezzo
+# di sillaba. E va tenuto separato anche il caso di chi sta ancora digitando:
+# "gavia" e' l'inizio di "Gaviao", ma solo a meta' di una parola, e non deve
+# valere quanto il "Gavia" intero del passo — altrimenti pareggiano, e infatti
+# pareggiavano esatto.
+# Il punteggio quindi moltiplica quanto conta il posto per come combacia il
+# nome: identico x1000, parola intera x300, sto-ancora-digitando x50,
+# frammento in mezzo a una parola x1 (cosi' basso che nessun peso lo salva).
 QUERY = """
 SELECT p.nome, n.mostrato, p.lat, p.lon, p.paese, p.peso, p.tipo,
-       MIN(CASE WHEN n.cercabile = :q THEN 0
-                WHEN n.cercabile LIKE :inizio THEN 1
-                ELSE 2 END) AS bonta
+       MAX(p.peso * CASE WHEN n.cercabile = :q             THEN 1000
+                         WHEN n.cercabile LIKE :parola_ini THEN 300
+                         WHEN n.cercabile LIKE :parola_mid THEN 300
+                         WHEN n.cercabile LIKE :parola_fin THEN 300
+                         WHEN n.cercabile LIKE :inizio     THEN 50
+                         ELSE 1 END) AS punteggio
 FROM nomi n JOIN posti p ON p.id = n.posto
 WHERE n.cercabile LIKE :dentro
 GROUP BY p.id
-ORDER BY bonta, p.peso DESC
+ORDER BY punteggio DESC
 LIMIT :quanti
 """
 
@@ -221,7 +235,13 @@ class Servizio(BaseHTTPRequestHandler):
             quanti = 10
 
         righe = self.con().execute(QUERY, {
-            "q": q, "inizio": q + "%", "dentro": "%" + q + "%", "quanti": quanti
+            "q": q,
+            "parola_ini": q + " %",
+            "parola_mid": "% " + q + " %",
+            "parola_fin": "% " + q,
+            "inizio": q + "%",
+            "dentro": "%" + q + "%",
+            "quanti": quanti,
         }).fetchall()
 
         self.rispondi({"risultati": [
