@@ -418,8 +418,21 @@ ssh root@IP_SERVER 'cd /opt/matteofabbri && docker compose up -d --build'
 
 ## Aggiornare mailcow
 
+Sul server (installazione in `/opt/mailcow-dockerized`, vedi `server-setup.sh`):
+
 ```bash
-cd /percorso/mailcow-dockerized && ./update.sh
+cd /opt/mailcow-dockerized
+sudo ./update.sh
 ```
 
-Lo stack Aspire non si tocca: progetto diverso, rete condivisa intatta.
+Lo script chiede il ramo (default = stabile: Invio), poi fa da solo `git pull`,
+`docker compose pull` e `up -d`. Se alla fine propone di rimuovere le immagini
+vecchie, `y` libera disco (con `N` restano per un rollback).
+
+Verifica a fine aggiornamento: `sudo docker compose ps` (tutti Up; i container
+partono in ordine, dai 1-2 minuti) e la webmail su `https://mail.maddalena.me`.
+
+Lo stack Aspire non si tocca: progetto diverso, rete condivisa intatta. Anche
+`mailcow.conf` e `docker-compose.override.yml` (l'aggancio a `matteo-shared`)
+non vengono toccati: non sono tracciati da git, e la rete è `external: true`
+quindi il compose di mailcow non può cancellarla.
