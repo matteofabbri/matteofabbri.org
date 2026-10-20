@@ -22,7 +22,6 @@
 | 8080 / 8443 | nginx di mailcow (ascolta solo su 127.0.0.1; Caddy lo raggiunge via rete docker) |
 | 18888 | dashboard Aspire (telemetria) — se vuoi vederla da fuori, passa da un tunnel ssh |
 | `SITE_PORT` (8080 del container sito) | il sito, raggiunto solo da Caddy |
-| 8002 | Valhalla (calcolo percorsi), raggiunto solo da Caddy su `maddalena.me/osm` |
 | 8080 del container tileserver | tiles della mappa, solo da Caddy su `maddalena.me/tiles` |
 
 ## Note OVH

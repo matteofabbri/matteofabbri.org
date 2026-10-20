@@ -102,71 +102,9 @@ maddalena
     .WithEnvironment("Licensing__PrivateKey", licensingPrivateKey)
     .WithEnvironment("Licensing__KeyId", "k1");
 
-// --- Mappe: calcolo percorsi e tiles ----------------------------------------
-// Due servizi distinti, e la distinzione conta: Valhalla calcola i PERCORSI,
-// tileserver-gl serve l'IMMAGINE della mappa. Nessuno dei due fa il lavoro
-// dell'altro. Vivono sotto maddalena.me: /osm il primo, /tiles il secondo.
-// Entrambi restano interni: fuori ci arriva solo Caddy.
-
-// Da dove Valhalla prende i dati OpenStreetMap. Al primo avvio scarica questo
-// estratto e ne COSTRUISCE il grafo di navigazione. Attenzione: le mappe si
-// scaricano gia' pronte, il grafo no, e il conto e' tutt'altro — il planet e'
-// 94 GB di dati grezzi, ~400 GB di spazio di lavoro e 20-60 ore di elaborazione
-// (misure del progetto Valhalla, vedi deploy/README.md). Succede una volta sola:
-// il risultato resta nel volume. Cambiare regione = cambiare questo parametro
-// nel .env e riavviare con force_rebuild a True.
-//
-// EUROPA, non il mondo — e non e' prudenza, e' una MISURA. Il planet e' stato
-// provato davvero la notte dell'1/8/2026 ed e' finito male: il grafo era a
-// 226 GB di tessere ANCORA INCOMPLETE quando il disco da 467 GB e' arrivato a
-// zero, con dentro anche i 128 GB delle mappe e i 94 del pbf. La costruzione e'
-// morta, e il disco pieno ha corrotto tre container di mailcow lasciando la
-// webmail giu' per ore. Su QUESTA macchina il mondo dei percorsi non ci sta
-// accanto al mondo delle mappe: l'Europa e' 34,7 GB di dati grezzi contro 94.
-// Per tornare al mondo serve un disco piu' grande, non un parametro diverso.
-var valhallaTileUrls = builder.AddParameter("valhalla-tile-urls",
-    () => builder.Configuration["Parameters:valhalla-tile-urls"]
-        ?? "https://download.geofabrik.de/europe-latest.osm.pbf");
-
-// Immagine NOSTRA (contesto ./valhalla), sull'ufficiale 3.8.3. Prima si usava
-// ghcr.io/nilsnolde/docker-valhalla 3.5.1, comoda perche' pilotata da variabili
-// d'ambiente, ma quel repo e' archiviato dal marzo 2026 e la 3.5.1 ha un bug
-// che ci ha bruciato una notte: costruendo l'Europa e' morta con "double free
-// or corruption" lasciando un grafo senza autostrade, che rispondeva "No
-// suitable edges" a ogni percorso (valhalla#4904, fix nella PR #5005 del
-// dicembre 2024). Vedi ./valhalla/prepara-percorsi.sh per i passi.
-var valhalla = builder.AddDockerfile("valhalla", "valhalla")
-    // Il grafo costruito. Senza volume ogni riavvio rifarebbe da capo il lavoro
-    // di cui sopra.
-    .WithVolume("valhalla-tiles", "/custom_files")
-    .WithEndpoint(targetPort: 8002, scheme: "http", name: "http")
-    .WithEnvironment("PBF_URL", valhallaTileUrls)
-    // TETTO AI FILE APERTI — senza, Valhalla MUORE. Durante la costruzione tiene
-    // aperti contemporaneamente migliaia di file (una tessera per file) e il
-    // limite di default di un container, spesso 1024, non basta: il processo
-    // termina con "Too many open files (src/epoll.cpp:38)". E' il flag che
-    // Matteo ricordava di aver dovuto scoprire a mano un paio d'anni fa
-    // (docker-valhalla issue #176). Su un'area grande e' quasi garantito.
-    // Sicuro da cablare qui: e' un numero fisso, non dipende dalla macchina.
-    .PublishAsDockerComposeService((_, service) =>
-    {
-        service.Ulimits["nofile"] = new Ulimit { Soft = 65536, Hard = 65536 };
-        // Come per Caddy e tileserver: senza, il compose PRETENDEREBBE
-        // un'immagine gia' costruita altrove e il container non partirebbe.
-        service.Image = null;
-        service.Build = new Build
-        {
-            Context = "./valhalla",
-            Dockerfile = "Dockerfile",
-        };
-    });
-
-// NB: altre due leve NON sono cablate apposta — un tetto alla memoria
-// (deploy.resources.limits.memory) e un tetto ai thread (env BUILD_THREADS,
-// che lo script passa a valhalla_build_tiles).
-// Quelle dipendono dalla RAM della macchina, che da qui non si conosce, e
-// scritte con un valore vuoto rischiano di impedire l'avvio a TUTTO il compose.
-// Si aggiungono a mano: snippet pronto in deploy/README.md, sezione Valhalla.
+// --- Mappe: i tiles -----------------------------------------------------------
+// tileserver-gl serve l'IMMAGINE della mappa sotto maddalena.me/tiles.
+// Resta interno: fuori ci arriva solo Caddy.
 
 // Quale mappa del mondo scaricare. Vuoto = l'ultima pubblicata: Protomaps ne
 // sforna una al giorno col nome fatto di data (20260731.pmtiles) e tiene online
@@ -178,9 +116,8 @@ var planetUrl = builder.AddParameter("planet-url",
 
 // A differenza dell'immagine ufficiale, questa si SCARICA DA SOLA la mappa del
 // mondo (~137 GB) e i font al primo avvio, dentro il volume: vedi
-// ./tileserver/prepara-mappe.sh. Nessun file da portare a mano sul server, come
-// gia' fa Valhalla coi suoi dati. Il primo avvio dura quanto il download; nel
-// frattempo /tiles risponde 502.
+// ./tileserver/prepara-mappe.sh. Nessun file da portare a mano sul server.
+// Il primo avvio dura quanto il download; nel frattempo /tiles risponde 502.
 var tileserver = builder.AddDockerfile("tileserver", "tileserver")
     // La mappa scaricata. Senza volume ogni riavvio rifarebbe i 137 GB.
     .WithVolume("tileserver-data", "/data")
@@ -207,12 +144,12 @@ var tileserver = builder.AddDockerfile("tileserver", "tileserver")
     });
 
 // --- Ricerca di luoghi per nome ---------------------------------------------
-// Il terzo pezzo, e il meno ovvio: le mappe sanno DISEGNARE Madrid, Valhalla sa
-// PORTARCI, ma nessuno dei due sa TROVARLA partendo dalla parola "madrid".
+// Il pezzo che le mappe non sanno fare: DISEGNANO Madrid, ma non sanno
+// TROVARLA partendo dalla parola "madrid".
 // Senza, un'app puo' cercare solo fra le tessere che ha gia' scaricato, cioe'
 // quelle intorno a dove si trova: Grenoble a 267 km si', Madrid a 1400 no.
 // Sono ~170.000 centri abitati da GeoNames in uno SQLite: 10 MB, si scarica da
-// solo al primo avvio come fanno gli altri due.
+// solo al primo avvio come fa il tileserver.
 var luoghi = builder.AddDockerfile("luoghi", "luoghi")
     .WithVolume("luoghi-dati", "/dati")
     .WithEndpoint(targetPort: 8090, scheme: "http", name: "http")
@@ -237,8 +174,6 @@ var thequltUpstream = ReferenceExpression.Create(
     $"{theqult.GetEndpoint("http").Property(EndpointProperty.HostAndPort)}");
 var maddalenaUpstream = ReferenceExpression.Create(
     $"{maddalena.GetEndpoint("http").Property(EndpointProperty.HostAndPort)}");
-var valhallaUpstream = ReferenceExpression.Create(
-    $"{valhalla.GetEndpoint("http").Property(EndpointProperty.HostAndPort)}");
 var tileserverUpstream = ReferenceExpression.Create(
     $"{tileserver.GetEndpoint("http").Property(EndpointProperty.HostAndPort)}");
 var luoghiUpstream = ReferenceExpression.Create(
@@ -265,7 +200,6 @@ var caddy = builder.AddDockerfile("caddy", "caddy")
     .WithEnvironment("SITE_UPSTREAM", siteUpstream)
     .WithEnvironment("THEQULT_UPSTREAM", thequltUpstream)
     .WithEnvironment("MADDALENA_UPSTREAM", maddalenaUpstream)
-    .WithEnvironment("VALHALLA_UPSTREAM", valhallaUpstream)
     .WithEnvironment("TILESERVER_UPSTREAM", tileserverUpstream)
     .WithEnvironment("LUOGHI_UPSTREAM", luoghiUpstream)
     .WithEnvironment("MAILCOW_TLS_UPSTREAM", mailcowTlsUpstream)

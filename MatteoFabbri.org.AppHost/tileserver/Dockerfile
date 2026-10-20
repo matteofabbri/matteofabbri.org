@@ -4,10 +4,8 @@
 # trovare i file gia' pronti nel suo volume. Qui sopra ci mettiamo un entrypoint
 # che, se il volume e' vuoto, scarica la mappa del mondo di Protomaps e i font,
 # e poi cede il posto all'entrypoint originale. Ai riavvii successivi trova
-# tutto al suo posto e parte in un secondo.
-#
-# Stessa filosofia di Valhalla, che i suoi dati se li scarica gia' da solo: il
-# server si arrangia, nessun file da portare a mano.
+# tutto al suo posto e parte in un secondo. Il server si arrangia: nessun file
+# da portare a mano.
 FROM maptiler/tileserver-gl:v5.6.0
 
 # L'immagine base non ha ne' curl ne' unzip (verificato: mancano entrambi).

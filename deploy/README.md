@@ -7,7 +7,6 @@ per nome:
 - `matteofabbri.org` (`SITE_DOMAIN`) → sito personale (progetto `site`)
 - `theqult.org` (`THEQULT_DOMAIN`)   → API `TheQult`
 - `maddalena.me` (`MADDALENA_DOMAIN`) → sito MVC `Maddalena` (include `/licensing`)
-- `maddalena.me/osm`                 → Valhalla, calcolo dei percorsi
 - `maddalena.me/tiles`               → tileserver-gl, immagine della mappa
 - `<dominio>/mail` (tutti e tre)     → redirect a `https://<WEBMAIL_HOST>`
 - **qualunque altro nome**           → mailcow (TLS **passato sigillato**: il
@@ -132,112 +131,10 @@ docker compose up -d --build
 
 ---
 
-## 2-bis. Le mappe: Valhalla e tileserver-gl
+## 2-bis. Le mappe: tileserver-gl
 
-Due servizi distinti, e la distinzione è la cosa da tenere a mente: **Valhalla
-calcola i percorsi, tileserver-gl serve l'immagine della mappa**. Nessuno dei
-due fa il lavoro dell'altro, e servono entrambi per una navigazione funzionante.
-Restano interni: fuori ci arriva solo Caddy, su `maddalena.me/osm` e
-`maddalena.me/tiles`.
-
-### Valhalla — si popola da solo, ma ci mette un po'
-
-Nel `.env`, `VALHALLA_TILE_URLS` è l'estratto OpenStreetMap da cui costruire il
-grafo dei percorsi. **Il default è il mondo intero** (scelta esplicita del
-2026-07-31, presa dopo aver visto i numeri più sotto):
-
-```ini
-VALHALLA_TILE_URLS=https://planet.openstreetmap.org/pbf/planet-latest.osm.pbf
-```
-
-Per un'area più piccola basta cambiare l'URL, per esempio
-`https://download.geofabrik.de/europe-latest.osm.pbf` (Europa) o
-`.../europe/italy-latest.osm.pbf` (Italia).
-
-Al **primo avvio** scarica l'estratto e costruisce il grafo. È un'operazione
-lunga — decine di minuti per l'Italia — e affamata di RAM. Succede una volta
-sola: il risultato resta nel volume `valhalla-tiles` e i riavvii successivi
-partono subito. Nel frattempo `/osm` risponde con errori: è normale, non è rotto.
-
-Per cambiare regione: cambia l'URL e riavvia con `force_rebuild` a `True` una
-volta sola (poi rimettilo a `False`, altrimenti ricostruisce a ogni riavvio).
-
-Prova che funzioni:
-
-```bash
-curl "https://maddalena.me/osm/status"
-```
-
-#### Attenzione a ingrandire l'area: qui non vale la regola delle mappe
-
-Le mappe (tileserver) si **scaricano** già pronte, quindi il mondo costa solo
-tempo di rete. I percorsi no: il grafo di navigazione va **costruito**, ed è un
-lavoro che cresce molto più in fretta dell'area. Dati misurati il 2026-07-31:
-
-| Area | Dati grezzi da scaricare |
-|---|---|
-| Italia (quello configurato oggi) | 2,2 GB |
-| Europa | 34,7 GB |
-| Mondo | 94,1 GB |
-
-E costruire il grafo del **mondo** richiede, secondo le misure riportate dal
-progetto Valhalla:
-
-- **64 GB di RAM raccomandati.** Con 32 GB una build reale è **fallita per
-  esaurimento memoria dopo 20 ore** (il processo era arrivato a ~23 GB).
-- **~400 GB di spazio di lavoro**, oltre al risultato finale.
-- **20-60 ore** di elaborazione, a seconda del disco (gli SSD NVMe contano più
-  della CPU).
-- Tile del mondo già pronte da scaricare **non esistono pubblicamente**: i
-  manutentori stessi sconsigliano di partire dal planet.
-
-Il punto delicato non è solo che possa fallire: **questo server ospita anche i
-tre siti, Postgres e mailcow**. Una build che satura memoria e disco per giorni
-può farli cadere, e quando la memoria finisce il kernel non uccide
-necessariamente il colpevole. Prima di ingrandire l'area, controlla cosa c'è:
-
-```bash
-free -g; df -h /
-```
-
-Se il mondo non ci sta, le strade sono due: fermarsi all'**Europa** (molto più
-leggera e probabilmente sufficiente), oppure costruire il grafo **altrove** —
-una macchina affittata a ore — e portare qui solo il risultato: il container
-sa caricare un `valhalla_tiles.tar` già pronto messo in `/custom_files`, con
-`use_tiles_ignore_pbf=True` e `force_rebuild=False`.
-
-#### Le due leve per non far male al resto del server
-
-Non sono cablate nell'AppHost apposta: un valore vuoto lì dentro rischia di
-impedire l'avvio a **tutto** il compose, e il numero giusto dipende dalla RAM
-della macchina. Si aggiungono a mano al servizio `valhalla` nel compose, e
-valgono finché non lo si rigenera.
-
-```yaml
-  valhalla:
-    # ... quello che c'è già ...
-    environment:
-      # Quanti thread usa per costruire e servire. Senza, se li prende tutti e
-      # per un giorno intero i siti e la posta arrancano. Con 16 thread
-      # disponibili, 8 è un compromesso: dimezza il carico, allunga la build.
-      server_threads: "8"
-    deploy:
-      resources:
-        limits:
-          # Il tetto di memoria. Non serve a far riuscire la build — serve a
-          # decidere CHI muore se va male: con il tetto muore Valhalla, senza
-          # sceglie il kernel, e può prendersela con Postgres o con la posta.
-          # Metti circa il 70% della RAM totale (con 32 GB → 22g).
-          memory: 22g
-```
-
-Verifica prima quanta RAM c'è davvero, il numero qui sopra è un esempio:
-
-```bash
-free -g
-```
-
-### tileserver-gl — si scarica il mondo da solo
+tileserver-gl serve l'immagine della mappa su `maddalena.me/tiles` e resta
+interno: fuori ci arriva solo Caddy.
 
 Non c'è niente da portare a mano. L'immagine è nostra (contesto
 `MatteoFabbri.org.AppHost/tileserver`, costruita sul server dal `--build`): al
@@ -418,7 +315,17 @@ ssh root@IP_SERVER 'cd /opt/matteofabbri && docker compose up -d --build'
 
 ## Aggiornare mailcow
 
-Sul server (installazione in `/opt/mailcow-dockerized`, vedi `server-setup.sh`):
+Sul server (installazione in `/opt/mailcow-dockerized`, vedi `server-setup.sh`).
+
+Prima di partire, controlla lo spazio: l'update scarica immagini nuove e su
+questa macchina il disco pieno di agosto ha corrotto tre container di mailcow.
+
+```bash
+df -h /
+```
+
+Con parecchi GB liberi si va tranquilli; sotto i ~10 GB meglio fare ordine
+prima (le mappe occupano tanto).
 
 ```bash
 cd /opt/mailcow-dockerized
@@ -427,7 +334,10 @@ sudo ./update.sh
 
 Lo script chiede il ramo (default = stabile: Invio), poi fa da solo `git pull`,
 `docker compose pull` e `up -d`. Se alla fine propone di rimuovere le immagini
-vecchie, `y` libera disco (con `N` restano per un rollback).
+vecchie, `y` libera disco (con `N` restano per un rollback). Si aggiorna solo
+da terminale con `update.sh`, mai dal pannello web. Durante l'aggiornamento la
+webmail sta giù qualche minuto: la posta in arrivo non si perde, i server
+mittenti riprovano da soli.
 
 Verifica a fine aggiornamento: `sudo docker compose ps` (tutti Up; i container
 partono in ordine, dai 1-2 minuti) e la webmail su `https://mail.maddalena.me`.

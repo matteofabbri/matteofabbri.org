@@ -86,7 +86,7 @@ jobs:
       # al loro posto accanto al compose.
       - name: Aggiornamento contesti di build
         run: |
-          for ctx in caddy tileserver valhalla luoghi; do
+          for ctx in caddy tileserver luoghi; do
             ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$SERVER" "rm -rf ~/$ctx-new"
             scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -r \
               "MatteoFabbri.org.AppHost/$ctx" "$SERVER:~/$ctx-new"
