@@ -45,6 +45,7 @@ jobs:
 
       - name: Chiave SSH del server
         run: |
+          mkdir -p ~/.ssh
           echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           # Host key del server fissata qui (e' pubblica): niente "trust on first use".
