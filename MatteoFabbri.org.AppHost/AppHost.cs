@@ -23,6 +23,16 @@ builder.AddDockerComposeEnvironment("matteofabbri")
             External = true,
         };
 
+        // Volume degli articoli del blog: dichiararlo qui (e non solo sul
+        // servizio) evita il compose "undefined volume". Docker lo crea al
+        // primo avvio e lo conserva tra un deploy e l'altro: i post non
+        // stanno nell'immagine, quindi non si perdono a ogni build.
+        file.Volumes["blog-data"] = new Volume
+        {
+            Name = "blog-data",
+            Driver = "local",
+        };
+
         // RIAVVIO AUTOMATICO per tutti i servizi. Di suo Aspire non ne mette
         // nessuno (`restart-policy=no`), e le conseguenze sono due, entrambe
         // viste dal vivo: un container che esce per un errore passeggero — una
@@ -59,48 +69,78 @@ var mailcowTlsUpstream = builder.AddParameter("mailcow-tls-upstream");
 var mailcowHttpUpstream = builder.AddParameter("mailcow-http-upstream");
 
 // --- Il sito personale -------------------------------------------------------
-var site = builder.AddProject<Projects.MainSite>("site");
+// Ospita anche le prenotazioni degli appuntamenti, che leggono e scrivono il
+// calendario della casella: è il calendario CalDAV di SOGo, il groupware dentro
+// mailcow. L'URL è pubblico (SOGo lo serve sotto /SOGo/dav/ sullo stesso nome
+// della webmail) così vale sia dal container sia dal PC in sviluppo.
+var caldavUrl = builder.AddParameter("caldav-url",
+    () => builder.Configuration["Parameters:caldav-url"] ?? "https://mail.maddalena.me/SOGo/dav/");
+
+// La casella: email completa come nome utente. La password NON è quella vera
+// della casella ma un'APP PASSWORD creata in mailcow con accesso DAV (le
+// password vere cambiano, e con 2FA i client DAV non funzionano affatto).
+// Vuote = prenotazioni spente (l'API risponde 503), il sito parte lo stesso.
+//   dotnet user-secrets set "Parameters:caldav-username" "matteo@maddalena.me" --project <questo AppHost>
+//   dotnet user-secrets set "Parameters:caldav-password" "<app password DAV>" --project <questo AppHost>
+var caldavUsername = builder.AddParameter("caldav-username",
+    () => builder.Configuration["Parameters:caldav-username"] ?? "");
+var caldavPassword = builder.AddParameter("caldav-password",
+    () => builder.Configuration["Parameters:caldav-password"] ?? "", secret: true);
+
+// --- Blog: accesso con mailcow (OAuth2) --------------------------------------
+// mailcow espone un server OAuth2: il blog manda l'autore sulla webmail, riceve
+// un codice e lo scambia con il profilo della casella. La password non passa
+// mai dal sito e il 2FA di mailcow continua a funzionare.
+//
+// Il client si crea in mailcow (Configurazione → Access → OAuth2 Apps) e il suo
+// redirect URI deve essere esattamente:
+//   https://<SITE_DOMAIN>/admin/login/callback
+// Client ID e secret NON stanno nel repo: arrivano dal .env (o dai user-secrets).
+// Blog-authors è l'elenco delle caselle abilitate a scrivere, separate da
+// virgola; vuoto = accesso all'area di scrittura spento, il blog resta leggibile.
+var mailcowOauthUrl = builder.AddParameter("mailcow-oauth-url",
+    () => builder.Configuration["Parameters:mailcow-oauth-url"] ?? "https://mail.maddalena.me");
+var mailcowOauthClientId = builder.AddParameter("mailcow-oauth-client-id",
+    () => builder.Configuration["Parameters:mailcow-oauth-client-id"] ?? "");
+var mailcowOauthClientSecret = builder.AddParameter("mailcow-oauth-client-secret",
+    () => builder.Configuration["Parameters:mailcow-oauth-client-secret"] ?? "", secret: true);
+var blogAuthors = builder.AddParameter("blog-authors",
+    () => builder.Configuration["Parameters:blog-authors"] ?? "");
+
+// In pubblicazione gli articoli stanno nel volume; in esecuzione locale (run
+// dell'AppHost) restano accanto al progetto, come con `dotnet run`.
+string blogContentPath = builder.ExecutionContext.IsPublishMode ? "/data/blog" : "App_Data/blog";
+
+var site = builder.AddProject<Projects.MainSite>("site")
+    .WithEnvironment("Calendar__CalDavUrl", caldavUrl)
+    .WithEnvironment("Calendar__Username", caldavUsername)
+    .WithEnvironment("Calendar__Password", caldavPassword)
+    .WithEnvironment("Blog__Auth__BaseUrl", mailcowOauthUrl)
+    .WithEnvironment("Blog__Auth__ClientId", mailcowOauthClientId)
+    .WithEnvironment("Blog__Auth__ClientSecret", mailcowOauthClientSecret)
+    .WithEnvironment("Blog__Authors", blogAuthors)
+    // Gli articoli stanno fuori dall'immagine: un deploy che ricostruisce il
+    // container non deve portarsi via quello che è stato scritto.
+    .WithEnvironment("Blog__ContentPath", blogContentPath)
+    .PublishAsDockerComposeService((_, service) =>
+    {
+        service.AddVolume(new Volume
+        {
+            Name = "blog-data",
+            Type = "volume",
+            Source = "blog-data",
+            Target = "/data/blog",
+        });
+    });
 
 // --- theqult.org: progetto API ----------------------------------------------
 var theqult = builder.AddProject<Projects.TheQult>("theqult");
 
-// --- maddalena.me: progetto MVC ---------------------------------------------
-// Fa da sito principale del dominio; sotto /licensing ospita il licensing di
-// Sperone. Account LOCALI (Identity + cookie): niente piu' provider OIDC.
+// --- maddalena.me: sito segnaposto -------------------------------------------
+// Per ora risponde "hello world": il vecchio frontend React e il submodule
+// maddelena-FE sono stati rimossi. Il servizio resta nello stack (dominio,
+// Caddy e DNS già configurati) finché non arriverà il nuovo contenuto.
 var maddalena = builder.AddProject<Projects.Maddalena>("maddalena");
-
-// Postgres: gli account di Maddalena (ASP.NET Core Identity) + le licenze
-// commerciali comprate (tabella AccountLicense). WithDataVolume => i dati sopravvivono ai riavvii.
-var postgres = builder.AddPostgres("postgres")
-    .WithDataVolume();
-
-// DB di Maddalena: account + licenze. Il licensing vive ORA dentro Maddalena (sotto
-// /licensing) — niente piu' sito separato ne' Mongo.
-var maddalenaDb = postgres.AddDatabase("maddalenadb");
-
-// Chiavi Stripe (test/sandbox in dev, live in prod). I valori stanno negli user-secrets di QUESTO AppHost
-// come Parameters:stripe-* ; opzionali (default vuoto) cosi' Maddalena parte anche prima di impostarle.
-//   dotnet user-secrets set "Parameters:stripe-secret" "sk_test_…" --project <questo AppHost>
-var stripePublishable = builder.AddParameter("stripe-publishable", () => builder.Configuration["Parameters:stripe-publishable"] ?? "");
-var stripeSecret = builder.AddParameter("stripe-secret", () => builder.Configuration["Parameters:stripe-secret"] ?? "", secret: true);
-var stripeWebhook = builder.AddParameter("stripe-webhook", () => builder.Configuration["Parameters:stripe-webhook"] ?? "", secret: true);
-
-// La chiave PRIVATA di firma delle licenze: vive SOLO qui (mai nel prodotto). Il webhook la usa per firmare
-// la chiave portabile. Vuota di default (Maddalena parte lo stesso); in prod via user-secrets.
-//   dotnet user-secrets set "Parameters:licensing-private-key" "<base64>" --project <questo AppHost>
-var licensingPrivateKey = builder.AddParameter("licensing-private-key",
-    () => builder.Configuration["Parameters:licensing-private-key"] ?? "", secret: true);
-
-// Maddalena ospita il licensing: le servono il suo DB, le chiavi Stripe e la chiave
-// privata di firma (Stripe__X -> Stripe:X ; Licensing__X -> Licensing:X).
-maddalena
-    .WithReference(maddalenaDb)
-    .WaitFor(maddalenaDb)
-    .WithEnvironment("Stripe__PublishableKey", stripePublishable)
-    .WithEnvironment("Stripe__SecretKey", stripeSecret)
-    .WithEnvironment("Stripe__WebhookSecret", stripeWebhook)
-    .WithEnvironment("Licensing__PrivateKey", licensingPrivateKey)
-    .WithEnvironment("Licensing__KeyId", "k1");
 
 // --- Mappe: i tiles -----------------------------------------------------------
 // tileserver-gl serve l'IMMAGINE della mappa sotto maddalena.me/tiles.
@@ -143,26 +183,6 @@ var tileserver = builder.AddDockerfile("tileserver", "tileserver")
         };
     });
 
-// --- Ricerca di luoghi per nome ---------------------------------------------
-// Il pezzo che le mappe non sanno fare: DISEGNANO Madrid, ma non sanno
-// TROVARLA partendo dalla parola "madrid".
-// Senza, un'app puo' cercare solo fra le tessere che ha gia' scaricato, cioe'
-// quelle intorno a dove si trova: Grenoble a 267 km si', Madrid a 1400 no.
-// Sono ~170.000 centri abitati da GeoNames in uno SQLite: 10 MB, si scarica da
-// solo al primo avvio come fa il tileserver.
-var luoghi = builder.AddDockerfile("luoghi", "luoghi")
-    .WithVolume("luoghi-dati", "/dati")
-    .WithEndpoint(targetPort: 8090, scheme: "http", name: "http")
-    .PublishAsDockerComposeService((_, service) =>
-    {
-        service.Image = null;
-        service.Build = new Build
-        {
-            Context = "./luoghi",
-            Dockerfile = "Dockerfile",
-        };
-    });
-
 // L'indirizzo interno (host:porta) a cui Caddy inoltra il traffico del sito:
 // deriva dall'endpoint del progetto. HostAndPort restituisce "host:porta" gia'
 // risolti e si adatta da solo alla modalita': in pubblicazione diventa "site:8080",
@@ -176,8 +196,6 @@ var maddalenaUpstream = ReferenceExpression.Create(
     $"{maddalena.GetEndpoint("http").Property(EndpointProperty.HostAndPort)}");
 var tileserverUpstream = ReferenceExpression.Create(
     $"{tileserver.GetEndpoint("http").Property(EndpointProperty.HostAndPort)}");
-var luoghiUpstream = ReferenceExpression.Create(
-    $"{luoghi.GetEndpoint("http").Property(EndpointProperty.HostAndPort)}");
 
 // --- Caddy: la "portineria" sulle porte 80/443 ------------------------------
 // Immagine su misura (Caddy ufficiale + modulo layer4), costruita dal
@@ -201,7 +219,6 @@ var caddy = builder.AddDockerfile("caddy", "caddy")
     .WithEnvironment("THEQULT_UPSTREAM", thequltUpstream)
     .WithEnvironment("MADDALENA_UPSTREAM", maddalenaUpstream)
     .WithEnvironment("TILESERVER_UPSTREAM", tileserverUpstream)
-    .WithEnvironment("LUOGHI_UPSTREAM", luoghiUpstream)
     .WithEnvironment("MAILCOW_TLS_UPSTREAM", mailcowTlsUpstream)
     .WithEnvironment("MAILCOW_HTTP_UPSTREAM", mailcowHttpUpstream)
     // Aggancia Caddy alla rete condivisa (per raggiungere mailcow per nome) e

@@ -4,75 +4,10 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <!-- Il frontend: la SPA React/Vite nel submodule external/maddelena-FE.
-         La build (target BuildSpa qui sotto) la compila e ne copia la dist in wwwroot. -->
-    <SpaRoot>..\external\maddelena-FE\</SpaRoot>
-    <!-- Pipeline "static web assets" dell'SDK SPENTA: fingerprinting e manifest non
-         servono a una SPA gia' compilata da Vite. Qui i file statici li gestisce
-         SOLO la coppia BuildSpa/PublishSpa. -->
-    <StaticWebAssetsEnabled>false</StaticWebAssetsEnabled>
-    <!-- wwwroot e' output generato (e ignorato da git): fuori da TUTTI i glob di
-         default. Non solo dal Content di valutazione: anche il target SDK
-         _IncludePrePublishGeneratedContent, che a fine build riscopre wwwroot e la
-         aggiungerebbe alla publish per conto suo, onora questa esclusione. Senza,
-         quando wwwroot nasce durante la build (checkout fresco: CI) i file ci
-         finivano due volte — la sua e quella di PublishSpa — e la publish moriva
-         di NETSDK1152. -->
-    <DefaultItemExcludes>$(DefaultItemExcludes);wwwroot\**</DefaultItemExcludes>
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- I sorgenti della SPA che fanno scattare la ricompilazione del frontend. -->
-    <SpaSource Include="$(SpaRoot)src\**" />
-    <SpaSource Include="$(SpaRoot)index.html;$(SpaRoot)package.json;$(SpaRoot)vite.config.ts;$(SpaRoot)tsconfig.json" />
-  </ItemGroup>
-
-  <ItemGroup>
     <ProjectReference Include="..\MatteoFabbri.org.ServiceDefaults\MatteoFabbri.org.ServiceDefaults.csproj" />
-    <!-- The licensing signing core. Vendor-only (holds the private key); Maddalena mints portable keys
-         on Stripe payment. Generic: the same libraries license every product sold on maddalena.me. -->
-    <ProjectReference Include="..\LIBRARIES\MADDALENA\Maddalena.Licensing.Issuing\Maddalena.Licensing.Issuing.csproj" />
   </ItemGroup>
-
-  <ItemGroup>
-    <PackageReference Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" Version="13.6.1" />
-    <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.10" />
-    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.10" />
-    <!-- Pin del transitivo: la 2.0.0 portata da AspNetCore.OpenApi ha una CVE nota (GHSA-v5pm-xwqc-g5wc).
-         DEVE restare nella famiglia 2.x: il source generator di AspNetCore.OpenApi emette codice
-         per l'API 2.x, con la 3.x la build esplode (CS0200 su IOpenApiMediaType.Example). -->
-    <PackageReference Include="Microsoft.OpenApi" Version="2.11.0" />
-    <PackageReference Include="Stripe.net" Version="52.1.1" />
-  </ItemGroup>
-
-  <!-- npm install solo se node_modules manca (primo clone): il check a ogni build
-       costerebbe secondi; se cambiano le dipendenze del FE basta cancellarla. -->
-  <Target Name="EnsureNodeModules" Condition="!Exists('$(SpaRoot)node_modules')">
-    <Exec Command="npm install" WorkingDirectory="$(SpaRoot)" />
-  </Target>
-
-  <!-- Compila la SPA e ne copia la dist in wwwroot. Incrementale: se nessun
-       sorgente del FE e' piu' nuovo di wwwroot\index.html non fa nulla,
-       cosi' la F5 da Visual Studio non paga npm a ogni giro. -->
-  <Target Name="BuildSpa" DependsOnTargets="EnsureNodeModules" BeforeTargets="Build" Inputs="@(SpaSource)" Outputs="wwwroot\index.html">
-    <Exec Command="npm run build" WorkingDirectory="$(SpaRoot)" />
-    <RemoveDir Directories="wwwroot" />
-    <ItemGroup>
-      <SpaDist Include="$(SpaRoot)dist\**" />
-    </ItemGroup>
-    <Copy SourceFiles="@(SpaDist)" DestinationFiles="@(SpaDist->'wwwroot\%(RecursiveDir)%(Filename)%(Extension)')" />
-  </Target>
-
-  <!-- La publish porta con se' la wwwroot appena costruita da BuildSpa
-       (il glob Content e' spento sopra, quindi qui non nascono duplicati). -->
-  <Target Name="PublishSpa" AfterTargets="ComputeFilesToPublish">
-    <ItemGroup>
-      <SpaWwwroot Include="wwwroot\**" />
-      <ResolvedFileToPublish Include="@(SpaWwwroot)">
-        <RelativePath>wwwroot\%(RecursiveDir)%(Filename)%(Extension)</RelativePath>
-        <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-      </ResolvedFileToPublish>
-    </ItemGroup>
-  </Target>
 
 </Project>

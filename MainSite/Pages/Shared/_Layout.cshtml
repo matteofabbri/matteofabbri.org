@@ -1,0 +1,51 @@
+@inject MainSite.Blog.BlogAuthState BlogAuthState
+@{
+    string? pageTitle = ViewData["Title"] as string;
+    string fullTitle = pageTitle is null ? "Matteo Fabbri" : $"{pageTitle} — Matteo Fabbri";
+    string description = ViewData["Description"] as string
+        ?? "Appunti, progetti e cose che vale la pena raccontare.";
+    bool isAuthor = BlogAuthState.IsAuthor(User);
+}
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@fullTitle</title>
+    <meta name="description" content="@description" />
+    <link rel="stylesheet" href="~/css/blog.css" asp-append-version="true" />
+    <link rel="alternate" type="application/rss+xml" title="Matteo Fabbri — Blog" href="/blog/feed.xml" />
+    @await RenderSectionAsync("Head", required: false)
+</head>
+<body>
+<a class="skip-link" href="#contenuto">Vai al contenuto</a>
+
+<header class="site-header">
+    <div class="wrap header-inner">
+        <a class="brand" asp-page="/Blog/Index">Matteo Fabbri</a>
+        <nav class="site-nav" aria-label="Navigazione principale">
+            <a asp-page="/Blog/Index">Blog</a>
+            <a href="/blog/feed.xml">RSS</a>
+            @if (isAuthor)
+            {
+                <a asp-page="/Admin/Index">Scrivi</a>
+                <form method="post" asp-page="/Admin/Logout" class="inline-form">
+                    <button type="submit" class="link-button">Esci</button>
+                </form>
+            }
+        </nav>
+    </div>
+</header>
+
+<main id="contenuto" class="wrap">
+    @RenderBody()
+</main>
+
+<footer class="site-footer">
+    <div class="wrap footer-inner">
+        <span>© @DateTime.UtcNow.Year Matteo Fabbri</span>
+        <a href="/blog/feed.xml">Feed RSS</a>
+    </div>
+</footer>
+</body>
+</html>

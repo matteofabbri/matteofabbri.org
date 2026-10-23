@@ -8,7 +8,7 @@
 # @site qui sotto). Tutti e tre hanno il redirect /mail verso la webmail:
 #   - matteofabbri.org  (SITE_DOMAIN)      -> sito personale
 #   - theqult.org       (THEQULT_DOMAIN)   -> API TheQult
-#   - maddalena.me      (MADDALENA_DOMAIN) -> sito MVC Maddalena (include /licensing)
+#   - maddalena.me      (MADDALENA_DOMAIN) -> sito MVC Maddalena
 #
 # Conseguenza pratica: aggiungere un nome alla POSTA (il nome generico OVH per
 # la transizione, mail.theqult.org, ...) NON richiede di toccare questo file.
@@ -29,7 +29,6 @@
 #   THEQULT_UPSTREAM      -> backend dell'API TheQult      (es. theqult:8080)
 #   MADDALENA_UPSTREAM    -> backend del sito Maddalena    (es. maddalena:8080)
 #   TILESERVER_UPSTREAM   -> tiles della mappa             (es. tileserver:8080)
-#   LUOGHI_UPSTREAM       -> ricerca di posti per nome     (es. luoghi:8090)
 #   MAILCOW_TLS_UPSTREAM  -> nginx di mailcow, HTTPS       (es. nginx-mailcow:8443)
 #   MAILCOW_HTTP_UPSTREAM -> nginx di mailcow, HTTP        (es. nginx-mailcow:8080)
 {
@@ -188,19 +187,7 @@
 		reverse_proxy {$TILESERVER_UPSTREAM:tileserver:8080}
 	}
 
-	# /luoghi -> ricerca di un posto per nome ("madrid" -> coordinate). E' il
-	# pezzo che alle tessere manca: loro DISEGNANO Madrid, questo la TROVA.
-	# Senza, un'app puo' cercare solo fra le tessere che ha gia' scaricato,
-	# cioe' quelle intorno a dove si trova.
-	#   /luoghi/cerca?q=madrid   -> i risultati
-	#   /luoghi/stato            -> quanti luoghi conosce
-	# Stesso default innocuo, per non far cadere Caddy se il compose e' piu'
-	# vecchio del Caddyfile.
-	handle_path /luoghi/* {
-		reverse_proxy {$LUOGHI_UPSTREAM:luoghi:8090}
-	}
-
-	# Tutto il resto (incluso /licensing, ora servito da Maddalena) -> il sito Maddalena.
+	# Tutto il resto -> il sito Maddalena.
 	handle {
 		reverse_proxy {$MADDALENA_UPSTREAM}
 	}

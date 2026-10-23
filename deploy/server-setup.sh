@@ -101,14 +101,36 @@ for tarball in matteofabbri-*.tar; do
 done
 
 # Il .env deve essere compilato: blocco se le voci chiave sono vuote.
-if grep -qE '^(ACME_EMAIL|SITE_DOMAIN|WEBMAIL_HOST|SITE_IMAGE|SITE_PORT|THEQULT_IMAGE|THEQULT_PORT|MADDALENA_IMAGE|MADDALENA_PORT|POSTGRES_PASSWORD|MAILCOW_TLS_UPSTREAM|MAILCOW_HTTP_UPSTREAM)=\s*$' .env; then
+if grep -qE '^(ACME_EMAIL|SITE_DOMAIN|WEBMAIL_HOST|SITE_IMAGE|SITE_PORT|THEQULT_IMAGE|THEQULT_PORT|MADDALENA_IMAGE|MADDALENA_PORT|MAILCOW_TLS_UPSTREAM|MAILCOW_HTTP_UPSTREAM)=\s*$' .env; then
     echo
     echo "FERMO QUI: $STACK_DIR/.env ha valori vuoti. Compilalo e poi:"
     echo "  cd $STACK_DIR && docker compose up -d --build"
     exit 1
 fi
 
-docker compose up -d --build
+docker compose up -d --build --remove-orphans
+
+# Pulizia GENERICA dei componenti rimasti orfani (servizi tolti dal compose,
+# es. valhalla o postgres): funziona per label di progetto, non per nome di
+# servizio. --remove-orphans ha gia' buttato i container; qui si tolgono i
+# volumi e le immagini del progetto che nessun container usa piu'.
+# OCCHIO: un volume orfano contiene i DATI del servizio tolto (per un DB:
+# tutto quello che cera dentro). Se possono ancora servire, salvali PRIMA di
+# rilanciare: da qui in poi spariscono.
+# La label e' di questo stack soltanto: i volumi di mailcow restano fuori.
+PROGETTO="$(basename "$STACK_DIR")"
+for v in $(docker volume ls --filter label=com.docker.compose.project="$PROGETTO" --format '{{.Name}}'); do
+    if [ -z "$(docker ps -aq --filter volume="$v")" ]; then
+        echo "volume orfano (nessun container lo usa): $v -> rimuovo"
+        docker volume rm "$v" || true
+    fi
+done
+for img in $(docker images --filter label=com.docker.compose.project="$PROGETTO" --format '{{.ID}}'); do
+    if [ -z "$(docker ps -aq --filter ancestor="$img")" ]; then
+        echo "immagine orfana (nessun container la usa): $img -> rimuovo"
+        docker rmi "$img" || true
+    fi
+done
 
 # --- 5. Riepilogo -------------------------------------------------------------
 step "5/5 Stato"

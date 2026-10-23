@@ -1,0 +1,52 @@
+@page "/admin/media"
+@model MainSite.Pages.Admin.MediaModel
+@{
+    ViewData["Title"] = "Immagini";
+}
+
+<div class="page-head">
+    <div>
+        <p class="eyebrow"><a asp-page="/Admin/Index">I tuoi articoli</a> / Immagini</p>
+        <h1>Immagini</h1>
+        <p class="lede">Le immagini caricate qui finiscono nel volume del blog e si possono citare dagli articoli.</p>
+    </div>
+</div>
+
+@if (TempData["Messaggio"] is string message)
+{
+    <div class="alert success">@message</div>
+}
+@if (TempData["Errore"] is string error)
+{
+    <div class="alert error">@error</div>
+}
+
+<form method="post" enctype="multipart/form-data" class="upload-form">
+    <label class="field">
+        <span class="field-label">Carica un'immagine</span>
+        <input type="file" name="Upload" accept="image/jpeg,image/png,image/gif,image/webp,image/avif" />
+        <span class="hint">JPG, PNG, GIF, WebP o AVIF. Massimo 8 MB.</span>
+    </label>
+    <button type="submit" class="button">Carica</button>
+</form>
+
+@if (Model.Files.Count == 0)
+{
+    <div class="empty"><p>Nessuna immagine caricata.</p></div>
+}
+else
+{
+    <div class="media-grid">
+        @foreach (var file in Model.Files)
+        {
+            <figure class="media-item">
+                <img src="@file.Url" alt="" loading="lazy" />
+                <figcaption>
+                    <span class="media-name">@file.FileName</span>
+                    <span class="hint">@file.SizeLabel</span>
+                    <code>![descrizione](@file.Url)</code>
+                </figcaption>
+            </figure>
+        }
+    </div>
+}

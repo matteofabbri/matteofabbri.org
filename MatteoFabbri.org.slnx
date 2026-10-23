@@ -1,9 +1,6 @@
 <Solution>
-  <Folder Name="/LIBRARIES/">
-    <Project Path="LIBRARIES/MADDALENA/Maddalena.Licensing/Maddalena.Licensing.csproj" />
-    <Project Path="LIBRARIES/MADDALENA/Maddalena.Licensing.Issuing/Maddalena.Licensing.Issuing.csproj" />
-    <Project Path="LIBRARIES/MADDALENA/Maddalena.Licensing.Tests/Maddalena.Licensing.Tests.csproj" />
-  </Folder>
+  <Folder Name="/LIBRARIES/" />
+  <Project Path="MainSite.Tests/MainSite.Tests.csproj" />
   <Project Path="MainSite/MainSite.csproj" />
   <Project Path="TheQult/TheQult.csproj" />
   <Project Path="Maddalena/Maddalena.csproj" />

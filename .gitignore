@@ -2,14 +2,14 @@
 [Bb]in/
 [Oo]bj/
 
+# --- Blog: contenuti e immagini creati in sviluppo.
+#     In produzione stanno nel volume Docker "blog-data", mai nell'immagine. ---
+MainSite/App_Data/
+
 # --- Output di pubblicazione (publish.ps1 genera ./out con .env e immagini) ---
 # Contiene segreti (ACME_EMAIL, ecc.) e l'immagine docker: NON va su git.
 [Oo]ut/
 *.tar
-
-# --- Frontend di Maddalena: wwwroot e' GENERATA dalla build Vite del
-#     submodule external/maddelena-FE (target BuildSpa nel csproj) ---
-Maddalena/wwwroot/
 
 # --- Residuo: lo stato dell'LLM in dev. Il motore LLM e' stato rimosso da
 #     Maddalena; la regola resta finche' non si cancellano a mano le cartelle. ---

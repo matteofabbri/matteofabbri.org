@@ -1,0 +1,73 @@
+@page "/admin"
+@model MainSite.Pages.Admin.IndexModel
+@{
+    ViewData["Title"] = "Scrivi";
+}
+
+<div class="page-head">
+    <div>
+        <p class="eyebrow">Area di scrittura</p>
+        <h1>I tuoi articoli</h1>
+        <p class="lede">@(Model.Posts.Count == 1 ? "1 articolo in totale, bozze comprese." : $"{Model.Posts.Count} articoli in totale, bozze comprese.")</p>
+    </div>
+    <div class="actions">
+        <a class="button button-secondary" asp-page="/Admin/Media">Immagini</a>
+        <a class="button" asp-page="/Admin/Edit">Nuovo articolo</a>
+    </div>
+</div>
+
+@if (TempData["Messaggio"] is string message)
+{
+    <div class="alert success">@message</div>
+}
+@if (TempData["Errore"] is string error)
+{
+    <div class="alert error">@error</div>
+}
+
+@if (Model.Posts.Count == 0)
+{
+    <div class="empty">
+        <p>Non hai ancora scritto niente.</p>
+        <p><a asp-page="/Admin/Edit">Crea il primo articolo</a>.</p>
+    </div>
+}
+else
+{
+    <div class="table-wrap">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>Titolo</th>
+                    <th>Stato</th>
+                    <th>Data</th>
+                    <th class="cell-actions">Azioni</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var post in Model.Posts)
+                {
+                    string status = Model.Status(post);
+                    <tr>
+                        <td>
+                            <a class="table-title" asp-page="/Admin/Edit" asp-route-slug="@post.Slug">@post.Title</a>
+                            <span class="table-slug">/@post.Slug</span>
+                        </td>
+                        <td>
+                            <span class="badge badge-@status">@status</span>
+                        </td>
+                        <td class="cell-date">@Model.Clock.Format(post.Published, "d MMM yyyy")</td>
+                        <td class="cell-actions">
+                            <a asp-page="/Admin/Edit" asp-route-slug="@post.Slug">Modifica</a>
+                            <a asp-page="/Blog/Post" asp-route-slug="@post.Slug">Vedi</a>
+                            <form method="post" asp-page-handler="Delete" asp-route-slug="@post.Slug"
+                                  onsubmit="return confirm('Spostare questo articolo nel cestino?');">
+                                <button type="submit" class="link-button danger">Elimina</button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}

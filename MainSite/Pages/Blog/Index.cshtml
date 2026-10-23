@@ -1,0 +1,84 @@
+@page "/blog"
+@model MainSite.Pages.Blog.IndexModel
+@{
+    ViewData["Title"] = "Blog";
+    bool isAuthor = Model.IsAuthor;
+    var now = DateTimeOffset.UtcNow;
+}
+
+<div class="page-head">
+    <div>
+        <p class="eyebrow">Appunti</p>
+        <h1>Blog</h1>
+        <p class="lede">Progetti, idee e cose che vale la pena raccontare.</p>
+    </div>
+    @if (isAuthor)
+    {
+        <a class="button" asp-page="/Admin/Edit">Nuovo articolo</a>
+    }
+</div>
+
+@if (Model.Posts.Count == 0)
+{
+    <div class="empty">
+        <p>Qui non c'è ancora niente da leggere.</p>
+        @if (isAuthor)
+        {
+            <p><a asp-page="/Admin/Edit">Scrivi il primo articolo</a>.</p>
+        }
+    </div>
+}
+else
+{
+    @if (Model.Tags.Count > 0)
+    {
+        <nav class="tag-cloud" aria-label="Tag">
+            @foreach (string tag in Model.Tags)
+            {
+                <a class="tag" asp-page="/Blog/Tag" asp-route-tag="@BlogMarkdown.Slugify(tag)">@tag</a>
+            }
+        </nav>
+    }
+
+    <div class="post-list">
+        @foreach (var post in Model.Posts)
+        {
+            bool visible = post.IsVisibleAt(now);
+            <article class="post-card">
+                <div class="post-meta">
+                    <time datetime="@post.Published.UtcDateTime.ToString("yyyy-MM-dd")">@Model.Clock.Format(post.Published)</time>
+                    @if (BlogMarkdown.ReadingMinutes(post.Markdown) > 0)
+                    {
+                        <span aria-hidden="true">·</span>
+                        <span>@BlogMarkdown.ReadingMinutes(post.Markdown) min di lettura</span>
+                    }
+                    @if (!visible)
+                    {
+                        <span class="badge @(post.Draft ? "badge-draft" : "badge-scheduled")">
+                            @(post.Draft ? "bozza" : "programmato")
+                        </span>
+                    }
+                </div>
+
+                <h2 class="post-title">
+                    <a asp-page="/Blog/Post" asp-route-slug="@post.Slug">@post.Title</a>
+                </h2>
+
+                @if (!string.IsNullOrWhiteSpace(post.Summary))
+                {
+                    <p class="post-summary">@post.Summary</p>
+                }
+
+                @if (post.Tags.Count > 0)
+                {
+                    <div class="tags">
+                        @foreach (string tag in post.Tags)
+                        {
+                            <a class="tag" asp-page="/Blog/Tag" asp-route-tag="@BlogMarkdown.Slugify(tag)">@tag</a>
+                        }
+                    </div>
+                }
+            </article>
+        }
+    </div>
+}

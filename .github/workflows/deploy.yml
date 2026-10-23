@@ -11,9 +11,6 @@
 # Segreti usati (impostati via `gh secret set`):
 #   DEPLOY_SSH_KEY   — chiave privata dedicata per ubuntu@server (la pubblica e'
 #                      in authorized_keys sul server; NON e' la chiave .ppk di Matteo)
-#   FE_SUBMODULE_KEY — deploy key read-only del repo privato matteofabbri.org-FE
-#                      (ex maddelena-FE, ricreato il 2026-07-24), serve solo a
-#                      scaricare il submodule del frontend
 name: deploy
 
 on:
@@ -36,29 +33,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Il submodule maddelena-FE e' privato: il token del workflow non lo vede,
-      # si scarica via SSH con la sua deploy key. E' l'UNICO submodule che serve:
-      # SPERONE e PredicitiveCoding non li referenzia piu' nessuno dei tre siti.
-      - name: Checkout submodule frontend
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.FE_SUBMODULE_KEY }}" > ~/.ssh/fe_key
-          chmod 600 ~/.ssh/fe_key
-          ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
-          git submodule init external/maddelena-FE
-          git config submodule.external/maddelena-FE.url git@github.com:matteofabbri/matteofabbri.org-FE.git
-          GIT_SSH_COMMAND="ssh -i ~/.ssh/fe_key -o IdentitiesOnly=yes" \
-            git submodule update external/maddelena-FE
-
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
-
-      # Node per la build Vite del frontend (target BuildSpa nel csproj di
-      # Maddalena: fa da solo npm install + npm run build).
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
 
       - name: Build immagini
         run: |
@@ -86,7 +63,7 @@ jobs:
       # al loro posto accanto al compose.
       - name: Aggiornamento contesti di build
         run: |
-          for ctx in caddy tileserver luoghi; do
+          for ctx in caddy tileserver; do
             ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$SERVER" "rm -rf ~/$ctx-new"
             scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -r \
               "MatteoFabbri.org.AppHost/$ctx" "$SERVER:~/$ctx-new"
@@ -95,12 +72,39 @@ jobs:
           done
 
       # up -d --build ricrea SOLO i container cambiati (immagine nuova o contesto
-      # Caddy cambiato); il prune butta le immagini vecchie rimaste senza tag
-      # (sennò il disco si riempie).
+      # di build cambiato). --remove-orphans butta i container dei servizi che
+      # NON ESISTONO PIU' nel compose (un servizio tolto dall'AppHost); il prune
+      # butta le immagini vecchie rimaste senza tag (sennò il disco si riempie).
+      # I due cicli finali completano la pulizia in modo GENERICO — per label di
+      # progetto, senza nomi di servizi: volumi e immagini dello stack che nessun
+      # container usa più (il grafo di valhalla, i dati di postgres, ...) vengono
+      # rimossi a ogni deploy. Vale solo per lo stack matteofabbri: i volumi di
+      # mailcow non hanno quella label e non vengono toccati.
+      # OCCHIO: un volume orfano contiene i DATI del servizio tolto — se possono
+      # ancora servire (un DB, ad esempio), salvali PRIMA di aggiornare il
+      # compose sul server, perché dal deploy successivo spariscono.
       - name: Riavvio container e pulizia
         run: |
-          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$SERVER" \
-            'cd /opt/matteofabbri && sudo docker compose up -d --build && sudo docker image prune -f'
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$SERVER" '
+            set -e
+            cd /opt/matteofabbri
+            sudo docker compose up -d --build --remove-orphans
+            sudo docker image prune -f
+            PROGETTO=$(basename "$PWD")
+            echo "=== Pulizia componenti non piu usati del progetto $PROGETTO ==="
+            for v in $(sudo docker volume ls --filter label=com.docker.compose.project="$PROGETTO" --format "{{.Name}}"); do
+              if [ -z "$(sudo docker ps -aq --filter volume="$v")" ]; then
+                echo "volume senza container: $v -> rimuovo"
+                sudo docker volume rm "$v" || true
+              fi
+            done
+            for img in $(sudo docker images --filter label=com.docker.compose.project="$PROGETTO" --format "{{.ID}}"); do
+              if [ -z "$(sudo docker ps -aq --filter ancestor="$img")" ]; then
+                echo "immagine senza container: $img -> rimuovo"
+                sudo docker rmi "$img" || true
+              fi
+            done
+          '
 
       # Solo maddalena.me: gli altri due domini non hanno ancora il DNS puntato qui.
       - name: Verifica
