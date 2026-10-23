@@ -72,6 +72,25 @@ jobs:
               "sudo mkdir -p /opt/matteofabbri/$ctx && sudo cp -r ~/$ctx-new/. /opt/matteofabbri/$ctx/ && rm -rf ~/$ctx-new"
           done
 
+      # Blog: il volume deve esistere ed essere scrivibile dall'utente `app`
+      # (UID 1654) PRIMA che il sito parta. L'override aggiunge mount e
+      # variabili del blog; se sul server ce n'è già uno, lo conserviamo.
+      - name: Blog: volume e override
+        run: |
+          scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \
+            deploy/docker-compose.override.yml "$SERVER:~/site-compose.override.yml"
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$SERVER" '
+            set -e
+            stamp=$(date +%Y%m%d-%H%M%S)
+            if [ -f /opt/matteofabbri/docker-compose.override.yml ]; then
+              sudo cp /opt/matteofabbri/docker-compose.override.yml /opt/matteofabbri/docker-compose.override.yml.$stamp.bak
+            fi
+            sudo mv ~/site-compose.override.yml /opt/matteofabbri/docker-compose.override.yml
+            sudo chown root:root /opt/matteofabbri/docker-compose.override.yml
+            sudo docker volume create matteofabbri_blog-data >/dev/null
+            sudo docker run --rm -v matteofabbri_blog-data:/data alpine chown -R 1654:1654 /data
+          '
+
       # up -d --build ricrea SOLO i container cambiati (immagine nuova o contesto
       # di build cambiato). --remove-orphans butta i container dei servizi che
       # NON ESISTONO PIU' nel compose (un servizio tolto dall'AppHost); il prune
@@ -117,6 +136,8 @@ jobs:
             cd /opt/matteofabbri
             sudo docker compose ps
             sudo docker inspect --format "user={{.Config.User}}" $(sudo docker compose ps -q site) || true
+            sudo docker compose exec -T site sh -c "id; ls -ld /data/blog; touch /data/blog/.probe && rm /data/blog/.probe && echo blog-writable" || true
+            curl -sS -o /dev/null -w "blog=%{http_code}\n" https://matteofabbri.org/blog || true
             sudo docker compose logs --tail=120 site
           '
 
