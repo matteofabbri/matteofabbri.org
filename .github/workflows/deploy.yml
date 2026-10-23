@@ -75,7 +75,7 @@ jobs:
       # Blog: il volume deve esistere ed essere scrivibile dall'utente `app`
       # (UID 1654) PRIMA che il sito parta. L'override aggiunge mount e
       # variabili del blog; se sul server ce n'è già uno, lo conserviamo.
-      - name: Blog: volume e override
+      - name: "Blog: volume e override"
         run: |
           scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \
             deploy/docker-compose.override.yml "$SERVER:~/site-compose.override.yml"
