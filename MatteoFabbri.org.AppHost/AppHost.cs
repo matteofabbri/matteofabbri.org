@@ -142,47 +142,6 @@ var theqult = builder.AddProject<Projects.TheQult>("theqult");
 // Caddy e DNS già configurati) finché non arriverà il nuovo contenuto.
 var maddalena = builder.AddProject<Projects.Maddalena>("maddalena");
 
-// --- Mappe: i tiles -----------------------------------------------------------
-// tileserver-gl serve l'IMMAGINE della mappa sotto maddalena.me/tiles.
-// Resta interno: fuori ci arriva solo Caddy.
-
-// Quale mappa del mondo scaricare. Vuoto = l'ultima pubblicata: Protomaps ne
-// sforna una al giorno col nome fatto di data (20260731.pmtiles) e tiene online
-// solo l'ultima settimana, quindi un indirizzo fisso "l'ultimo" non esiste e lo
-// script d'avvio va a ritroso dall'oggi finche' non ne trova uno. Si valorizza
-// nel .env solo per inchiodare una versione precisa.
-var planetUrl = builder.AddParameter("planet-url",
-    () => builder.Configuration["Parameters:planet-url"] ?? "");
-
-// A differenza dell'immagine ufficiale, questa si SCARICA DA SOLA la mappa del
-// mondo (~137 GB) e i font al primo avvio, dentro il volume: vedi
-// ./tileserver/prepara-mappe.sh. Nessun file da portare a mano sul server.
-// Il primo avvio dura quanto il download; nel frattempo /tiles risponde 502.
-var tileserver = builder.AddDockerfile("tileserver", "tileserver")
-    // La mappa scaricata. Senza volume ogni riavvio rifarebbe i 137 GB.
-    .WithVolume("tileserver-data", "/data")
-    .WithEndpoint(targetPort: 8080, scheme: "http", name: "http")
-    .WithEnvironment("PLANET_URL", planetUrl)
-    // Indispensabile dietro a un prefisso di percorso: tileserver-gl scrive gli
-    // indirizzi delle tiles DENTRO il JSON dello stile che serve. Senza questo
-    // li scriverebbe come /data/... e il client li chiederebbe alla radice del
-    // dominio, dove non c'e' niente.
-    .WithArgs("--public_url", ReferenceExpression.Create($"https://{maddalenaDomain}/tiles/"))
-    // Come per Caddy: senza questo il compose uscirebbe con
-    // `image: ${TILESERVER_IMAGE}` — cioe' PRETENDEREBBE un'immagine gia'
-    // costruita altrove, e sul server (dove quella variabile e' vuota) il
-    // container non partirebbe affatto. E' il comportamento di default di
-    // Aspire per AddDockerfile; va corretto a mano per ogni immagine su misura.
-    .PublishAsDockerComposeService((_, service) =>
-    {
-        service.Image = null;
-        service.Build = new Build
-        {
-            Context = "./tileserver",
-            Dockerfile = "Dockerfile",
-        };
-    });
-
 // L'indirizzo interno (host:porta) a cui Caddy inoltra il traffico del sito:
 // deriva dall'endpoint del progetto. HostAndPort restituisce "host:porta" gia'
 // risolti e si adatta da solo alla modalita': in pubblicazione diventa "site:8080",
@@ -194,8 +153,6 @@ var thequltUpstream = ReferenceExpression.Create(
     $"{theqult.GetEndpoint("http").Property(EndpointProperty.HostAndPort)}");
 var maddalenaUpstream = ReferenceExpression.Create(
     $"{maddalena.GetEndpoint("http").Property(EndpointProperty.HostAndPort)}");
-var tileserverUpstream = ReferenceExpression.Create(
-    $"{tileserver.GetEndpoint("http").Property(EndpointProperty.HostAndPort)}");
 
 // --- Caddy: la "portineria" sulle porte 80/443 ------------------------------
 // Immagine su misura (Caddy ufficiale + modulo layer4), costruita dal
@@ -218,7 +175,6 @@ var caddy = builder.AddDockerfile("caddy", "caddy")
     .WithEnvironment("SITE_UPSTREAM", siteUpstream)
     .WithEnvironment("THEQULT_UPSTREAM", thequltUpstream)
     .WithEnvironment("MADDALENA_UPSTREAM", maddalenaUpstream)
-    .WithEnvironment("TILESERVER_UPSTREAM", tileserverUpstream)
     .WithEnvironment("MAILCOW_TLS_UPSTREAM", mailcowTlsUpstream)
     .WithEnvironment("MAILCOW_HTTP_UPSTREAM", mailcowHttpUpstream)
     // Aggancia Caddy alla rete condivisa (per raggiungere mailcow per nome) e

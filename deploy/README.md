@@ -7,7 +7,6 @@ per nome:
 - `matteofabbri.org` (`SITE_DOMAIN`) → sito personale (progetto `site`)
 - `theqult.org` (`THEQULT_DOMAIN`)   → API `TheQult`
 - `maddalena.me` (`MADDALENA_DOMAIN`) → sito `Maddalena` (per ora un hello world)
-- `maddalena.me/tiles`               → tileserver-gl, immagine della mappa
 - `<dominio>/mail` (tutti e tre)     → redirect a `https://<WEBMAIL_HOST>`
 - **qualunque altro nome**           → mailcow (TLS **passato sigillato**: il
   certificato se lo fa mailcow)
@@ -129,81 +128,6 @@ Avvia (la prima volta costruisce l'immagine Caddy su misura, col modulo layer4):
 cd out
 docker compose up -d --build
 ```
-
----
-
-## 2-bis. Le mappe: tileserver-gl
-
-tileserver-gl serve l'immagine della mappa su `maddalena.me/tiles` e resta
-interno: fuori ci arriva solo Caddy.
-
-Non c'è niente da portare a mano. L'immagine è nostra (contesto
-`MatteoFabbri.org.AppHost/tileserver`, costruita sul server dal `--build`): al
-primo avvio, se il volume `tileserver-data` è vuoto, scarica da sé la **mappa
-del mondo di Protomaps** — circa **137 GB**, zoom 0-15, licenza ODbL — più i
-font per le etichette (~19 MB). Poi parte. Ai riavvii trova tutto e parte
-subito.
-
-Il primo avvio dura quanto il download. Nel frattempo `/tiles` risponde 502: è
-normale, non è rotto. Se il container viene fermato a metà, il download
-**riprende da dove era** (non ricomincia).
-
-Come va: `sudo docker compose logs -f tileserver` — le righe sono marcate
-`[mappe]`.
-
-**Quale build.** Protomaps ne pubblica uno al giorno, il nome è la data
-(`20260731.pmtiles`), e tiene online solo l'ultima settimana: un indirizzo
-fisso "l'ultimo" non esiste. Lo script parte da oggi e va a ritroso finché non
-ne trova uno che risponde. Per inchiodare una versione precisa, nel `.env`:
-
-```ini
-PLANET_URL=https://build.protomaps.com/20260731.pmtiles
-```
-
-Lasciato vuoto = sempre l'ultimo disponibile al momento del primo avvio.
-
-**Per aggiornare la mappa** (i dati OpenStreetMap invecchiano): cancella il
-file e riavvia, si riscarica l'ultimo.
-
-```bash
-sudo docker compose stop tileserver
-sudo docker run --rm -v matteofabbri_tileserver-data:/data alpine rm -f /data/planet.pmtiles
-sudo docker compose start tileserver
-```
-
-Prova che funzioni:
-
-```bash
-curl -s "https://maddalena.me/tiles/data/planet.json" | head -c 300
-```
-
-**Cosa serve il server e cosa no.** Serve i **dati** (le tessere) e i **font**
-delle etichette:
-
-- tessere: `/tiles/data/planet/{z}/{x}/{y}.pbf` — il contratto sta in
-  `/tiles/data/planet.json`
-- font: `/tiles/fonts/{nome}/{intervallo}.pbf`, per esempio
-  `/tiles/fonts/Noto%20Sans%20Medium/0-255.pbf`
-
-Non serve lo **stile** (l'aspetto grafico: colori, spessori, quali etichette a
-quale zoom): quello lo porta il frontend, dove appartiene, insieme alle icone
-dei punti d'interesse. Lo stile va preso dai temi Protomaps — `light`, `dark`,
-`white`, `black`, `grayscale` — e dentro vanno puntati gli indirizzi qui sopra
-al posto di quelli del CDN pubblico.
-
-> Dettaglio che è costato una mezz'ora di prove, per chi ci rimetterà mano:
-> nel `config.json` generato c'è `"serveAllFonts": true`, e non è decorativo.
-> Senza, tileserver-gl serve solo i font citati da uno stile che conosce — e
-> stili non ne ha — quindi ogni font risponde `400 Error serving font` e la
-> mappa esce **senza una scritta**. L'immagine ufficiale, fra l'altro, porta un
-> solo font dei quattro che lo stile Protomaps usa: gli altri tre arrivano col
-> download dei ~19 MB.
-
-> `--public_url` è impostato dall'AppHost a `https://<MADDALENA_DOMAIN>/tiles/`
-> e non è un dettaglio: tileserver-gl scrive gli indirizzi delle tiles **dentro**
-> il JSON dello stile che serve, in forma assoluta. Se non concorda col percorso
-> reale, il client chiede le tiles alla radice del dominio e trova il sito
-> Maddalena invece della mappa.
 
 ---
 
@@ -607,8 +531,7 @@ questa macchina il disco pieno di agosto ha corrotto tre container di mailcow.
 df -h /
 ```
 
-Con parecchi GB liberi si va tranquilli; sotto i ~10 GB meglio fare ordine
-prima (le mappe occupano tanto).
+Con parecchi GB liberi si va tranquilli; sotto i ~10 GB meglio fare ordine prima.
 
 ```bash
 cd /opt/mailcow-dockerized

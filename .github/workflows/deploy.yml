@@ -2,7 +2,7 @@
 # porta sul server, poi `docker compose up -d` riavvia solo i container cambiati.
 # E' lo stesso flusso manuale (publish.ps1 + docker save/load), automatizzato.
 #
-# Porta anche i contesti di build che stanno nel repo (Caddy e tileserver): il
+# Porta anche il contesto di build che sta nel repo (Caddy): il
 # `--build` del riavvio ricostruisce l'immagine solo se e' cambiato qualcosa.
 #
 # NON tocca: docker-compose/.env e mailcow — restano manuali (contengono
@@ -58,13 +58,12 @@ jobs:
               ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$SERVER" 'gunzip | sudo docker load'
           done
 
-      # I contesti di build che vivono nel repo: Caddy e tileserver (quest'ultimo
-      # e' l'immagine che si scarica la mappa del mondo da sola all'avvio).
-      # Passano dalla home perche' ubuntu non scrive in /opt, poi sudo li mette
-      # al loro posto accanto al compose.
+      # Il contesto di build che vive nel repo: Caddy.
+      # Passa dalla home perche' ubuntu non scrive in /opt, poi sudo lo mette
+      # al suo posto accanto al compose.
       - name: Aggiornamento contesti di build
         run: |
-          for ctx in caddy tileserver; do
+          for ctx in caddy; do
             ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$SERVER" "rm -rf ~/$ctx-new"
             scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -r \
               "MatteoFabbri.org.AppHost/$ctx" "$SERVER:~/$ctx-new"

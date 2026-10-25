@@ -39,11 +39,11 @@ foreach ($image in $images) {
     }
 }
 
-# Contesti di build accanto al compose: Caddy e tileserver (l'immagine che si
-# scarica la mappa del mondo da sola). La destinazione si azzera prima: con
+# Contesti di build accanto al compose: Caddy (l'immagine su misura col modulo
+# layer4). La destinazione si azzera prima: con
 # -Force su una cartella gia' esistente Copy-Item copierebbe DENTRO di essa
 # (out\caddy\caddy) lasciando al primo livello i file della publish precedente.
-foreach ($ctx in @("caddy", "tileserver")) {
+foreach ($ctx in @("caddy")) {
     $ctxOut = Join-Path $Output $ctx
     if (Test-Path $ctxOut) { Remove-Item -Recurse -Force $ctxOut }
     Copy-Item -Recurse (Join-Path "MatteoFabbri.org.AppHost" $ctx) $ctxOut
@@ -53,8 +53,6 @@ Write-Host ""
 Write-Host "Fatto. Output in: $Output" -ForegroundColor Green
 Write-Host "Prossimi passi:"
 Write-Host "  1. compila $Output\.env (SITE_IMAGE/THEQULT_IMAGE/MADDALENA_IMAGE=matteofabbri-*:latest, *_PORT=8080, ...)"
-Write-Host "     PLANET_URL puo' restare VUOTO: tileserver si scarica da solo l'ultima"
-Write-Host "     mappa del mondo (~137 GB) al primo avvio. Si valorizza solo per fissare una versione."
 Write-Host "  2. porta le tre immagini sul server se e' remoto:"
 Write-Host "       docker save matteofabbri-site matteofabbri-theqult matteofabbri-maddalena | ssh server docker load"
 Write-Host "  3. sul server:  docker compose up -d --build --remove-orphans"
