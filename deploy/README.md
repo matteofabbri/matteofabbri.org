@@ -196,10 +196,18 @@ l'unico modo per arrivarci. La casella è **hardcodata**:
 `matteo@matteofabbri.org`.
 
 ```
-GET  /booking                         pagina con gli slot liberi
+GET  /booking                         calendario mensile di disponibilità
 GET  /api/booking/availability?from=2026-11-01&to=2026-11-30
 POST /api/booking/appointments
 ```
+
+La pagina **`/booking`** è client-side: carica `/api/booking/availability` per
+il mese visibile e colora i giorni — **verde** = tutti gli slot liberi,
+**giallo** = parzialmente libero ("forse"), **rosso** = occupato/non
+prenotabile; weekend e giorni passati sono spenti. Cliccando un giorno si
+aprono gli orari: quelli liberi sono selezionabili, quelli occupati barrati.
+Il form chiede nome, email, **link alla video call** e nota; la prenotazione
+crea l'evento con il link nella descrizione.
 
 Il POST accetta anche `meetingUrl` (link http/https alla video call scelta da
 chi prenota); finisce nella descrizione dell'evento in calendario.
