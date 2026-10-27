@@ -26,8 +26,8 @@ public static class BlogAuth
 
     public const string CookieName = "mf-blog-auth";
 
-    // Cookie valido E claim di autore. L'allowlist corrente viene ricontrollata
-    // dalla policy BlogAuthor a ogni richiesta (vedi Program.cs).
+    // Cookie valido con il claim che BlogAuth mette solo dopo che mailcow ha
+    // autenticato la casella.
     public static bool IsAuthor(ClaimsPrincipal user) =>
         user.Identity?.IsAuthenticated == true
         && user.HasClaim(AuthorClaim, "true");
@@ -142,8 +142,8 @@ public static class BlogAuth
                 identity.AddClaim(new Claim(ClaimTypes.NameIdentifier, email));
                 identity.AddClaim(new Claim(ClaimTypes.Email, email));
                 identity.AddClaim(new Claim(ClaimTypes.Name, name));
-                // Il claim che la policy BlogAuthor controlla: non basta essere
-                // autenticati, bisogna essere passati dall'allowlist qui sopra.
+                // Il claim che apre l'area di scrittura: lo riceve qualunque
+                // casella che mailcow ha appena autenticato.
                 identity.AddClaim(new Claim(AuthorClaim, "true"));
             };
 
