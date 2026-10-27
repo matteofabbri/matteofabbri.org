@@ -106,11 +106,13 @@ public sealed class BookingServiceTests
             Name = "  Mario   Rossi ",
             Email = "mario@example.com",
             Note = "Vorrei parlare di X",
+            MeetingUrl = "https://meet.google.com/abc-defg-hij",
         }, default);
 
         var created = Assert.Single(gateway.Created);
         Assert.Equal("booking-20261102T080000Z", created.Uid);
         Assert.Equal("Mario Rossi", created.Name);
+        Assert.Equal("https://meet.google.com/abc-defg-hij", created.MeetingUrl);
         Assert.Equal(new DateTimeOffset(2026, 11, 2, 8, 0, 0, TimeSpan.Zero), created.Start);
         Assert.Equal(response.Id, created.Uid);
     }
@@ -127,6 +129,7 @@ public sealed class BookingServiceTests
             Start = new DateTimeOffset(2026, 11, 2, 9, 15, 0, TimeSpan.FromHours(1)),
             Name = "Mario Rossi",
             Email = "mario@example.com",
+            MeetingUrl = "https://meet.google.com/abc-defg-hij",
         }, default));
     }
 
@@ -141,6 +144,7 @@ public sealed class BookingServiceTests
             Start = new DateTimeOffset(2026, 11, 2, 9, 0, 0, TimeSpan.FromHours(1)),
             Name = "Mario Rossi",
             Email = "mario@example.com",
+            MeetingUrl = "https://meet.google.com/abc-defg-hij",
         }, default));
     }
 
@@ -157,6 +161,24 @@ public sealed class BookingServiceTests
             Start = new DateTimeOffset(2026, 11, 2, 9, 0, 0, TimeSpan.FromHours(1)),
             Name = "Mario Rossi",
             Email = email,
+            MeetingUrl = "https://meet.google.com/abc-defg-hij",
+        }, default));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("non-un-link")]
+    [InlineData("ftp://example.com/meeting")]
+    public async Task Un_link_video_non_valido_ferma_la_prenotazione(string meetingUrl)
+    {
+        var service = CreateService(new FakeGateway(), Now);
+
+        await Assert.ThrowsAsync<BookingValidationException>(() => service.BookAsync(new BookingRequest
+        {
+            Start = new DateTimeOffset(2026, 11, 2, 9, 0, 0, TimeSpan.FromHours(1)),
+            Name = "Mario Rossi",
+            Email = "mario@example.com",
+            MeetingUrl = meetingUrl,
         }, default));
     }
 

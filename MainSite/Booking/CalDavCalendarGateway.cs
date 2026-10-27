@@ -199,7 +199,9 @@ public sealed class CalDavCalendarGateway : ICalendarGateway
             Version = "2.0",
         };
 
-        var description = new StringBuilder(booking.Email);
+        var description = new StringBuilder();
+        description.Append("Video call: ").Append(booking.MeetingUrl);
+        description.Append('\n').Append(booking.Email);
         if (!string.IsNullOrWhiteSpace(booking.Note))
             description.Append('\n').Append(booking.Note);
 
@@ -209,7 +211,7 @@ public sealed class CalDavCalendarGateway : ICalendarGateway
             DtStamp = ToCalDateTime(DateTimeOffset.UtcNow),
             DtStart = ToCalDateTime(booking.Start),
             DtEnd = ToCalDateTime(booking.End),
-            Summary = $"Appuntamento con {booking.Name}",
+            Summary = $"Video call with {booking.Name}",
             Description = description.ToString(),
             Status = EventStatus.Confirmed,
             Transparency = TransparencyType.Opaque,

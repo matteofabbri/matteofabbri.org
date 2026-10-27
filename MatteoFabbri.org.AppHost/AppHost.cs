@@ -84,14 +84,11 @@ var mailcowHttpUpstream = builder.AddParameter("mailcow-http-upstream");
 var caldavUrl = builder.AddParameter("caldav-url",
     () => builder.Configuration["Parameters:caldav-url"] ?? "https://mail.maddalena.me/SOGo/dav/");
 
-// La casella: email completa come nome utente. La password NON è quella vera
-// della casella ma un'APP PASSWORD creata in mailcow con accesso DAV (le
-// password vere cambiano, e con 2FA i client DAV non funzionano affatto).
-// Vuote = prenotazioni spente (l'API risponde 503), il sito parte lo stesso.
-//   dotnet user-secrets set "Parameters:caldav-username" "matteo@maddalena.me" --project <questo AppHost>
+// La casella è fissa nel codice (matteo@matteofabbri.org); qui serve solo la
+// password, che NON è quella vera della casella ma un'APP PASSWORD creata in
+// mailcow con accesso DAV (le password vere cambiano, e con 2FA i client DAV
+// non funzionano affatto). Vuota = prenotazioni spente (503), il sito parte.
 //   dotnet user-secrets set "Parameters:caldav-password" "<app password DAV>" --project <questo AppHost>
-var caldavUsername = builder.AddParameter("caldav-username",
-    () => builder.Configuration["Parameters:caldav-username"] ?? "");
 var caldavPassword = builder.AddParameter("caldav-password",
     () => builder.Configuration["Parameters:caldav-password"] ?? "", secret: true);
 
@@ -128,7 +125,6 @@ string blogContentPath = builder.ExecutionContext.IsPublishMode ? "/data/blog" :
 
 var site = builder.AddProject<Projects.MainSite>("site")
     .WithEnvironment("Calendar__CalDavUrl", caldavUrl)
-    .WithEnvironment("Calendar__Username", caldavUsername)
     .WithEnvironment("Calendar__Password", caldavPassword)
     .WithEnvironment("Blog__Auth__BaseUrl", mailcowOauthUrl)
     .WithEnvironment("Blog__Auth__ClientId", mailcowOauthClientId)

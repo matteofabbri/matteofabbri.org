@@ -12,11 +12,15 @@ public sealed class CalendarOptions
 {
     public const string Section = "Calendar";
 
+    // L'account del calendario è fisso: non si configura da .env e non si può
+    // sbagliare. Program.cs forza questo valore con PostConfigure.
+    public const string FixedUsername = "matteo@matteofabbri.org";
+
     // Base DAV. Deve finire con una "/" (viene normalizzata).
     public string CalDavUrl { get; set; } = "https://mail.maddalena.me/SOGo/dav/";
 
     // La casella: l'indirizzo email completo fa da nome utente.
-    public string Username { get; set; } = "";
+    public string Username { get; set; } = FixedUsername;
 
     // App password con accesso DAV. Vuota = prenotazioni spente (503), il sito
     // parte lo stesso: così un .env incompleto non butta giù i siti.

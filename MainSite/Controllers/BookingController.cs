@@ -36,7 +36,8 @@ public sealed class BookingController(BookingService booking) : ControllerBase
     }
 
     // POST /api/booking/appointments
-    // { "start": "2026-11-03T10:00:00+01:00", "name": "...", "email": "...", "note": "..." }
+    // { "start": "2026-11-03T10:00:00+01:00", "name": "...", "email": "...", "note": "...",
+    //   "meetingUrl": "https://meet.google.com/..." }
     [HttpPost("appointments")]
     [EnableRateLimiting("booking")]
     public async Task<IActionResult> Book([FromBody] BookingRequest request, CancellationToken ct)

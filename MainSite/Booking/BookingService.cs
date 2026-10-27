@@ -134,6 +134,10 @@ public sealed class BookingService
         if (request.Start == default)
             throw new BookingValidationException("The appointment time is missing.");
 
+        var meetingUrl = (request.MeetingUrl ?? "").Trim();
+        if (meetingUrl.Length > 500 || !IsValidMeetingUrl(meetingUrl))
+            throw new BookingValidationException("A valid video call link (http or https) is required.");
+
         // Lo slot richiesto deve essere uno di quelli PUBBLICATI: la stessa
         // funzione che alimenta la disponibilità decide, così le regole non
         // possono divergere fra "vedere" e "prenotare".
@@ -152,7 +156,8 @@ public sealed class BookingService
         var uid = $"booking-{slot.Start.UtcDateTime:yyyyMMdd'T'HHmmss'Z'}";
         var booking = new CalendarBooking(
             uid, slot.Start, slot.End, name, email,
-            string.IsNullOrWhiteSpace(note) ? null : note);
+            string.IsNullOrWhiteSpace(note) ? null : note,
+            meetingUrl);
 
         if (!await _calendar.TryCreateEventAsync(booking, ct))
             throw new SlotUnavailableException("Someone just booked that time: choose another slot.");
@@ -200,6 +205,11 @@ public sealed class BookingService
     private static bool IsValidEmail(string value)
         => MailAddress.TryCreate(value, out var address)
            && string.Equals(address.Address, value, StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsValidMeetingUrl(string value)
+        => Uri.TryCreate(value, UriKind.Absolute, out var uri)
+           && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps)
+           && value.Length <= 500;
 
     private static string CleanName(string? value)
         => string.Join(' ', (value ?? "")

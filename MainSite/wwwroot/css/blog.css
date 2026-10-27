@@ -1023,6 +1023,44 @@ main.wrap {
     gap: 0.6rem;
 }
 
+/* --- Booking -------------------------------------------------------------- */
+
+.booking-form {
+    margin-top: 1.5rem;
+}
+
+.booking-day {
+    margin: 1.25rem 0;
+}
+
+.booking-day h3 {
+    margin: 0 0 0.5rem;
+    font-family: var(--serif);
+    font-size: 1.05rem;
+}
+
+.slot-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.slot-button {
+    padding: 0.45rem 0.8rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    color: var(--text);
+    font: inherit;
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+
+.slot-button:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
 /* --- Amministrazione: lede ------------------------------------------------ */
 
 .section-title {

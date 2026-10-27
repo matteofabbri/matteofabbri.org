@@ -1,0 +1,100 @@
+@page "/booking"
+@model MainSite.Pages.BookingModel
+@{
+    ViewData["Title"] = "Book a video call";
+    ViewData["Description"] = "Check my availability and book a video call.";
+}
+
+<div class="page-head">
+    <div>
+        <p class="eyebrow">Booking</p>
+        <h1>Book a video call</h1>
+        <p class="lede">
+            Pick a free time and paste the link to the video call you want to use.
+            Times are in @Model.TimeZone; slots are @Model.SlotMinutes minutes.
+        </p>
+    </div>
+</div>
+
+@if (Model.NotConfigured)
+{
+    <div class="alert warning">
+        <strong>Booking is not configured yet.</strong>
+        The calendar app password (DAV access) is missing. Please try again later.
+    </div>
+}
+else if (Model.LoadError is not null)
+{
+    <div class="alert error">
+        <strong>Could not read the calendar.</strong>
+        @Model.LoadError
+    </div>
+}
+else
+{
+    @if (Model.Error is not null)
+    {
+        <div class="alert error">@Model.Error</div>
+    }
+
+    @if (Model.Confirmed is not null)
+    {
+        <div class="alert success">
+            <strong>Booked: @Model.FormatConfirmedDay().</strong>
+            Your video call link: <a href="@Model.ConfirmedMeetingUrl" rel="noopener">@Model.ConfirmedMeetingUrl</a>
+        </div>
+    }
+
+    <form method="post" class="booking-form">
+        <div class="field-row">
+            <div class="field">
+                <label for="booking-name">Name</label>
+                <input id="booking-name" name="name" class="input" value="@Model.Name" maxlength="100" required autocomplete="name" />
+            </div>
+            <div class="field">
+                <label for="booking-email">Email</label>
+                <input id="booking-email" name="email" class="input" type="email" value="@Model.Email" maxlength="200" required autocomplete="email" />
+            </div>
+        </div>
+
+        <div class="field">
+            <label for="booking-meeting">Video call link</label>
+            <input id="booking-meeting" name="meetingUrl" class="input" type="url"
+                   value="@Model.MeetingUrl" maxlength="500" required
+                   placeholder="https://meet.google.com/..." autocomplete="off" />
+            <span class="hint">Google Meet, Zoom, Teams, ... — the link ends up in the calendar event.</span>
+        </div>
+
+        <div class="field">
+            <label for="booking-note">Note</label>
+            <textarea id="booking-note" name="note" class="input" rows="3" maxlength="@Model.MaxNoteLength">@Model.Note</textarea>
+        </div>
+
+        @if (Model.Days.Count == 0)
+        {
+            <div class="empty">
+                <p>No available times in the next two weeks.</p>
+            </div>
+        }
+        else
+        {
+            <h2 class="section-title">Choose a time</h2>
+            <p class="hint">Fill in your details above, then click a time.</p>
+
+            @foreach (var day in Model.Days)
+            {
+                <section class="booking-day">
+                    <h3>@Model.FormatDay(day.Date)</h3>
+                    <div class="slot-grid">
+                        @foreach (var slot in day.Slots)
+                        {
+                            <button type="submit" class="slot-button" name="start" value="@Model.SlotValue(slot)">
+                                @Model.FormatSlot(slot)
+                            </button>
+                        }
+                    </div>
+                </section>
+            }
+        }
+    </form>
+}

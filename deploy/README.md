@@ -108,8 +108,8 @@ MAILCOW_HTTP_UPSTREAM=nginx-mailcow:8080  # nginx di mailcow, HTTP
 # Prenotazioni (calendario CalDAV su SOGo): vedi la sezione 2-quater.
 # Vuote = funzione spenta (l'API risponde 503), il sito parte lo stesso.
 CALDAV_URL=https://mail.maddalena.me/SOGo/dav/
-CALDAV_USERNAME=matteo@maddalena.me      # l'indirizzo della casella
 CALDAV_PASSWORD=                         # APP PASSWORD con accesso DAV, NON la password vera
+                                         # l'account è hardcodato: matteo@matteofabbri.org
 
 # Blog (accesso con mailcow via OAuth2): vedi la sezione 2-quinquies.
 # Vuote = area di scrittura spenta, il blog resta leggibile da tutti.
@@ -188,23 +188,29 @@ compose quindi resta in piedi comunque.
 
 ## 2-quater. Prenotazioni: il calendario di mailcow (CalDAV)
 
-Le API vivono in **MainSite** (matteofabbri.org), sotto `/api/booking/`. Leggono
-e scrivono il calendario della casella su **SOGo**, il groupware che mailcow
-include: mailcow non ha un calendario "suo", ma SOGo espone quello di ogni
-casella via CalDAV, ed è l'unico modo per arrivarci.
+Le API vivono in **MainSite** (matteofabbri.org), sotto `/api/booking/`; la
+pagina pubblica è **`/booking`**. Leggono e scrivono il calendario della
+casella su **SOGo**, il groupware che mailcow include: mailcow non ha un
+calendario "suo", ma SOGo espone quello di ogni casella via CalDAV, ed è
+l'unico modo per arrivarci. La casella è **hardcodata**:
+`matteo@matteofabbri.org`.
 
 ```
+GET  /booking                         pagina con gli slot liberi
 GET  /api/booking/availability?from=2026-11-01&to=2026-11-30
 POST /api/booking/appointments
 ```
+
+Il POST accetta anche `meetingUrl` (link http/https alla video call scelta da
+chi prenota); finisce nella descrizione dell'evento in calendario.
 
 ### Le credenziali: un'app password, non la password vera
 
 SOGo accetta Basic auth con **email + app password**. Le password vere
 cambiano, e con 2FA un client DAV non funziona affatto.
 
-1. entra nella webmail (`https://mail.maddalena.me`) con la casella che vuoi
-   rendere prenotabile;
+1. entra nella webmail (`https://mail.maddalena.me`) con
+   `matteo@matteofabbri.org`;
 2. **Impostazioni → App password → Crea**: nome (`prenotazioni`), protocollo
    **DAV** abilitato (bastano DAV; non serve IMAP/SMTP a questo scopo);
 3. copia la password generata: si vede una volta sola.
@@ -212,19 +218,19 @@ cambiano, e con 2FA un client DAV non funziona affatto.
 Poi, in sviluppo (mai nel repo):
 
 ```powershell
-dotnet user-secrets set "Parameters:caldav-username" "matteo@maddalena.me" --project MatteoFabbri.org.AppHost
 dotnet user-secrets set "Parameters:caldav-password" "<app password DAV>" --project MatteoFabbri.org.AppHost
 ```
 
-Su server: `CALDAV_USERNAME` e `CALDAV_PASSWORD` nel `.env` dell'AppHost (vedi
-sezione 2). Se sono vuote le prenotazioni sono spente (503) e il sito parte
-lo stesso — un `.env` incompleto non deve buttare giù i siti.
+Su server: **solo `CALDAV_PASSWORD`** nel `.env` dell'AppHost (vedi sezione 2);
+l'username è nel codice. Se la password è vuota le prenotazioni sono spente
+(503) e il sito parte lo stesso — un `.env` incompleto non deve buttare giù i
+siti. Un vecchio `CALDAV_USERNAME` nel `.env` viene ignorato.
 
 > L'URL è `https://mail.maddalena.me/SOGo/dav/` e il percorso del calendario è
 > `Calendar/personal/` (insieme fanno
-> `.../SOGo/dav/matteo@maddalena.me/Calendar/personal/`). Se un domani vuoi un
-> calendario separato ("Appuntamenti") per non mescolare gli impegni privati,
-> crealo in SOGo e metti il suo percorso in `Calendar:CalendarPath`.
+> `.../SOGo/dav/matteo@matteofabbri.org/Calendar/personal/`). Se un domani vuoi
+> un calendario separato ("Appuntamenti") per non mescolare gli impegni
+> privati, crealo in SOGo e metti il suo percorso in `Calendar:CalendarPath`.
 
 ### Come si decide cosa è prenotabile
 
@@ -303,6 +309,7 @@ Il blog vive in **MainSite**:
 |---|---|
 | `/` | home = indice pubblico del blog |
 | `/blog` | redirect 301 a `/` (vecchio indice) |
+| `/booking` | pagina pubblica di prenotazione video call |
 | `/blog/{slug}` | un articolo |
 | `/blog/tag/{tag}` | articoli con un tag |
 | `/blog/feed.xml` | feed RSS |

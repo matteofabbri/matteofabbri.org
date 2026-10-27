@@ -89,9 +89,11 @@ public class Program
 
         // --- Prenotazioni: il calendario CalDAV di SOGo (mailcow) -------------
         // Le regole (orari, slot, buffer, orizzonte) stanno in appsettings.json
-        // sotto "Booking"; le credenziali arrivano dall'AppHost come
-        // Calendar__CalDavUrl / Calendar__Username / Calendar__Password.
+        // sotto "Booking". L'account del calendario è fisso (matteo@matteofabbri.org);
+        // dall'AppHost arrivano solo Calendar__CalDavUrl e Calendar__Password.
         builder.Services.Configure<CalendarOptions>(builder.Configuration.GetSection(CalendarOptions.Section));
+        builder.Services.PostConfigure<CalendarOptions>(options =>
+            options.Username = CalendarOptions.FixedUsername);
         builder.Services.Configure<BookingOptions>(builder.Configuration.GetSection(BookingOptions.Section));
 
         if (builder.Configuration.GetValue<bool>($"{CalendarOptions.Section}:UseFake"))

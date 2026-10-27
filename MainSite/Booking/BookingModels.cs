@@ -29,7 +29,8 @@ public sealed record CalendarBooking(
     DateTimeOffset End,
     string Name,
     string Email,
-    string? Note);
+    string? Note,
+    string MeetingUrl);
 
 // --- Richieste e risposte dell'API -----------------------------------------
 public sealed class BookingRequest
@@ -40,6 +41,9 @@ public sealed class BookingRequest
     public string Name { get; init; } = "";
     public string Email { get; init; } = "";
     public string? Note { get; init; }
+
+    // Il link alla video call scelto da chi prenota (Meet, Zoom, Teams, ...).
+    public string MeetingUrl { get; init; } = "";
 }
 
 public sealed record Slot(DateTimeOffset Start, DateTimeOffset End);
