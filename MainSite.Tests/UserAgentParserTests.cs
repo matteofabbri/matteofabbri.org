@@ -111,4 +111,16 @@ public sealed class UserAgentParserTests
         Assert.Equal("mobile", info.DeviceType);
         Assert.Equal("Chrome", info.Browser);
     }
+
+    [Fact]
+    public void L_etichetta_del_client_e_compatta_e_leggibile()
+    {
+        Assert.Equal(
+            "Chrome 126.0.0.0 · Windows 10/11",
+            UserAgentParser.Parse("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36").ClientLabel);
+
+        Assert.Equal(
+            "Googlebot 2.1",
+            UserAgentParser.Parse("Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)").ClientLabel);
+    }
 }

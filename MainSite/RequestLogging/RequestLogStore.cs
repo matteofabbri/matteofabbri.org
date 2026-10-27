@@ -194,23 +194,65 @@ public sealed class RequestLogStore : IDisposable
         return result == OperationResult.Success ? items.Count : 0;
     }
 
-    // Richieste di una regione nel periodo. La regione è il generatore (la
-    // posting list è ~1/20 del totale), il timestamp è il filtro successivo.
-    // Le righe scritte prima dell'introduzione dell'indice "region" non
-    // compaiono qui: restano contate nel totale e quindi tra le sconosciute.
-    public async Task<int> CountByRegionAsync(int regionCode, DateTimeOffset from, CancellationToken ct = default)
+    // Richieste di un paese nel periodo. Il paese è il generatore (la posting
+    // list è piccola), il timestamp è il filtro successivo. Le righe scritte
+    // prima dell'introduzione dell'indice "country" non compaiono qui: restano
+    // contate nel totale e quindi tra le non geolocalizzate.
+    public async Task<int> CountByCountryAsync(string countryCode, DateTimeOffset from, CancellationToken ct = default)
     {
         if (!await EnsureInitializedAsync(ct) || _db is null)
             return 0;
 
         var query = new QueryElementsCommand(_options.EffectiveCollection,
         [
-            new QueryStep([new QueryClause { Scalar = new ScalarQuery("region", EqualTo: regionCode.ToString(CultureInfo.InvariantCulture)) }]),
+            new QueryStep([new QueryClause { Scalar = new ScalarQuery("country", EqualTo: NormalizeCountry(countryCode)) }]),
             new QueryStep([new QueryClause { Scalar = new ScalarQuery("timestamp", From: Ticks(from)) }]),
         ]);
 
         var (result, items) = await _db.Query(query);
         return result == OperationResult.Success ? items.Count : 0;
+    }
+
+    // Ultime richieste pubbliche del periodo, dalla più recente. Le pagine
+    // /admin restano fuori: sono protette e possono contenere slug di bozze.
+    // L'indice "public" scarta le altre senza leggerne il payload.
+    public async Task<IReadOnlyList<RequestLogEntry>> GetRecentAsync(
+        int limit,
+        DateTimeOffset from,
+        CancellationToken ct = default)
+    {
+        if (limit <= 0 || !await EnsureInitializedAsync(ct) || _db is null)
+            return [];
+
+        var query = new QueryElementsCommand(_options.EffectiveCollection,
+        [
+            new QueryStep([new QueryClause { Scalar = new ScalarQuery("timestamp", From: Ticks(from)) }]),
+            new QueryStep([new QueryClause { Scalar = new ScalarQuery("public", EqualTo: "1") }]),
+        ]);
+
+        var (result, items) = await _db.Query(query);
+        if (result != OperationResult.Success || items.Count == 0)
+            return [];
+
+        int take = Math.Min(limit, items.Count);
+        int first = items.Count - take;
+
+        var entries = new List<RequestLogEntry>(take);
+        for (int i = first; i < items.Count; i++)
+        {
+            var (found, payload) = await _db.Get(new GetElementCommand(_options.EffectiveCollection, items[i]));
+            if (!found)
+                continue;
+
+            var entry = JsonSerializer.Deserialize(payload.Span, RequestLogJsonContext.Default.RequestLogEntry);
+            if (entry is not null)
+                entries.Add(entry);
+        }
+
+        // Il generatore timestamp enumera in ordine crescente: la lista parte
+        // dalla richiesta più recente.
+        entries.Reverse();
+        return entries;
     }
 
     public void Dispose()
@@ -232,7 +274,7 @@ public sealed class RequestLogStore : IDisposable
         }
     }
 
-    // Indexing per ogni riga. Scalar su timestamp/status/durata/bot/regione
+    // Indexing per ogni riga. Scalar su timestamp/status/durata/bot/paese
     // servono per i filtri; full-text su percorso e host per la ricerca libera.
     private static IndexElementCommand IndexingOf(RequestLogEntry entry) => new(
         Scalar:
@@ -241,7 +283,8 @@ public sealed class RequestLogStore : IDisposable
             new ScalarIndexCommand("status", false, entry.StatusCode.ToString(CultureInfo.InvariantCulture)),
             new ScalarIndexCommand("durationMs", false, ((long)Math.Round(entry.DurationMs)).ToString(CultureInfo.InvariantCulture)),
             new ScalarIndexCommand("bot", false, entry.IsBot ? "1" : "0"),
-            new ScalarIndexCommand("region", false, entry.RegionCode.ToString(CultureInfo.InvariantCulture)),
+            new ScalarIndexCommand("country", false, NormalizeCountry(entry.CountryCode)),
+            new ScalarIndexCommand("public", false, entry.Path.StartsWith("/admin", StringComparison.OrdinalIgnoreCase) ? "0" : "1"),
         ],
         Geographic: null,
         Vectorial: null,
@@ -252,6 +295,11 @@ public sealed class RequestLogStore : IDisposable
         ]);
 
     private static string Ticks(DateTimeOffset value) => value.UtcTicks.ToString(CultureInfo.InvariantCulture);
+
+    // "ZZ" (codice ISO riservato all'uso locale) per gli IP privati o non
+    // geolocalizzati: un indice scalare non deve avere valori vuoti.
+    private static string NormalizeCountry(string? code) =>
+        string.IsNullOrWhiteSpace(code) ? "ZZ" : code.Trim().ToUpperInvariant();
 }
 
 public readonly record struct RequestLogWriteResult(int Ok, int Duplicates, int NotFound, int Invalid)

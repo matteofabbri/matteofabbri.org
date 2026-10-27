@@ -41,6 +41,7 @@ public sealed class RequestLogMiddlewareTests
         Assert.Equal("203.0.113.7", entry.RemoteIp);
         Assert.Equal(54321, entry.RemotePort);
         Assert.Equal(ChromeWindows, entry.UserAgent);
+        Assert.Equal("Chrome 126.0.0.0 · Windows 10/11", entry.Client);
         Assert.Equal("Chrome", entry.Browser);
         Assert.Equal("126.0.0.0", entry.BrowserVersion);
         Assert.Equal("Windows 10/11", entry.OperatingSystem);
@@ -138,7 +139,7 @@ public sealed class RequestLogMiddlewareTests
     }
 
     [Fact]
-    public async Task Registra_la_regione_risolta_dall_ip()
+    public async Task Registra_il_paese_risolto_dall_ip()
     {
         var sink = new CapturingSink();
         var context = CreateContext();
@@ -148,13 +149,13 @@ public sealed class RequestLogMiddlewareTests
             sink,
             Options.Create(new RequestLogOptions()),
             NullLogger<RequestLogMiddleware>.Instance,
-            new FixedRegionResolver(ItalianRegions.FromCode(12)));
+            new FixedCountryResolver(new CountryInfo("IT", "Italy")));
 
         await middleware.InvokeAsync(context);
 
         var entry = Assert.Single(sink.Entries);
-        Assert.Equal(12, entry.RegionCode);
-        Assert.Equal("Lazio", entry.RegionName);
+        Assert.Equal("IT", entry.CountryCode);
+        Assert.Equal("Italy", entry.CountryName);
     }
 
     [Fact]
@@ -217,8 +218,8 @@ public sealed class RequestLogMiddlewareTests
         }
     }
 
-    private sealed class FixedRegionResolver(ItalianRegion region) : IRegionResolver
+    private sealed class FixedCountryResolver(CountryInfo country) : ICountryResolver
     {
-        public ItalianRegion Resolve(IPAddress? address) => region;
+        public CountryInfo Resolve(IPAddress? address) => country;
     }
 }

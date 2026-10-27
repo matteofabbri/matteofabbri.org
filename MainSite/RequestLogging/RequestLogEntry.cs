@@ -33,6 +33,7 @@ public sealed record RequestLogEntry
     public string? ForwardedFor { get; init; }
 
     public string? UserAgent { get; init; }
+    public string? Client { get; init; }
     public string? Browser { get; init; }
     public string? BrowserVersion { get; init; }
     public string? OperatingSystem { get; init; }
@@ -40,10 +41,11 @@ public sealed record RequestLogEntry
     public string? DeviceType { get; init; }
     public bool IsBot { get; init; }
 
-    // Regione italiana dell'IP (codice ISTAT 1-20; 0 = sconosciuta/estera).
-    // Il codice è indicizzato in Sperone; il nome è comodo nel payload.
-    public int RegionCode { get; init; }
-    public string? RegionName { get; init; }
+    // Paese dell'IP (ISO 3166-1 alpha-2, es. "IT"; vuoto = privato o non
+    // geolocalizzato). Il codice è indicizzato in Sperone; il nome è comodo
+    // nel payload per la lista delle richieste.
+    public string CountryCode { get; init; } = "";
+    public string? CountryName { get; init; }
 
     public string? Referer { get; init; }
     public string? AcceptLanguage { get; init; }

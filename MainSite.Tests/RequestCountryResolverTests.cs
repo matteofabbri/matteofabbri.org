@@ -5,17 +5,17 @@ using Microsoft.Extensions.Options;
 
 namespace MainSite.Tests;
 
-public sealed class RequestRegionResolverTests : IDisposable
+public sealed class RequestCountryResolverTests : IDisposable
 {
     private readonly string _path = Path.Combine(Path.GetTempPath(), "geoip-test-" + Guid.NewGuid().ToString("N"));
 
     [Fact]
-    public void Senza_database_resta_sconosciuta_e_non_esplode()
+    public void Senza_database_resta_sconosciuto_e_non_esplode()
     {
         using var resolver = CreateResolver();
 
         Assert.False(resolver.Available);
-        Assert.Equal(ItalianRegion.Unknown, resolver.Resolve(IPAddress.Parse("8.8.8.8")));
+        Assert.Equal(CountryInfo.Unknown, resolver.Resolve(IPAddress.Parse("8.8.8.8")));
     }
 
     [Theory]
@@ -26,11 +26,11 @@ public sealed class RequestRegionResolverTests : IDisposable
     [InlineData("169.254.1.1")]
     [InlineData("::1")]
     [InlineData("fd00::1")]
-    public void Gli_ip_privati_non_hanno_regione(string address)
+    public void Gli_ip_privati_non_hanno_un_paese(string address)
     {
         using var resolver = CreateResolver();
 
-        Assert.Equal(ItalianRegion.Unknown, resolver.Resolve(IPAddress.Parse(address)));
+        Assert.Equal(CountryInfo.Unknown, resolver.Resolve(IPAddress.Parse(address)));
     }
 
     [Fact]
@@ -38,7 +38,7 @@ public sealed class RequestRegionResolverTests : IDisposable
     {
         using var resolver = CreateResolver();
 
-        Assert.Equal(ItalianRegion.Unknown, resolver.Resolve(IPAddress.Parse("::ffff:192.168.1.1")));
+        Assert.Equal(CountryInfo.Unknown, resolver.Resolve(IPAddress.Parse("::ffff:192.168.1.1")));
     }
 
     public void Dispose()
@@ -53,11 +53,11 @@ public sealed class RequestRegionResolverTests : IDisposable
         }
     }
 
-    private RequestRegionResolver CreateResolver() => new(
+    private RequestCountryResolver CreateResolver() => new(
         Options.Create(new RequestLogOptions
         {
             GeoIpDatabasePath = Path.Combine(_path, "missing.mmdb"),
         }),
         new TestHostEnvironment(_path),
-        NullLogger<RequestRegionResolver>.Instance);
+        NullLogger<RequestCountryResolver>.Instance);
 }

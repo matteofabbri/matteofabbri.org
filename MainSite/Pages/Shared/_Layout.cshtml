@@ -25,11 +25,11 @@
         <a class="brand" asp-page="/Blog/Index">Matteo Fabbri</a>
         <nav class="site-nav" aria-label="Navigazione principale">
             <a asp-page="/Blog/Index">Blog</a>
+            <a asp-page="/Richieste">Richieste</a>
             <a href="/blog/feed.xml">RSS</a>
             @if (isAuthor)
             {
                 <a asp-page="/Admin/Index">Scrivi</a>
-                <a asp-page="/Admin/RequestMap">Richieste</a>
                 <form method="post" asp-page="/Admin/Logout" class="inline-form">
                     <button type="submit" class="link-button">Esci</button>
                 </form>

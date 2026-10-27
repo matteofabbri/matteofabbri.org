@@ -11,6 +11,19 @@ public readonly record struct UserAgentInfo(
 {
     public static readonly UserAgentInfo Unknown =
         new("Unknown", "", "Unknown", "", "unknown", false);
+
+    // Etichetta compatta per la lista delle richieste: "Chrome 126.0.0.0 ·
+    // Windows 10/11", oppure "Googlebot 2.1" per i bot.
+    public string ClientLabel
+    {
+        get
+        {
+            string browser = BrowserVersion.Length == 0 ? Browser : $"{Browser} {BrowserVersion}";
+            return OperatingSystem is "" or "Unknown"
+                ? browser
+                : $"{browser} · {OperatingSystem}";
+        }
+    }
 }
 
 // Parser minimale, senza dipendenze esterne: serve a rispondere alle domande

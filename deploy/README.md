@@ -479,15 +479,15 @@ sezione `environment` dell'override (es. `RequestLog__RetentionDays: 30`) e
 ricrea il container. Non ci sono segreti da configurare.
 
 **Indici.** Ogni riga è indicizzata con scalar `timestamp`, `status`,
-`durationMs`, `bot` e `region` e full-text `path` e `host`: si possono filtrare
-gli intervalli di tempo, gli errori e la regione, e cercare per percorso/host. Il
-payload JSON completo (IP, browser, referer, ...) resta leggibile con
-`Database.Get` o con `RequestLogStore.GetAsync`.
+`durationMs`, `bot`, `country` e `public` e full-text `path` e `host`: si possono
+filtrare gli intervalli di tempo, gli errori e il paese, escludere le pagine
+`/admin` e cercare per percorso/host. Il payload JSON completo (IP, client,
+referer, ...) resta leggibile con `Database.Get` o con `RequestLogStore.GetAsync`.
 
-**Leggere i log.** Non c'è una UI: il database è una cartella Sperone. Per
-esplorarlo si usa la libreria (o si esporta la collezione con
-`Database.ExportCollection`). Per un backup consistente ferma il sito, copia il
-volume e riavvialo:
+**Leggere i log.** La pagina pubblica `/richieste` è la UI: mappa per paese e
+ultime richieste. Per esplorare il database in altro modo si usa la libreria (o
+si esporta la collezione con `Database.ExportCollection`). Per un backup
+consistente ferma il sito, copia il volume e riavvialo:
 
 ```bash
 cd /opt/matteofabbri
@@ -511,22 +511,26 @@ problema si perde il log, non la richiesta. Se il container non ha il volume
 `request-log-data`, i log finiscono dentro il container e spariscono al deploy
 successivo: controlla `docker compose config` / `docker inspect` del sito.
 
-### Mappa delle richieste per regione
+### Mappa delle richieste per paese
 
-La pagina **`/admin/richieste`** (solo autori) mostra una mappa dell'Italia con
-le regioni colorate per numero di richieste, con selettore ultimi 7/30/90 giorni
-e la tabella ordinata sotto.
+La pagina **`/richieste`** è pubblica e mostra una mappa del mondo con i paesi
+colorati per numero di richieste, il selettore ultimi 7/30/90 giorni, la
+tabella ordinata e le ultime 50 richieste con paese, client (browser/sistema) e
+dispositivo. È aggregata su tutto il sito: non mostra IP né utenti autenticati,
+e le pagine `/admin` non compaiono nell'elenco. Il vecchio indirizzo
+`/admin/richieste` fa redirect.
 
 - Mappa: [Leaflet](https://leafletjs.com) + tile
-  [OpenStreetMap](https://www.openstreetmap.org/copyright); confini delle
-  regioni da [openpolis/geojson-italy](https://github.com/openpolis/geojson-italy)
-  (ISTAT, CC BY 4.0), copiati in `MainSite/wwwroot/maps/`.
+  [OpenStreetMap](https://www.openstreetmap.org/copyright); confini dei paesi da
+  [Natural Earth](https://www.naturalearthdata.com) 1:110m (pubblico dominio),
+  copiati in `MainSite/wwwroot/maps/countries.geojson`.
 - Geolocalizzazione: **DB-IP Lite City** (CC BY 4.0), database MMDB locale.
   Nessun IP viene inviato a servizi esterni: la lookup è in-process.
-- Il codice regione (ISTAT 1-20) viene indicizzato in Sperone su ogni nuova
-  richiesta. Le righe registrate **prima** di configurare GeoIP non hanno la
-  regione e restano tra le "non geolocalizzate": la mappa parte dalle nuove
-  richieste.
+- Il codice paese (ISO 3166-1 alpha-2, es. `IT`) viene indicizzato in Sperone su
+  ogni nuova richiesta; il client compatto (`Chrome 126 · Windows 10/11`) è
+  salvato nel payload. Le righe registrate **prima** di questa versione non
+  hanno il paese e restano tra le "non geolocalizzate": la mappa parte dalle
+  nuove richieste.
 
 **Installazione/aggiornamento GeoIP.**
 
@@ -543,13 +547,14 @@ e la tabella ordinata sotto.
   cd /opt/matteofabbri && sudo docker compose restart site
   ```
 
-- Se il file manca, il log continua a funzionare (regione sconosciuta) e la
+- Se il file manca, il log continua a funzionare (paese sconosciuto) e la
   pagina mostra un avviso con il percorso atteso. Il percorso si cambia con
   `RequestLog__GeoIpDatabasePath`.
 
-**Lettura.** La pagina conta per regione usando gli indici Sperone (`region` +
-`timestamp`) senza leggere i payload; i totali includono anche richieste estere,
-IP privati e righe senza regione.
+**Lettura.** La pagina conta per paese usando gli indici Sperone (`country` +
+`timestamp`) senza leggere i payload; i totali includono anche IP privati e
+righe senza paese. L'elenco delle ultime richieste usa `timestamp` + `public`
+e legge solo i payload delle righe mostrate (max 50).
 
 ---
 

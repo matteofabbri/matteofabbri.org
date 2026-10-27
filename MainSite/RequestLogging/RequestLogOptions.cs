@@ -20,7 +20,7 @@ public sealed class RequestLogOptions
 
     // Database MMDB per la geolocalizzazione degli IP (DB-IP Lite City o
     // GeoLite2 City). Relativo = rispetto alla content root. Se il file non
-    // c'è, il log funziona lo stesso con regione "sconosciuta" e la mappa
+    // c'è, il log funziona lo stesso con paese "sconosciuto" e la mappa
     // richieste lo segnala. Download: deploy/update-geoip.*.
     public string GeoIpDatabasePath { get; set; } = "App_Data/geoip/dbip-city-lite.mmdb";
 

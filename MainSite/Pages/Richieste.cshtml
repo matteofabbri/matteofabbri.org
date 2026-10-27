@@ -1,7 +1,7 @@
-@page "/admin/richieste"
-@model MainSite.Pages.Admin.RequestMapModel
+@page "/richieste"
+@model MainSite.Pages.RichiesteModel
 @{
-    ViewData["Title"] = "Richieste per regione";
+    ViewData["Title"] = "Richieste nel mondo";
 }
 
 @section Head {
@@ -11,9 +11,12 @@
 
 <div class="page-head">
     <div>
-        <p class="eyebrow"><a asp-page="/Admin/Index">I tuoi articoli</a> / Richieste</p>
-        <h1>Richieste per regione</h1>
-        <p class="lede">Da dove arrivano le richieste del sito: @Model.PeriodLabel.</p>
+        <p class="eyebrow">Il sito in numeri</p>
+        <h1>Richieste nel mondo</h1>
+        <p class="lede">
+            Da quali paesi arrivano le richieste, @Model.PeriodLabel.
+            Dati aggregati di tutto il sito: nessun IP e nessun utente.
+        </p>
     </div>
     <form method="get" class="map-controls">
         <label class="field map-period">
@@ -64,11 +67,11 @@ else if (Model.GeoIpUpdated is { } updated)
     </div>
     <div class="map-stat">
         <span class="map-number">@Model.FormatNumber(Model.GeocodedRequests)</span>
-        <span class="map-label">con una regione italiana</span>
+        <span class="map-label">con un paese riconosciuto</span>
     </div>
     <div class="map-stat">
         <span class="map-number">@Model.FormatNumber(Model.UnknownRequests)</span>
-        <span class="map-label">estere, private o non geolocalizzate</span>
+        <span class="map-label">private o non geolocalizzate</span>
     </div>
 </div>
 
@@ -82,66 +85,108 @@ else if (Model.GeoIpUpdated is { } updated)
 
 <div class="map-card">
     <div class="map-header">
-        <h2>Mappa delle regioni</h2>
+        <h2>Mappa dei paesi</h2>
         <div id="map-legend" class="map-legend" hidden>
             <span class="legend-title">Richieste</span>
             <div id="legend-scale" class="legend-scale"></div>
         </div>
     </div>
     <div id="request-map" class="request-map" role="application"
-         aria-label="Mappa dell'Italia con le regioni colorate per numero di richieste"></div>
+         aria-label="Mappa del mondo con i paesi colorati per numero di richieste"></div>
     <p id="map-loading" class="hint">Caricamento della mappa…</p>
     <p id="map-error" class="alert error" hidden>
-        Impossibile caricare i confini delle regioni. Ricarica la pagina o controlla la console.
+        Impossibile caricare i confini dei paesi. Ricarica la pagina o controlla la console.
     </p>
 </div>
 
-<div class="table-wrap">
-    <table class="admin-table region-table">
-        <thead>
-            <tr>
-                <th>Regione</th>
-                <th class="cell-number">Richieste</th>
-                <th class="cell-number">% sul totale</th>
-                <th class="region-bar-cell"></th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach (var region in Model.Regions)
-            {
+@if (Model.Countries.Count > 0)
+{
+    <div class="table-wrap">
+        <table class="admin-table country-table">
+            <thead>
                 <tr>
-                    <td>@region.Name</td>
-                    <td class="cell-number">@Model.FormatNumber(region.Count)</td>
-                    <td class="cell-number">@Model.PercentLabel(region.Count) %</td>
-                    <td class="region-bar-cell">
-                        <span class="region-bar" style="width:@(Model.BarWidth(region.Count))%"></span>
-                    </td>
+                    <th>Paese</th>
+                    <th class="cell-number">Richieste</th>
+                    <th class="cell-number">% sul totale</th>
+                    <th class="country-bar-cell"></th>
                 </tr>
-            }
-        </tbody>
-    </table>
-</div>
+            </thead>
+            <tbody>
+                @foreach (var country in Model.Countries)
+                {
+                    <tr>
+                        <td>@country.Name</td>
+                        <td class="cell-number">@Model.FormatNumber(country.Count)</td>
+                        <td class="cell-number">@Model.PercentLabel(country.Count) %</td>
+                        <td class="country-bar-cell">
+                            <span class="country-bar" style="width:@(Model.BarWidth(country.Count))%"></span>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+<h2 class="section-title">Ultime richieste</h2>
+
+@if (Model.Recent.Count == 0)
+{
+    <p class="hint">Nessuna richiesta pubblica registrata nel periodo.</p>
+}
+else
+{
+    <div class="table-wrap">
+        <table class="admin-table requests-table">
+            <thead>
+                <tr>
+                    <th>Quando</th>
+                    <th>Richiesta</th>
+                    <th>Esito</th>
+                    <th>Paese</th>
+                    <th>Client</th>
+                    <th>Dispositivo</th>
+                    <th class="cell-number">Durata</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var row in Model.Recent)
+                {
+                    <tr>
+                        <td class="cell-date">@Model.FormatWhen(row.When)</td>
+                        <td><code class="request-path">@row.Method @row.Path</code></td>
+                        <td><span class="status status-@(row.StatusCode / 100)xx">@row.StatusCode</span></td>
+                        <td>@row.Country</td>
+                        <td>@row.Client</td>
+                        <td>@Model.DeviceLabel(row.DeviceType)</td>
+                        <td class="cell-number">@Model.FormatDuration(row.DurationMs)</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
 
 <p class="hint map-attribution">
     Geolocalizzazione IP: <a href="https://db-ip.com" target="_blank" rel="noopener">DB-IP</a> (CC BY 4.0).
-    Confini regioni: <a href="https://github.com/openpolis/geojson-italy" target="_blank" rel="noopener">openpolis/geojson-italy</a> (ISTAT, CC BY 4.0).
+    Confini: <a href="https://www.naturalearthdata.com" target="_blank" rel="noopener">Natural Earth</a> (pubblico dominio).
     Mappa: &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors,
     <a href="https://leafletjs.com" target="_blank" rel="noopener">Leaflet</a>.
 </p>
 
-<script id="region-counts" type="application/json">@Html.Raw(Model.CountsJson)</script>
+<script id="country-counts" type="application/json">@Html.Raw(Model.CountsJson)</script>
 
 @section Scripts {
     <script src="~/lib/leaflet/leaflet.js" asp-append-version="true"></script>
     <script>
         (() => {
-            const counts = JSON.parse(document.getElementById('region-counts').textContent);
+            const counts = JSON.parse(document.getElementById('country-counts').textContent);
             const total = @Model.TotalRequests.ToString(System.Globalization.CultureInfo.InvariantCulture);
-            const map = L.map('request-map', { preferCanvas: true, scrollWheelZoom: true })
-                .setView([42.5, 12.5], 6);
+            const map = L.map('request-map', { preferCanvas: true, scrollWheelZoom: true, minZoom: 1 })
+                .setView([20, 10], 2);
 
             L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                maxZoom: 10,
+                maxZoom: 8,
                 attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
             }).addTo(map);
 
@@ -154,44 +199,50 @@ else if (Model.GeoIpUpdated is { } updated)
             const color = value => palette[bucket(value)];
             const formatNumber = value => value.toLocaleString('it-IT');
 
+            const isoOf = feature => {
+                const properties = feature.properties;
+                const code = (properties.ISO_A2 && properties.ISO_A2 !== '-99')
+                    ? properties.ISO_A2
+                    : properties.ISO_A2_EH;
+                return code && code !== '-99' ? code.toUpperCase() : null;
+            };
+
             const geo = L.geoJSON(null, {
-                style: feature => ({
-                    fillColor: color(counts[feature.properties.reg_istat_code_num] || 0),
-                    weight: 1,
-                    color: '#ffffff',
-                    fillOpacity: 0.88
-                }),
+                style: feature => {
+                    const code = isoOf(feature);
+                    return {
+                        fillColor: color(code ? counts[code] || 0 : 0),
+                        weight: 0.6,
+                        color: '#ffffff',
+                        fillOpacity: 0.9
+                    };
+                },
                 onEachFeature: (feature, layer) => {
-                    const count = counts[feature.properties.reg_istat_code_num] || 0;
+                    const code = isoOf(feature);
+                    if (!code) return;
+
+                    const count = counts[code] || 0;
+                    const name = feature.properties.NAME_IT || feature.properties.NAME;
                     const percent = total ? (count * 100 / total).toFixed(1).replace('.', ',') : '0,0';
-                    layer.bindTooltip(`${feature.properties.reg_name}: ${formatNumber(count)}`, { sticky: true });
-                    layer.bindPopup(`<strong>${feature.properties.reg_name}</strong><br>${formatNumber(count)} richieste (${percent}% del totale)`);
-                    layer.on('mouseover', () => layer.setStyle({ weight: 2, color: '#1c1b19' }));
+                    layer.bindTooltip(`${name}: ${formatNumber(count)}`, { sticky: true });
+                    layer.bindPopup(`<strong>${name}</strong><br>${formatNumber(count)} richieste (${percent}% del totale)`);
+                    layer.on('mouseover', () => layer.setStyle({ weight: 1.5, color: '#1c1b19' }));
                     layer.on('mouseout', () => geo.resetStyle(layer));
                 }
             }).addTo(map);
 
-            fetch('@Url.Content("~/maps/italy-regions.geojson")')
+            fetch('@Url.Content("~/maps/countries.geojson")')
                 .then(response => {
                     if (!response.ok) throw new Error(`HTTP ${response.status}`);
                     return response.json();
                 })
                 .then(data => {
                     geo.addData(data);
-                    // Il GeoJSON ha il bbox dell'Italia: più affidabile del
-                    // bounds calcolato sul layer per inquadrare tutta la mappa.
-                    if (Array.isArray(data.bbox) && data.bbox.length === 4) {
-                        map.fitBounds(
-                            [[data.bbox[1], data.bbox[0]], [data.bbox[3], data.bbox[2]]],
-                            { padding: [16, 16] });
-                    } else {
-                        map.fitBounds(geo.getBounds(), { padding: [16, 16] });
-                    }
                     document.getElementById('map-loading').hidden = true;
                     buildLegend(max);
                 })
                 .catch(error => {
-                    console.error('Confini regioni:', error);
+                    console.error('Confini paesi:', error);
                     document.getElementById('map-loading').hidden = true;
                     document.getElementById('map-error').hidden = false;
                 });

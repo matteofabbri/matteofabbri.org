@@ -6,26 +6,34 @@ using Microsoft.Extensions.Options;
 
 namespace MainSite.RequestLogging;
 
-// Astrazione minima per poter provare il middleware senza un database GeoIP.
-public interface IRegionResolver
+// Paese di un IP: codice ISO 3166-1 alpha-2 e nome. Code vuoto = privato,
+// non geolocalizzato o database assente.
+public readonly record struct CountryInfo(string Code, string Name)
 {
-    ItalianRegion Resolve(IPAddress? address);
+    public static readonly CountryInfo Unknown = new("", "");
+    public bool IsKnown => Code.Length > 0;
 }
 
-// Risolve un IP nella regione italiana usando un database MMDB locale
-// (DB-IP Lite City o GeoLite2 City). Nessuna chiamata a servizi esterni:
-// l'IP del visitatore non esce dal server.
-public sealed class RequestRegionResolver : IRegionResolver, IDisposable
+// Astrazione minima per poter provare il middleware senza un database GeoIP.
+public interface ICountryResolver
+{
+    CountryInfo Resolve(IPAddress? address);
+}
+
+// Risolve un IP nel paese usando un database MMDB locale (DB-IP Lite City o
+// GeoLite2 City). Nessuna chiamata a servizi esterni: l'IP del visitatore non
+// esce dal server.
+public sealed class RequestCountryResolver : ICountryResolver, IDisposable
 {
     private readonly RequestLogOptions _options;
     private readonly IHostEnvironment _environment;
-    private readonly ILogger<RequestRegionResolver> _logger;
+    private readonly ILogger<RequestCountryResolver> _logger;
     private readonly Lazy<DatabaseReader?> _reader;
 
-    public RequestRegionResolver(
+    public RequestCountryResolver(
         IOptions<RequestLogOptions> options,
         IHostEnvironment environment,
-        ILogger<RequestRegionResolver> logger)
+        ILogger<RequestCountryResolver> logger)
     {
         _options = options.Value;
         _environment = environment;
@@ -51,50 +59,42 @@ public sealed class RequestRegionResolver : IRegionResolver, IDisposable
             ? new DateTimeOffset(File.GetLastWriteTimeUtc(ResolvedDatabasePath), TimeSpan.Zero)
             : null;
 
-    public ItalianRegion Resolve(IPAddress? address)
+    public CountryInfo Resolve(IPAddress? address)
     {
         if (address is null)
-            return ItalianRegion.Unknown;
+            return CountryInfo.Unknown;
 
         if (address.IsIPv4MappedToIPv6)
             address = address.MapToIPv4();
 
         if (IsPrivate(address))
-            return ItalianRegion.Unknown;
+            return CountryInfo.Unknown;
 
         var reader = _reader.Value;
         if (reader is null)
-            return ItalianRegion.Unknown;
+            return CountryInfo.Unknown;
 
         try
         {
             if (!reader.TryCity(address, out var city) || city is null)
-                return ItalianRegion.Unknown;
+                return CountryInfo.Unknown;
 
-            if (!string.Equals(city.Country.IsoCode, "IT", StringComparison.OrdinalIgnoreCase))
-                return ItalianRegion.Unknown;
+            string? code = city.Country.IsoCode;
+            if (string.IsNullOrWhiteSpace(code))
+                return CountryInfo.Unknown;
 
-            // Il primo livello è la regione, ma alcuni database mettono la
-            // provincia nel campo "most specific": si prova tutta la catena.
-            // DB-IP Lite spesso lascia vuoto l'ISO della suddivisione e mette
-            // il nome inglese ("Lombardy"): proviamo anche quello.
-            foreach (var subdivision in city.Subdivisions)
-                if (ItalianRegions.TryFromIsoCode(subdivision.IsoCode, out var region)
-                    || ItalianRegions.TryFromName(subdivision.Name, out region))
-                    return region;
-
-            if (ItalianRegions.TryFromIsoCode(city.MostSpecificSubdivision.IsoCode, out var most)
-                || ItalianRegions.TryFromName(city.MostSpecificSubdivision.Name, out most))
-                return most;
-
-            return ItalianRegion.Unknown;
+            string normalized = code.Trim().ToUpperInvariant();
+            string? name = city.Country.Name;
+            return new CountryInfo(
+                normalized,
+                string.IsNullOrWhiteSpace(name) ? WorldCountries.NameOf(normalized) : name.Trim());
         }
         catch (Exception ex)
         {
             // Indirizzo non presente nel database o record corrotto: per il
-            // log vale "sconosciuta", non deve far fallire la richiesta.
+            // log vale "sconosciuto", non deve far fallire la richiesta.
             _logger.LogDebug(ex, "GeoIP: risoluzione fallita per {Address}", address);
-            return ItalianRegion.Unknown;
+            return CountryInfo.Unknown;
         }
     }
 
@@ -128,7 +128,7 @@ public sealed class RequestRegionResolver : IRegionResolver, IDisposable
         }
     }
 
-    // Loopback, reti private, link-local e multicast non hanno una regione:
+    // Loopback, reti private, link-local e multicast non hanno un paese:
     // evitiamo una lookup inutile (e i falsi positivi dei database).
     private static bool IsPrivate(IPAddress address)
     {

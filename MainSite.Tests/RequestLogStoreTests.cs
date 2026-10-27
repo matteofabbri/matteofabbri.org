@@ -57,43 +57,77 @@ public sealed class RequestLogStoreTests : IDisposable
     }
 
     [Fact]
-    public async Task Conta_le_richieste_per_regione_nel_periodo()
+    public async Task Conta_le_richieste_per_paese_nel_periodo()
     {
         using var store = CreateStore();
         var now = DateTimeOffset.UtcNow;
         var from = now.AddMinutes(-1);
 
-        var lazio = CreateEntry("req-lazio") with
+        var italia = CreateEntry("req-italia") with
         {
             Timestamp = now,
-            RegionCode = 12,
-            RegionName = "Lazio",
+            CountryCode = "IT",
+            CountryName = "Italia",
         };
-        var lombardia = CreateEntry("req-lombardia") with
+        var statiUniti = CreateEntry("req-stati-uniti") with
         {
             Timestamp = now,
-            RegionCode = 3,
-            RegionName = "Lombardia",
+            CountryCode = "US",
+            CountryName = "Stati Uniti",
         };
         var vecchia = CreateEntry("req-vecchia") with
         {
             Timestamp = now.AddDays(-2),
-            RegionCode = 12,
-            RegionName = "Lazio",
+            CountryCode = "IT",
+            CountryName = "Italia",
         };
-        var senzaRegione = CreateEntry("req-senza-regione") with
+        var senzaPaese = CreateEntry("req-senza-paese") with
         {
             Timestamp = now,
-            RegionCode = 0,
+            CountryCode = "",
         };
 
-        await store.InsertManyAsync([lazio, lombardia, vecchia, senzaRegione], CancellationToken.None);
+        await store.InsertManyAsync([italia, statiUniti, vecchia, senzaPaese], CancellationToken.None);
 
-        // La vecchia è fuori periodo; senzaRegione non ha una regione italiana.
+        // La vecchia è fuori periodo; senzaPaese non ha un paese.
         Assert.Equal(3, await store.CountSinceAsync(from));
-        Assert.Equal(1, await store.CountByRegionAsync(12, from));
-        Assert.Equal(1, await store.CountByRegionAsync(3, from));
-        Assert.Equal(0, await store.CountByRegionAsync(5, from));
+        Assert.Equal(1, await store.CountByCountryAsync("IT", from));
+        Assert.Equal(1, await store.CountByCountryAsync("us", from));
+        Assert.Equal(0, await store.CountByCountryAsync("FR", from));
+    }
+
+    [Fact]
+    public async Task Le_ultime_richieste_saltano_l_area_admin_e_partono_dalla_piu_recente()
+    {
+        using var store = CreateStore();
+        var now = DateTimeOffset.UtcNow;
+        var from = now.AddHours(-1);
+
+        var blog = CreateEntry("req-blog") with
+        {
+            Timestamp = now.AddMinutes(-30),
+            Path = "/blog/uno",
+            CountryCode = "IT",
+        };
+        var admin = CreateEntry("req-admin") with
+        {
+            Timestamp = now.AddMinutes(-20),
+            Path = "/admin/edit/bozza",
+            CountryCode = "IT",
+        };
+        var nuova = CreateEntry("req-nuova") with
+        {
+            Timestamp = now.AddMinutes(-10),
+            Path = "/blog/due",
+            CountryCode = "US",
+        };
+
+        await store.InsertManyAsync([blog, admin, nuova], CancellationToken.None);
+
+        var recent = await store.GetRecentAsync(5, from);
+
+        Assert.Equal(["req-nuova", "req-blog"], recent.Select(entry => entry.Id));
+        Assert.Single(await store.GetRecentAsync(1, from));
     }
 
     public void Dispose()
@@ -141,12 +175,15 @@ public sealed class RequestLogStoreTests : IDisposable
         RemoteIp = "203.0.113.7",
         RemotePort = 54321,
         UserAgent = "Mozilla/5.0",
+        Client = "Chrome 126.0.0.0 · Windows 10/11",
         Browser = "Chrome",
         BrowserVersion = "126.0.0.0",
         OperatingSystem = "Windows 10/11",
         OperatingSystemVersion = "10.0",
         DeviceType = "desktop",
         IsBot = false,
+        CountryCode = "IT",
+        CountryName = "Italia",
         Referer = "https://example.org/",
         AcceptLanguage = "it-IT,it;q=0.9",
         ContentType = "text/plain",

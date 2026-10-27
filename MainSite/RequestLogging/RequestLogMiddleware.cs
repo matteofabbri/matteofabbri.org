@@ -26,20 +26,20 @@ public sealed class RequestLogMiddleware
     private readonly IRequestLogSink _sink;
     private readonly IOptions<RequestLogOptions> _options;
     private readonly ILogger<RequestLogMiddleware> _logger;
-    private readonly IRegionResolver? _regionResolver;
+    private readonly ICountryResolver? _countryResolver;
 
     public RequestLogMiddleware(
         RequestDelegate next,
         IRequestLogSink sink,
         IOptions<RequestLogOptions> options,
         ILogger<RequestLogMiddleware> logger,
-        IRegionResolver? regionResolver = null)
+        ICountryResolver? countryResolver = null)
     {
         _next = next;
         _sink = sink;
         _options = options;
         _logger = logger;
-        _regionResolver = regionResolver;
+        _countryResolver = countryResolver;
     }
 
     public async Task InvokeAsync(HttpContext context)
@@ -77,7 +77,7 @@ public sealed class RequestLogMiddleware
 
         string? userAgent = Truncate(headers.UserAgent.ToString(), 512);
         var agent = UserAgentParser.Parse(userAgent);
-        var region = _regionResolver?.Resolve(context.Connection.RemoteIpAddress) ?? ItalianRegion.Unknown;
+        var country = _countryResolver?.Resolve(context.Connection.RemoteIpAddress) ?? CountryInfo.Unknown;
 
         var entry = new RequestLogEntry
         {
@@ -100,6 +100,7 @@ public sealed class RequestLogMiddleware
             ForwardedFor = Truncate(headers["X-Forwarded-For"].ToString(), 512),
 
             UserAgent = userAgent,
+            Client = agent.ClientLabel,
             Browser = agent.Browser,
             BrowserVersion = agent.BrowserVersion,
             OperatingSystem = agent.OperatingSystem,
@@ -107,8 +108,8 @@ public sealed class RequestLogMiddleware
             DeviceType = agent.DeviceType,
             IsBot = agent.IsBot,
 
-            RegionCode = region.Code,
-            RegionName = region.Code == 0 ? null : region.Name,
+            CountryCode = country.Code,
+            CountryName = country.IsKnown ? country.Name : null,
 
             Referer = Truncate(headers.Referer.ToString(), 512),
             AcceptLanguage = Truncate(headers.AcceptLanguage.ToString(), 128),

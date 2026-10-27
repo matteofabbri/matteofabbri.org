@@ -40,8 +40,8 @@ public class Program
             builder.Services.AddSingleton<RequestLogStore>();
             builder.Services.AddSingleton<RequestLogQueue>();
             builder.Services.AddSingleton<IRequestLogSink>(services => services.GetRequiredService<RequestLogQueue>());
-            builder.Services.AddSingleton<RequestRegionResolver>();
-            builder.Services.AddSingleton<IRegionResolver>(services => services.GetRequiredService<RequestRegionResolver>());
+            builder.Services.AddSingleton<RequestCountryResolver>();
+            builder.Services.AddSingleton<ICountryResolver>(services => services.GetRequiredService<RequestCountryResolver>());
             builder.Services.AddHostedService<RequestLogWriter>();
         }
 
@@ -180,7 +180,7 @@ public class Program
             app.UseMiddleware<RequestLogMiddleware>();
 
         // Serve i file statici da wwwroot (css, js, immagini, ...). La mappa
-        // delle regioni è un .geojson: senza il mapping esplicito il middleware
+        // dei paesi è un .geojson: senza il mapping esplicito il middleware
         // non lo servirebbe (estensione sconosciuta).
         var staticFiles = new StaticFileOptions
         {
@@ -194,7 +194,11 @@ public class Program
         app.UseAuthorization();
 
         app.MapControllers();          // /api/download/sperone, /api/booking/*, /blog/media/*
-        app.MapRazorPages();           // /blog, /admin
+        app.MapRazorPages();           // /blog, /richieste, /admin
+
+        // La mappa è uscita dall'area di scrittura: il vecchio indirizzo resta
+        // come redirect per i segnalibri.
+        app.MapGet("/admin/richieste", () => Results.Redirect("/richieste", permanent: true));
 
         // Home → blog, feed RSS e sitemap (endpoint minimali, senza view).
         app.MapBlogEndpoints();

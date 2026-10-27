@@ -1,16 +1,16 @@
-# Confini delle regioni italiane
+# Confini dei paesi
 
-`italy-regions.geojson` contiene i confini delle 20 regioni italiane, derivati
-dai dati ISTAT e distribuiti da
-[openpolis/geojson-italy](https://github.com/openpolis/geojson-italy) con
-licenza **CC BY 4.0** (© 2018-2021 Openpolis, dati ISTAT).
+`countries.geojson` contiene i confini dei paesi del mondo, derivati da
+[Natural Earth](https://www.naturalearthdata.com) 1:110m
+(`ne_110m_admin_0_countries`, pubblico dominio).
 
-Proprietà usate dalla pagina `/admin/richieste`:
+Proprietà usate dalla pagina `/richieste`:
 
-- `reg_name` — nome della regione
-- `reg_istat_code_num` — codice ISTAT 1-20
-- `reg_iso_3166_2` — codice ISO 3166-2 (es. `IT-62`), lo stesso usato dai
-  database GeoIP
+- `ISO_A2` — codice ISO 3166-1 alpha-2 (chiave dei conteggi); per i pochi paesi
+  in cui il dataset mette `-99` (Francia, Norvegia, Kosovo) si usa
+  `ISO_A2_EH`
+- `NAME_IT` — nome italiano mostrato nella mappa
+- `NAME` — nome inglese di riserva
 
 La mappa usa [Leaflet 1.9.4](https://leafletjs.com) (BSD-2-Clause, vedi
 `../lib/leaflet/LICENSE`) e le tile di
