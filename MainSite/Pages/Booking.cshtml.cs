@@ -2,14 +2,14 @@ using System.Globalization;
 using MainSite.Booking;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
-using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Options;
 
 namespace MainSite.Pages;
 
 // Pagina pubblica di prenotazione: mostra gli slot liberi del calendario
 // CalDAV e crea un evento con il link alla video call scelto da chi prenota.
-[EnableRateLimiting("booking")]
+// Il rate limit "booking" resta sull'API POST; qui non va messo, altrimenti
+// bloccherebbe anche le visite alla pagina.
 public sealed class BookingModel(BookingService booking, IOptions<BookingOptions> options) : PageModel
 {
     private static readonly CultureInfo English = CultureInfo.GetCultureInfo("en-GB");
