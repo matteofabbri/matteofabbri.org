@@ -83,12 +83,13 @@ jobs:
           ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$SERVER" '
             set -e
             cd /opt/matteofabbri
-            IMG=$(sudo docker compose images -q caddy | head -n1)
-            if [ -z "$IMG" ]; then
-              echo "Immagine Caddy assente: salto la validazione (primo deploy)."
+            CID=$(sudo docker compose ps -q caddy | head -n1)
+            if [ -z "$CID" ]; then
+              echo "Container Caddy non in esecuzione: salto la validazione."
               rm -f /home/ubuntu/Caddyfile.new
               exit 0
             fi
+            IMG=$(sudo docker inspect --format "{{.Image}}" "$CID")
             sudo docker run --rm "$IMG" version
             sudo docker run --rm --env-file /opt/matteofabbri/.env \
               -v /home/ubuntu/Caddyfile.new:/etc/caddy/Caddyfile:ro \
