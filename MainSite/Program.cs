@@ -194,11 +194,7 @@ public class Program
         app.UseAuthorization();
 
         app.MapControllers();          // /api/download/sperone, /api/booking/*, /blog/media/*
-        app.MapRazorPages();           // /blog, /richieste, /admin
-
-        // La mappa è uscita dall'area di scrittura: il vecchio indirizzo resta
-        // come redirect per i segnalibri.
-        app.MapGet("/admin/richieste", () => Results.Redirect("/richieste", permanent: true));
+        app.MapRazorPages();           // /blog, /requests, /admin
 
         // Home → blog, feed RSS e sitemap (endpoint minimali, senza view).
         app.MapBlogEndpoints();

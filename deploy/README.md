@@ -493,7 +493,7 @@ filtrare gli intervalli di tempo, gli errori e il paese, escludere le pagine
 `/admin` e cercare per percorso/host. Il payload JSON completo (IP, client,
 referer, ...) resta leggibile con `Database.Get` o con `RequestLogStore.GetAsync`.
 
-**Leggere i log.** La pagina pubblica `/richieste` è la UI: mappa per paese e
+**Leggere i log.** La pagina pubblica `/requests` è la UI: mappa per paese e
 ultime richieste. Per esplorare il database in altro modo si usa la libreria (o
 si esporta la collezione con `Database.ExportCollection`). Per un backup
 consistente ferma il sito, copia il volume e riavvialo:
@@ -522,12 +522,11 @@ successivo: controlla `docker compose config` / `docker inspect` del sito.
 
 ### Mappa delle richieste per paese
 
-La pagina **`/richieste`** è pubblica e mostra una mappa del mondo con i paesi
+La pagina **`/requests`** è pubblica e mostra una mappa del mondo con i paesi
 colorati per numero di richieste, il selettore ultimi 7/30/90 giorni, la
 tabella ordinata e le ultime 50 richieste con paese, client (browser/sistema) e
 dispositivo. È aggregata su tutto il sito: non mostra IP né utenti autenticati,
-e le pagine `/admin` non compaiono nell'elenco. Il vecchio indirizzo
-`/admin/richieste` fa redirect.
+e le pagine `/admin` non compaiono nell'elenco.
 
 - Mappa: [Leaflet](https://leafletjs.com) + tile
   [OpenStreetMap](https://www.openstreetmap.org/copyright); confini dei paesi da

@@ -158,7 +158,7 @@ public static class BlogAuth
                     .CreateLogger("MainSite.Blog.BlogAuth");
                 logger.LogWarning(context.Failure, "Accesso al blog non riuscito.");
 
-                context.Response.Redirect("/admin/login?errore=accesso");
+                context.Response.Redirect("/admin/login?error=access_denied");
                 return Task.CompletedTask;
             };
         });

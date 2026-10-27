@@ -11,11 +11,11 @@ namespace MainSite.Pages;
 // paese: non mostra né IP né utenti autenticati. I conteggi vengono dagli
 // indici Sperone (scalar country + timestamp); la lista legge solo le ultime
 // righe e lascia fuori le pagine /admin (possono contenere slug di bozze).
-public sealed class RichiesteModel(
+public sealed class RequestsModel(
     IServiceProvider services,
     IOptions<RequestLogOptions> options,
     IMemoryCache cache,
-    ILogger<RichiesteModel> logger) : PageModel
+    ILogger<RequestsModel> logger) : PageModel
 {
     private static readonly int[] AllowedDays = [7, 30, 90];
     private static readonly TimeZoneInfo Rome = TimeZoneInfo.FindSystemTimeZoneById("Europe/Rome");
