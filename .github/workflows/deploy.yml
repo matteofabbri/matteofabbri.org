@@ -93,7 +93,7 @@ jobs:
             sudo docker compose build caddy
             sudo docker compose run --rm --no-deps \
               -v /home/ubuntu/Caddyfile.new:/etc/caddy/Caddyfile:ro \
-              caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+              caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
             rm -f /home/ubuntu/Caddyfile.new
           '
 
