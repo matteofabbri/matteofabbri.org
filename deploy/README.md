@@ -314,6 +314,7 @@ Il blog vive in **MainSite**:
 | `/admin/login` | accesso autori |
 | `/admin` | amministrazione: post, lede, immagini, richieste |
 | `/admin/ledes` | lista editabile delle frasi del jumbotron |
+| `/admin/jumbotron` | upload e gestione di foto/video del jumbotron |
 
 Gli articoli sono file **Markdown con front matter YAML**. In produzione stanno
 nel volume Docker `blog-data`, montato in `/data/blog`: un deploy ricostruisce
@@ -423,19 +424,22 @@ La **`/sitemap`** è la versione leggibile (pagine, articoli pubblicati, tag);
 `/sitemap.xml` elenca home, `/requests`, `/info-bot`, articoli e tag. Entrambe
 sono collegate dal footer, insieme al login.
 
-La home del blog ha un **jumbotron** con una foto a caso da
-`MainSite/wwwroot/photos` (JPG, PNG, GIF, WebP, AVIF); se la cartella è vuota
-usa un gradiente di riserva. Le icone di GitHub, Instagram e TikTok sono
-sovrapposte in alto a destra. Il lede sotto il titolo è scelto a caso tra quelli
-gestiti in `/admin/ledes` (Sperone, collezione `ledes`); se non ce ne sono, non
-viene mostrato. Aggiungi le foto al repo e fai deploy.
+La home del blog ha un **jumbotron** con un media a caso: le foto e i video si
+caricano da **`/admin/jumbotron`** e finiscono in `jumbotron/` dentro il volume
+del blog (`/data/blog`, quindi sopravvivono ai deploy). Limiti: immagini 15 MB
+(JPG, PNG, GIF, WebP, AVIF), video 25 MB (MP4, WebM, MOV, M4V). Se non c'è
+niente caricato, si usano le foto committate in `MainSite/wwwroot/photos`; se
+neanche quelle ci sono, un gradiente di riserva. Le icone di GitHub, Instagram
+e TikTok sono sovrapposte in alto a destra. Il lede sotto il titolo è scelto a
+caso tra quelli gestiti in `/admin/ledes` (Sperone, collezione `ledes`); se non
+ce ne sono, non viene mostrato.
 
 ### Amministrazione e lede
 
 **`/admin`** è la pagina di amministrazione: la raggiunge qualunque casella
 registrata su mailcow (non c'è allowlist). Da lì si crea un post con **New
-post**, si gestiscono i **lede**, le immagini e si vedono le richieste. Il
-pulsante di creazione non sta nella home.
+post**, si gestiscono i **lede**, i **media del jumbotron**, le immagini e si
+vedono le richieste. Il pulsante di creazione non sta nella home.
 
 In **`/admin/ledes`** c'è la lista editabile delle frasi del jumbotron: si
 aggiungono, si modificano in riga e si eliminano (massimo 300 caratteri). La

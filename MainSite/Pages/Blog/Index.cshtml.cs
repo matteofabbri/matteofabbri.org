@@ -11,6 +11,7 @@ public sealed class IndexModel(
     BlogAuthState auth,
     IWebHostEnvironment environment,
     RequestLogStore requestLogStore,
+    JumbotronMediaStore jumbotronMedia,
     ILogger<IndexModel> logger) : PageModel
 {
     private static readonly HashSet<string> PhotoExtensions = new(StringComparer.OrdinalIgnoreCase)
@@ -22,12 +23,25 @@ public sealed class IndexModel(
     public IReadOnlyList<string> Tags { get; private set; } = [];
     public bool IsAuthor { get; private set; }
     public string? PhotoUrl { get; private set; }
+    public string? VideoUrl { get; private set; }
     public string? Lede { get; private set; }
     public BlogClock Clock => clock;
 
     public async Task OnGetAsync(CancellationToken ct)
     {
-        PhotoUrl = PickPhoto();
+        var media = jumbotronMedia.PickRandom();
+        if (media is not null)
+        {
+            if (media.IsVideo)
+                VideoUrl = media.Url;
+            else
+                PhotoUrl = media.Url;
+        }
+        else
+        {
+            // Fallback per le foto committate a mano in wwwroot/photos.
+            PhotoUrl = PickPhoto();
+        }
 
         try
         {

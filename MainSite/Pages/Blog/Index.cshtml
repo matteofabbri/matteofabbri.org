@@ -6,7 +6,12 @@
     string? jumboStyle = Model.PhotoUrl is null ? null : $"background-image: url('{Model.PhotoUrl}')";
 }
 
-<section class="jumbotron @(Model.PhotoUrl is null ? "no-photo" : null)" style="@jumboStyle">
+<section class="jumbotron @(Model.PhotoUrl is null && Model.VideoUrl is null ? "no-photo" : null)" style="@jumboStyle">
+    @if (!string.IsNullOrEmpty(Model.VideoUrl))
+    {
+        <video class="jumbotron-video" src="@Model.VideoUrl" autoplay muted loop playsinline aria-hidden="true"></video>
+    }
+
     <nav class="social-bar" aria-label="Social links">
         <a class="social-link" href="https://github.com/matteofabbri" target="_blank" rel="noopener" aria-label="GitHub" title="GitHub">
             <img src="~/lib/social/github.svg" alt="" width="20" height="20" asp-append-version="true" />

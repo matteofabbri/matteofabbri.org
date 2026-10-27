@@ -172,7 +172,7 @@ main.wrap {
     position: absolute;
     top: 0.9rem;
     right: 0.9rem;
-    z-index: 2;
+    z-index: 3;
     display: flex;
     gap: 0.5rem;
 }
@@ -217,9 +217,20 @@ main.wrap {
     background-image: linear-gradient(135deg, #206f68 0%, #141413 70%);
 }
 
+.jumbotron-video {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    pointer-events: none;
+}
+
 .jumbotron::after {
     position: absolute;
     inset: 0;
+    z-index: 1;
     background: linear-gradient(180deg, rgba(0, 0, 0, 0.05), rgba(0, 0, 0, 0.7));
     pointer-events: none;
     content: "";
@@ -227,7 +238,7 @@ main.wrap {
 
 .jumbotron-inner {
     position: relative;
-    z-index: 1;
+    z-index: 2;
     max-width: 70ch;
     padding: clamp(1.4rem, 4vw, 2.6rem);
     color: #fff;
@@ -895,7 +906,8 @@ main.wrap {
     overflow: hidden;
 }
 
-.media-item img {
+.media-item img,
+.media-item video {
     display: block;
     width: 100%;
     aspect-ratio: 4 / 3;

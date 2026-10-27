@@ -65,6 +65,7 @@ public class Program
         builder.Services.AddSingleton<BlogClock>();
         builder.Services.AddSingleton<BlogStore>();
         builder.Services.AddSingleton<BlogMediaStore>();
+        builder.Services.AddSingleton<JumbotronMediaStore>();
         builder.AddBlogAuthentication(blogAuthState);
 
         builder.Services.AddAuthorization(options =>
