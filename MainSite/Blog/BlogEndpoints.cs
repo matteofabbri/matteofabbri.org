@@ -3,15 +3,15 @@ using System.Xml.Linq;
 
 namespace MainSite.Blog;
 
-// Gli indirizzi "di servizio" del blog: la home che porta all'indice, il feed
-// RSS e la sitemap. Sono minimal API perché non hanno bisogno di una view.
+// Gli indirizzi "di servizio" del blog: il vecchio indice, il feed RSS e la
+// sitemap. Sono minimal API perché non hanno bisogno di una view.
 public static class BlogEndpoints
 {
     public static void MapBlogEndpoints(this WebApplication app)
     {
-        // Per ora la home del sito personale è il blog. Quando arriverà una
-        // pagina vera, questo redirect sparirà.
-        app.MapGet("/", () => Results.Redirect("/blog"));
+        // La home è l'indice del blog (Pages/Blog/Index.cshtml, route "/").
+        // Il vecchio indirizzo resta solo come redirect per segnalibri e feed.
+        app.MapGet("/blog", () => Results.Redirect("/", permanent: true));
 
         app.MapGet("/blog/feed.xml", async (
             BlogStore store, TimeProvider clock, HttpRequest request, CancellationToken ct) =>
@@ -52,7 +52,7 @@ public static class BlogEndpoints
                 new XAttribute(XNamespace.Xmlns + "atom", atom),
                 new XElement("channel",
                     new XElement("title", "Matteo Fabbri — Blog"),
-                    new XElement("link", $"{baseUrl}/blog"),
+                    new XElement("link", $"{baseUrl}/"),
                     new XElement("description", "Appunti, progetti e cose che vale la pena raccontare."),
                     new XElement("language", "it"),
                     new XElement("lastBuildDate", now.UtcDateTime.ToString("R", CultureInfo.InvariantCulture)),
@@ -76,7 +76,7 @@ public static class BlogEndpoints
         return new XDocument(
             new XElement(ns + "urlset",
                 new XElement(ns + "url",
-                    new XElement(ns + "loc", $"{baseUrl}/blog")),
+                    new XElement(ns + "loc", $"{baseUrl}/")),
                 posts.Select(post => new XElement(ns + "url",
                     new XElement(ns + "loc", $"{baseUrl}/blog/{post.Slug}"),
                     new XElement(ns + "lastmod", post.Updated.UtcDateTime.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))))));

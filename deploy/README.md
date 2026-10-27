@@ -301,7 +301,8 @@ Il blog vive in **MainSite**:
 
 | Percorso | Cosa |
 |---|---|
-| `/blog` | indice pubblico |
+| `/` | home = indice pubblico del blog |
+| `/blog` | redirect 301 a `/` (vecchio indice) |
 | `/blog/{slug}` | un articolo |
 | `/blog/tag/{tag}` | articoli con un tag |
 | `/blog/feed.xml` | feed RSS |
