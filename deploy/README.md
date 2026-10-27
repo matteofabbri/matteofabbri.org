@@ -129,6 +129,14 @@ cd out
 docker compose up -d --build
 ```
 
+> **IP del client.** Il layer4 inoltra i siti al server HTTP interno con il
+> **PROXY protocol** (`proxy_protocol v1` verso `127.0.0.1:8443`): senza, il
+> sito vedrebbe tutte le richieste da `127.0.0.1` e GeoIP/rate limit per IP
+> sarebbero inutili. Il server HTTP rilegge l'header con il listener wrapper
+> `proxy_protocol`, disponibile in Caddy ≥ 2.8. Il workflow di deploy valida il
+> Caddyfile con l'immagine già in uso **prima** di sostituirlo: un errore ferma
+> il deploy senza toccare siti e posta.
+
 ---
 
 ## 2-ter. Togliere un servizio: la pulizia di docker

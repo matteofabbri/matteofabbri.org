@@ -73,6 +73,29 @@ jobs:
               ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$SERVER" 'gunzip | sudo docker load'
           done
 
+      # Il Caddyfile governa anche il routing della posta: se è invalido il
+      # container non parte e cadono siti E posta. Lo validiamo con l'immagine
+      # Caddy già in uso sul server, PRIMA di sostituire quello in /opt.
+      - name: Valida Caddyfile
+        run: |
+          scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \
+            "MatteoFabbri.org.AppHost/caddy/Caddyfile" "$SERVER:~/Caddyfile.new"
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$SERVER" '
+            set -e
+            cd /opt/matteofabbri
+            IMG=$(sudo docker compose images -q caddy | head -n1)
+            if [ -z "$IMG" ]; then
+              echo "Immagine Caddy assente: salto la validazione (primo deploy)."
+              rm -f /home/ubuntu/Caddyfile.new
+              exit 0
+            fi
+            sudo docker run --rm "$IMG" version
+            sudo docker run --rm --env-file /opt/matteofabbri/.env \
+              -v /home/ubuntu/Caddyfile.new:/etc/caddy/Caddyfile:ro \
+              "$IMG" validate --config /etc/caddy/Caddyfile --adapter caddyfile
+            rm -f /home/ubuntu/Caddyfile.new
+          '
+
       # Il contesto di build che vive nel repo: Caddy.
       # Passa dalla home perche' ubuntu non scrive in /opt, poi sudo lo mette
       # al suo posto accanto al compose.
