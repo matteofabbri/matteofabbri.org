@@ -78,15 +78,9 @@ a {
 
 .wrap {
     width: 100%;
-    max-width: 760px;
+    max-width: 1400px;
     margin: 0 auto;
     padding: 0 1.25rem;
-}
-
-/* Pagine di dati (mappa e tabella richieste): più larghe della misura di
-   lettura del blog. */
-.wrap-wide {
-    max-width: 1400px;
 }
 
 main.wrap {
@@ -400,6 +394,7 @@ main.wrap {
 
 .post {
     max-width: 70ch;
+    margin-inline: auto;
 }
 
 .post-header {

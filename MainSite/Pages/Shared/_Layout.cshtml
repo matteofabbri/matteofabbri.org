@@ -5,7 +5,6 @@
     string description = ViewData["Description"] as string
         ?? "Appunti, progetti e cose che vale la pena raccontare.";
     bool isAuthor = BlogAuthState.IsAuthor(User);
-    string wideClass = ViewData["WideLayout"] is true ? " wrap-wide" : "";
 }
 <!DOCTYPE html>
 <html lang="it">
@@ -22,7 +21,7 @@
 <a class="skip-link" href="#contenuto">Vai al contenuto</a>
 
 <header class="site-header">
-    <div class="wrap header-inner@(wideClass)">
+    <div class="wrap header-inner">
         <a class="brand" asp-page="/Blog/Index">Matteo Fabbri</a>
         <nav class="site-nav" aria-label="Navigazione principale">
             <a asp-page="/Blog/Index">Blog</a>
@@ -39,12 +38,12 @@
     </div>
 </header>
 
-<main id="contenuto" class="wrap@(wideClass)">
+<main id="contenuto" class="wrap">
     @RenderBody()
 </main>
 
 <footer class="site-footer">
-    <div class="wrap footer-inner@(wideClass)">
+    <div class="wrap footer-inner">
         <span>© @DateTime.UtcNow.Year Matteo Fabbri</span>
         <a href="/blog/feed.xml">Feed RSS</a>
     </div>
