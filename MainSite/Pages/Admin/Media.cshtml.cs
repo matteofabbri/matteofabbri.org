@@ -17,7 +17,7 @@ public sealed class MediaModel(BlogMediaStore media) : PageModel
     {
         if (Upload is null || Upload.Length == 0)
         {
-            TempData["Errore"] = "Scegli un file da caricare.";
+            TempData["Errore"] = "Choose a file to upload.";
             return RedirectToPage();
         }
 
@@ -25,7 +25,7 @@ public sealed class MediaModel(BlogMediaStore media) : PageModel
         {
             await using var stream = Upload.OpenReadStream();
             var saved = await media.SaveAsync(Upload.FileName, stream, Upload.Length, ct);
-            TempData["Messaggio"] = $"Immagine caricata: {saved.FileName}";
+            TempData["Messaggio"] = $"Image uploaded: {saved.FileName}";
         }
         catch (BlogValidationException ex)
         {

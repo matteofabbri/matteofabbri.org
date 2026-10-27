@@ -93,8 +93,8 @@ public static class BlogAuth
                         request, context.HttpContext.RequestAborted);
                     if (!response.IsSuccessStatusCode)
                     {
-                        logger.LogWarning("mailcow /oauth/profile ha risposto {Status}.", (int)response.StatusCode);
-                        context.Fail($"mailcow /oauth/profile ha risposto {(int)response.StatusCode}.");
+                        logger.LogWarning("mailcow /oauth/profile responded {Status}.", (int)response.StatusCode);
+                        context.Fail($"mailcow /oauth/profile responded {(int)response.StatusCode}.");
                         return;
                     }
 
@@ -105,14 +105,14 @@ public static class BlogAuth
                 }
                 catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
                 {
-                    logger.LogWarning(ex, "Impossibile leggere il profilo mailcow.");
-                    context.Fail("mailcow non ha risposto.");
+                    logger.LogWarning(ex, "Unable to read the mailcow profile.");
+                    context.Fail("mailcow did not respond.");
                     return;
                 }
 
                 if (!profile.TryGetProperty("success", out var success) || success.ValueKind != JsonValueKind.True)
                 {
-                    context.Fail("mailcow non ha restituito un profilo valido.");
+                    context.Fail("mailcow did not return a valid profile.");
                     return;
                 }
 
@@ -122,7 +122,7 @@ public static class BlogAuth
 
                 if (email.Length == 0)
                 {
-                    context.Fail("Il profilo mailcow non contiene un indirizzo.");
+                    context.Fail("The mailcow profile does not contain an email address.");
                     return;
                 }
 
@@ -135,7 +135,7 @@ public static class BlogAuth
                 var identity = context.Identity;
                 if (identity is null)
                 {
-                    context.Fail("Identità mailcow mancante.");
+                    context.Fail("Missing mailcow identity.");
                     return;
                 }
 
@@ -156,7 +156,7 @@ public static class BlogAuth
                 var logger = context.HttpContext.RequestServices
                     .GetRequiredService<ILoggerFactory>()
                     .CreateLogger("MainSite.Blog.BlogAuth");
-                logger.LogWarning(context.Failure, "Accesso al blog non riuscito.");
+                logger.LogWarning(context.Failure, "Blog sign-in failed.");
 
                 context.Response.Redirect("/admin/login?error=access_denied");
                 return Task.CompletedTask;

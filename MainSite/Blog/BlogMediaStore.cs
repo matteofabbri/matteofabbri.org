@@ -56,13 +56,13 @@ public sealed class BlogMediaStore
     public async Task<BlogMediaFile> SaveAsync(string originalFileName, Stream content, long length, CancellationToken ct = default)
     {
         if (length <= 0)
-            throw new BlogValidationException("Il file è vuoto.");
+            throw new BlogValidationException("The file is empty.");
         if (length > MaxBytes)
-            throw new BlogValidationException("Il file supera gli 8 MB.");
+            throw new BlogValidationException("The file exceeds 8 MB.");
 
         string extension = Path.GetExtension(originalFileName);
         if (!AllowedTypes.ContainsKey(extension))
-            throw new BlogValidationException("Formato non supportato. Usa JPG, PNG, GIF, WebP o AVIF.");
+            throw new BlogValidationException("Unsupported format. Use JPG, PNG, GIF, WebP or AVIF.");
 
         string baseName = BlogMarkdown.Slugify(Path.GetFileNameWithoutExtension(originalFileName));
         if (baseName.Length > 60)
@@ -79,7 +79,7 @@ public sealed class BlogMediaStore
                 await content.CopyToAsync(file, ct);
 
             if (!await HasValidSignatureAsync(temp, extension.ToLowerInvariant(), ct))
-                throw new BlogValidationException("Il contenuto del file non sembra un'immagine valida.");
+                throw new BlogValidationException("The file content does not look like a valid image.");
 
             File.Move(temp, target);
         }

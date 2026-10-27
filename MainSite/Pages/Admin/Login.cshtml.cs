@@ -33,8 +33,8 @@ public sealed class LoginModel(BlogAuthState auth) : PageModel
         ReturnUrl = Url.IsLocalUrl(returnUrl) ? returnUrl : null;
         Error = error switch
         {
-            "access_denied" => "Accesso non riuscito. Riprova; se il problema resta, controlla che la casella sia abilitata.",
-            "not_configured" => "L'accesso con mailcow non è configurato su questo sito.",
+            "access_denied" => "Sign-in failed. Try again; if the problem persists, check that the mailbox is enabled.",
+            "not_configured" => "mailcow sign-in is not configured on this site.",
             _ => null,
         };
 

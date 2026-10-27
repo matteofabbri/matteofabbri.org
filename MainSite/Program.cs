@@ -179,6 +179,10 @@ public class Program
         if (requestLogEnabled)
             app.UseMiddleware<RequestLogMiddleware>();
 
+        // 404: la pagina riusa il percorso /404 e pesca un media a caso da
+        // wwwroot/404. Va prima dei file statici e del routing.
+        app.UseStatusCodePagesWithReExecute("/404");
+
         // Serve i file statici da wwwroot (css, js, immagini, ...). La mappa
         // dei paesi è un .geojson: senza il mapping esplicito il middleware
         // non lo servirebbe (estensione sconosciuta).

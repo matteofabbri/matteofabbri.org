@@ -1,0 +1,33 @@
+@page "/404"
+@model MainSite.Pages.NotFoundModel
+@{
+    ViewData["Title"] = "Page not found";
+}
+
+<div class="not-found">
+    <p class="eyebrow">404</p>
+    <h1>Page not found</h1>
+    <p class="lede">The page you are looking for does not exist. Here is something to make up for it.</p>
+
+    @if (Model.MediaUrl is not null)
+    {
+        <figure class="not-found-media">
+            @if (Model.IsVideo)
+            {
+                <video src="@Model.MediaUrl" autoplay muted loop playsinline controls></video>
+            }
+            else
+            {
+                <img src="@Model.MediaUrl" alt="@Model.MediaName" />
+            }
+        </figure>
+    }
+    else
+    {
+        <p class="hint">
+            Put an image or a video in <code>wwwroot/404</code> and one will show up here at random.
+        </p>
+    }
+
+    <p><a class="button" asp-page="/Blog/Index">Back to the blog</a></p>
+</div>

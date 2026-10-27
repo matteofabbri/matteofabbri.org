@@ -53,8 +53,8 @@ public static class BlogEndpoints
                 new XElement("channel",
                     new XElement("title", "Matteo Fabbri — Blog"),
                     new XElement("link", $"{baseUrl}/"),
-                    new XElement("description", "Appunti, progetti e cose che vale la pena raccontare."),
-                    new XElement("language", "it"),
+                    new XElement("description", "Notes, projects and things worth telling."),
+                    new XElement("language", "en"),
                     new XElement("lastBuildDate", now.UtcDateTime.ToString("R", CultureInfo.InvariantCulture)),
                     new XElement(atom + "link",
                         new XAttribute("href", feedUrl),
@@ -77,8 +77,15 @@ public static class BlogEndpoints
             new XElement(ns + "urlset",
                 new XElement(ns + "url",
                     new XElement(ns + "loc", $"{baseUrl}/")),
+                new XElement(ns + "url",
+                    new XElement(ns + "loc", $"{baseUrl}/requests")),
                 posts.Select(post => new XElement(ns + "url",
                     new XElement(ns + "loc", $"{baseUrl}/blog/{post.Slug}"),
-                    new XElement(ns + "lastmod", post.Updated.UtcDateTime.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))))));
+                    new XElement(ns + "lastmod", post.Updated.UtcDateTime.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)))),
+                posts.SelectMany(post => post.Tags)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(tag => tag, StringComparer.OrdinalIgnoreCase)
+                    .Select(tag => new XElement(ns + "url",
+                        new XElement(ns + "loc", $"{baseUrl}/blog/tag/{BlogMarkdown.Slugify(tag)}")))));
     }
 }

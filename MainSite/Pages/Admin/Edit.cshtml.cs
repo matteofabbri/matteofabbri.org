@@ -61,25 +61,25 @@ public sealed class EditModel(BlogStore store, BlogClock clock, IOptions<BlogOpt
         Input.Markdown ??= "";
 
         if (Input.Title.Length == 0)
-            ModelState.AddModelError("Input.Title", "Il titolo è obbligatorio.");
+            ModelState.AddModelError("Input.Title", "Title is required.");
         else if (Input.Title.Length > 200)
-            ModelState.AddModelError("Input.Title", "Il titolo non può superare i 200 caratteri.");
+            ModelState.AddModelError("Input.Title", "Title cannot exceed 200 characters.");
 
         if (string.IsNullOrWhiteSpace(Input.Markdown))
-            ModelState.AddModelError("Input.Markdown", "Il testo dell'articolo è obbligatorio.");
+            ModelState.AddModelError("Input.Markdown", "The post body is required.");
 
         if (Input.Summary.Length > 300)
-            ModelState.AddModelError("Input.Summary", "Il riepilogo non può superare i 300 caratteri.");
+            ModelState.AddModelError("Input.Summary", "Summary cannot exceed 300 characters.");
 
         string finalSlug = Input.Slug.Length > 0
             ? BlogMarkdown.Slugify(Input.Slug)
             : slug ?? store.UniqueSlug(BlogMarkdown.Slugify(Input.Title));
 
         if (!BlogMarkdown.IsValidSlug(finalSlug))
-            ModelState.AddModelError("Input.Slug", "Lo slug non è valido.");
+            ModelState.AddModelError("Input.Slug", "Slug is not valid.");
 
         if (finalSlug != slug && store.SlugExists(finalSlug))
-            ModelState.AddModelError("Input.Slug", "Esiste già un articolo con questo slug: scegline un altro.");
+            ModelState.AddModelError("Input.Slug", "A post with this slug already exists: choose another one.");
 
         DateTimeOffset published = default;
         if (!DateTime.TryParseExact(
@@ -89,7 +89,7 @@ public sealed class EditModel(BlogStore store, BlogClock clock, IOptions<BlogOpt
                 DateTimeStyles.None,
                 out var local))
         {
-            ModelState.AddModelError("Input.Published", "Data di pubblicazione non valida.");
+            ModelState.AddModelError("Input.Published", "Invalid publication date.");
         }
         else
         {
@@ -101,7 +101,7 @@ public sealed class EditModel(BlogStore store, BlogClock clock, IOptions<BlogOpt
             ?? "";
 
         if (author.Length == 0)
-            ModelState.AddModelError("", "La sessione non contiene un indirizzo: rifai l'accesso.");
+            ModelState.AddModelError("", "The session has no email address: sign in again.");
 
         if (!ModelState.IsValid)
             return Page();
@@ -125,7 +125,7 @@ public sealed class EditModel(BlogStore store, BlogClock clock, IOptions<BlogOpt
                 Author = author,
             }, slug, ct);
 
-            TempData["Messaggio"] = Input.Draft ? "Bozza salvata." : "Articolo salvato.";
+            TempData["Messaggio"] = Input.Draft ? "Draft saved." : "Post saved.";
             return RedirectToPage("Edit", new { slug = post.Slug });
         }
         catch (BlogValidationException ex)
@@ -138,9 +138,9 @@ public sealed class EditModel(BlogStore store, BlogClock clock, IOptions<BlogOpt
     public async Task<IActionResult> OnPostDeleteAsync(string? slug, CancellationToken ct)
     {
         if (slug is not null && await store.DeleteAsync(slug, ct))
-            TempData["Messaggio"] = $"Articolo \"{slug}\" spostato nel cestino.";
+            TempData["Messaggio"] = $"Post \"{slug}\" moved to the trash.";
         else
-            TempData["Errore"] = "Articolo non trovato: forse è già stato cancellato.";
+            TempData["Errore"] = "Post not found: it may have already been deleted.";
 
         return RedirectToPage("Index");
     }

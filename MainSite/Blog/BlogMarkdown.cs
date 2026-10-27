@@ -114,5 +114,5 @@ public sealed class BlogClock
     public DateTime ToLocal(DateTimeOffset instant) => TimeZoneInfo.ConvertTime(instant, Zone).DateTime;
 
     public string Format(DateTimeOffset instant, string format = "d MMMM yyyy") =>
-        ToLocal(instant).ToString(format, CultureInfo.GetCultureInfo("it-IT"));
+        ToLocal(instant).ToString(format, CultureInfo.GetCultureInfo("en-GB"));
 }

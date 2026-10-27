@@ -17,16 +17,16 @@ public sealed class IndexModel(BlogStore store, BlogClock clock, TimeProvider ti
     public string Status(BlogPost post)
     {
         if (post.Draft)
-            return "bozza";
-        return post.Published > time.GetUtcNow() ? "programmato" : "pubblicato";
+            return "draft";
+        return post.Published > time.GetUtcNow() ? "scheduled" : "published";
     }
 
     public async Task<IActionResult> OnPostDeleteAsync(string slug, CancellationToken ct)
     {
         if (await store.DeleteAsync(slug, ct))
-            TempData["Messaggio"] = $"Articolo \"{slug}\" spostato nel cestino.";
+            TempData["Messaggio"] = $"Post \"{slug}\" moved to the trash.";
         else
-            TempData["Errore"] = "Articolo non trovato: forse è già stato cancellato.";
+            TempData["Errore"] = "Post not found: it may have already been deleted.";
 
         return RedirectToPage();
     }

@@ -12,8 +12,8 @@ public sealed class LogoutModel : PageModel
     public async Task<IActionResult> OnPostAsync()
     {
         await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-        return Redirect("/blog");
+        return Redirect("/");
     }
 
-    public IActionResult OnGet() => Redirect("/blog");
+    public IActionResult OnGet() => Redirect("/");
 }

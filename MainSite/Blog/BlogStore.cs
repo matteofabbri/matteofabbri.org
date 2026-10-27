@@ -118,25 +118,25 @@ public sealed class BlogStore
         string author = (input.Author ?? "").Trim();
 
         if (!SlugPattern.IsMatch(input.Slug))
-            throw new BlogValidationException("Lo slug può contenere solo lettere minuscole, numeri e trattini.");
+            throw new BlogValidationException("The slug can contain only lowercase letters, numbers and hyphens.");
         if (title.Length == 0)
-            throw new BlogValidationException("Il titolo è obbligatorio.");
+            throw new BlogValidationException("Title is required.");
         if (title.Length > 200)
-            throw new BlogValidationException("Il titolo non può superare i 200 caratteri.");
+            throw new BlogValidationException("Title cannot exceed 200 characters.");
         if (body.Length == 0)
-            throw new BlogValidationException("Il testo dell'articolo è obbligatorio.");
+            throw new BlogValidationException("The post body is required.");
         if (body.Length > 400_000)
-            throw new BlogValidationException("L'articolo è troppo lungo (limite 400.000 caratteri).");
+            throw new BlogValidationException("The post is too long (limit 400,000 characters).");
         if (summary.Length > 300)
-            throw new BlogValidationException("Il riepilogo non può superare i 300 caratteri.");
+            throw new BlogValidationException("Summary cannot exceed 300 characters.");
         if (author.Length == 0)
-            throw new BlogValidationException("Autore mancante: rifai l'accesso.");
+            throw new BlogValidationException("Missing author: sign in again.");
 
         var tags = NormalizeTags(input.Tags);
         if (tags.Count > 12)
-            throw new BlogValidationException("Al massimo 12 tag per articolo.");
+            throw new BlogValidationException("At most 12 tags per post.");
         if (tags.Any(t => t.Length > 40))
-            throw new BlogValidationException("Ogni tag può avere al massimo 40 caratteri.");
+            throw new BlogValidationException("Each tag can be at most 40 characters.");
 
         await _writeLock.WaitAsync(ct);
         try
@@ -147,7 +147,7 @@ public sealed class BlogStore
                 && SlugPattern.IsMatch(originalSlug);
 
             if (File.Exists(path) && (originalSlug is null || originalSlug != input.Slug))
-                throw new BlogValidationException($"Esiste già un articolo con lo slug \"{input.Slug}\".");
+                throw new BlogValidationException($"A post with the slug \"{input.Slug}\" already exists.");
 
             var post = new BlogPost
             {
@@ -289,7 +289,7 @@ public sealed class BlogStore
     {
         string path = Path.GetFullPath(Path.Combine(_root, slug + ".md"));
         if (!path.StartsWith(_root + Path.DirectorySeparatorChar, StringComparison.Ordinal))
-            throw new BlogValidationException("Percorso dell'articolo non valido.");
+            throw new BlogValidationException("Invalid post path.");
         return path;
     }
 

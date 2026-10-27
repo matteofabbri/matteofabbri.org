@@ -74,7 +74,7 @@ public sealed class CalDavCalendarGateway : ICalendarGateway
         request.Headers.Authorization = new AuthenticationHeaderValue("Basic", _credentials);
         request.Headers.TryAddWithoutValidation("Depth", "1");
 
-        using var response = await SendAsync(request, "leggere il calendario", ct);
+        using var response = await SendAsync(request, "reading the calendar", ct);
         var multistatus = await response.Content.ReadAsStringAsync(ct);
         return ParseBusy(multistatus, fromUtc, toUtc);
     }
@@ -93,7 +93,7 @@ public sealed class CalDavCalendarGateway : ICalendarGateway
         // risponde 412 e non sovrascrive niente.
         request.Headers.TryAddWithoutValidation("If-None-Match", "*");
 
-        using var response = await SendAsync(request, "scrivere sul calendario", ct);
+        using var response = await SendAsync(request, "writing to the calendar", ct);
 
         // 412/409: lo slot è già occupato (non è un guasto).
         if (response.StatusCode is HttpStatusCode.PreconditionFailed or HttpStatusCode.Conflict)
@@ -114,31 +114,31 @@ public sealed class CalDavCalendarGateway : ICalendarGateway
         }
         catch (HttpRequestException ex)
         {
-            throw new CalendarUnavailableException($"Impossibile {action}: server non raggiungibile.", ex);
+            throw new CalendarUnavailableException($"Cannot {action}: server unreachable.", ex);
         }
         catch (TaskCanceledException ex) when (!ct.IsCancellationRequested)
         {
-            throw new CalendarUnavailableException($"Impossibile {action}: nessuna risposta in tempo.", ex);
+            throw new CalendarUnavailableException($"Cannot {action}: no response in time.", ex);
         }
 
         if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
         {
             response.Dispose();
             throw new CalendarUnavailableException(
-                "Il calendario ha rifiutato le credenziali: controlla l'app password con accesso DAV.");
+                "The calendar rejected the credentials: check the app password with DAV access.");
         }
         if (response.StatusCode == HttpStatusCode.NotFound)
         {
             response.Dispose();
             throw new CalendarUnavailableException(
-                "Calendario non trovato: controlla Calendar:CalendarPath (di norma Calendar/personal/).");
+                "Calendar not found: check Calendar:CalendarPath (usually Calendar/personal/).");
         }
         if (!response.IsSuccessStatusCode && response.StatusCode is not HttpStatusCode.PreconditionFailed
             && response.StatusCode is not HttpStatusCode.Conflict)
         {
             var status = (int)response.StatusCode;
             response.Dispose();
-            throw new CalendarUnavailableException($"Il calendario ha risposto {status} durante {action}.");
+            throw new CalendarUnavailableException($"The calendar responded {status} during {action}.");
         }
 
         return response;
@@ -154,7 +154,7 @@ public sealed class CalDavCalendarGateway : ICalendarGateway
         }
         catch (System.Xml.XmlException ex)
         {
-            throw new CalendarUnavailableException("La risposta del calendario non è leggibile.", ex);
+            throw new CalendarUnavailableException("The calendar response is not readable.", ex);
         }
 
         var busy = new List<BusyPeriod>();
@@ -169,7 +169,7 @@ public sealed class CalDavCalendarGateway : ICalendarGateway
             }
             catch (Exception ex)
             {
-                throw new CalendarUnavailableException("Un evento del calendario non è leggibile.", ex);
+                throw new CalendarUnavailableException("A calendar event is not readable.", ex);
             }
             if (calendar is null) continue;
 
@@ -216,7 +216,7 @@ public sealed class CalDavCalendarGateway : ICalendarGateway
         });
 
         return new CalendarSerializer().SerializeToString(calendar)
-               ?? throw new CalendarUnavailableException("Impossibile preparare l'evento da scrivere.");
+               ?? throw new CalendarUnavailableException("Cannot prepare the event to write.");
     }
 
     // --- Utilità ------------------------------------------------------------
@@ -231,7 +231,7 @@ public sealed class CalDavCalendarGateway : ICalendarGateway
 
     private Uri RequireCalendarUrl() => _calendarUrl
         ?? throw new CalendarNotConfiguredException(
-            "Prenotazioni non configurate: servono URL, utente e app password del calendario.");
+            "Bookings are not configured: calendar URL, username and app password are required.");
 
     // CalDateTime con istanti UTC: niente TZID da risolvere a mano, e gli orari
     // restano corretti anche quando cambia l'ora legale.

@@ -8,23 +8,23 @@
 
 <div class="page-head">
     <div>
-        <p class="eyebrow">Appunti</p>
+        <p class="eyebrow">Notes</p>
         <h1>Blog</h1>
-        <p class="lede">Progetti, idee e cose che vale la pena raccontare.</p>
+        <p class="lede">Projects, ideas and things worth telling.</p>
     </div>
     @if (isAuthor)
     {
-        <a class="button" asp-page="/Admin/Edit">Nuovo articolo</a>
+        <a class="button" asp-page="/Admin/Edit">New post</a>
     }
 </div>
 
 @if (Model.Posts.Count == 0)
 {
     <div class="empty">
-        <p>Qui non c'è ancora niente da leggere.</p>
+        <p>There is nothing to read yet.</p>
         @if (isAuthor)
         {
-            <p><a asp-page="/Admin/Edit">Scrivi il primo articolo</a>.</p>
+            <p><a asp-page="/Admin/Edit">Write the first post</a>.</p>
         }
     </div>
 }
@@ -32,7 +32,7 @@ else
 {
     @if (Model.Tags.Count > 0)
     {
-        <nav class="tag-cloud" aria-label="Tag">
+        <nav class="tag-cloud" aria-label="Tags">
             @foreach (string tag in Model.Tags)
             {
                 <a class="tag" asp-page="/Blog/Tag" asp-route-tag="@BlogMarkdown.Slugify(tag)">@tag</a>
@@ -50,12 +50,12 @@ else
                     @if (BlogMarkdown.ReadingMinutes(post.Markdown) > 0)
                     {
                         <span aria-hidden="true">·</span>
-                        <span>@BlogMarkdown.ReadingMinutes(post.Markdown) min di lettura</span>
+                        <span>@BlogMarkdown.ReadingMinutes(post.Markdown) min read</span>
                     }
                     @if (!visible)
                     {
                         <span class="badge @(post.Draft ? "badge-draft" : "badge-scheduled")">
-                            @(post.Draft ? "bozza" : "programmato")
+                            @(post.Draft ? "draft" : "scheduled")
                         </span>
                     }
                 </div>

@@ -96,6 +96,6 @@ public sealed class BlogMarkdownTests
 
         Assert.Equal(TimeSpan.FromHours(2), clock.ToInstant(new DateTime(2026, 7, 1, 9, 0, 0)).Offset);
         Assert.Equal(TimeSpan.FromHours(1), clock.ToInstant(new DateTime(2026, 12, 1, 9, 0, 0)).Offset);
-        Assert.Equal("1 luglio 2026", clock.Format(clock.ToInstant(new DateTime(2026, 7, 1, 9, 0, 0))));
+        Assert.Equal("1 July 2026", clock.Format(clock.ToInstant(new DateTime(2026, 7, 1, 9, 0, 0))));
     }
 }

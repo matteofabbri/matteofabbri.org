@@ -1,14 +1,14 @@
 @page "/admin/media"
 @model MainSite.Pages.Admin.MediaModel
 @{
-    ViewData["Title"] = "Immagini";
+    ViewData["Title"] = "Images";
 }
 
 <div class="page-head">
     <div>
-        <p class="eyebrow"><a asp-page="/Admin/Index">I tuoi articoli</a> / Immagini</p>
-        <h1>Immagini</h1>
-        <p class="lede">Le immagini caricate qui finiscono nel volume del blog e si possono citare dagli articoli.</p>
+        <p class="eyebrow"><a asp-page="/Admin/Index">Your posts</a> / Images</p>
+        <h1>Images</h1>
+        <p class="lede">Images uploaded here go into the blog volume and can be referenced from posts.</p>
     </div>
 </div>
 
@@ -23,16 +23,16 @@
 
 <form method="post" enctype="multipart/form-data" class="upload-form">
     <label class="field">
-        <span class="field-label">Carica un'immagine</span>
+        <span class="field-label">Upload an image</span>
         <input type="file" name="Upload" accept="image/jpeg,image/png,image/gif,image/webp,image/avif" />
-        <span class="hint">JPG, PNG, GIF, WebP o AVIF. Massimo 8 MB.</span>
+        <span class="hint">JPG, PNG, GIF, WebP or AVIF. Max 8 MB.</span>
     </label>
-    <button type="submit" class="button">Carica</button>
+    <button type="submit" class="button">Upload</button>
 </form>
 
 @if (Model.Files.Count == 0)
 {
-    <div class="empty"><p>Nessuna immagine caricata.</p></div>
+    <div class="empty"><p>No images uploaded yet.</p></div>
 }
 else
 {
@@ -44,7 +44,7 @@ else
                 <figcaption>
                     <span class="media-name">@file.FileName</span>
                     <span class="hint">@file.SizeLabel</span>
-                    <code>![descrizione](@file.Url)</code>
+                    <code>![description](@file.Url)</code>
                 </figcaption>
             </figure>
         }

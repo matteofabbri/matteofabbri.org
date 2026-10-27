@@ -306,7 +306,9 @@ Il blog vive in **MainSite**:
 | `/blog/{slug}` | un articolo |
 | `/blog/tag/{tag}` | articoli con un tag |
 | `/blog/feed.xml` | feed RSS |
-| `/sitemap.xml` | sitemap del blog |
+| `/sitemap` | sitemap leggibile |
+| `/sitemap.xml` | sitemap XML |
+| `/404` | pagina di errore con un media casuale |
 | `/admin/login` | accesso autori |
 | `/admin` | elenco, editor, immagini |
 
@@ -376,8 +378,10 @@ mailcow **non** sono caselle e non possono accedere al blog.
 ### Scrivere e pubblicare
 
 Da `/admin` crei un articolo, ne scegli lo slug (se lo lasci vuoto lo ricaviamo
-dal titolo) e scrivi in Markdown: titoli, elenchi, link, tabelle, blocchi di
-codice e immagini. L'HTML grezzo non viene eseguito.
+dal titolo) e scrivi il testo nell'editor **WYSIWYG** (Toast UI Editor, incluso
+in `wwwroot/lib/toastui-editor`): titoli, elenchi, link, tabelle, blocchi di
+codice e immagini. L'editor produce **Markdown** e si può passare alla modalità
+Markdown dalle schede in basso. L'HTML grezzo non viene eseguito.
 
 La **data di pubblicazione** si interpreta nel fuso `Blog:TimeZone`
 (`Europe/Rome`). Un articolo con la spunta **Bozza**, o con una data futura, non
@@ -392,6 +396,17 @@ volume, si servono da `/blog/media/{file}` e il testo da incollare nell'articolo
 **Cestino.** Eliminare un articolo non cancella il file: lo sposta in
 `_trash/` dentro il volume. Se la cancellazione è stata un errore, si recupera
 da lì.
+
+### 404 e sitemap
+
+La pagina **`/404`** si apre per qualsiasi URL inesistente (`UseStatusCodePagesWithReExecute`).
+Pesca a caso un file da `MainSite/wwwroot/404` tra JPG, PNG, GIF, WebP, AVIF,
+MP4, WebM, MOV e M4V; se la cartella è vuota mostra un messaggio. I file vanno
+nel repo (quindi nell'immagine al deploy): aggiungi immagini o video lì.
+
+La **`/sitemap`** è la versione leggibile (pagine, articoli pubblicati, tag);
+`/sitemap.xml` elenca home, `/requests`, articoli e tag. Entrambe sono collegate
+dal footer, insieme al login.
 
 ### Backup degli articoli
 

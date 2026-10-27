@@ -23,7 +23,7 @@
             @if (BlogMarkdown.ReadingMinutes(Model.Post.Markdown) > 0)
             {
                 <span aria-hidden="true">·</span>
-                <span>@BlogMarkdown.ReadingMinutes(Model.Post.Markdown) min di lettura</span>
+                <span>@BlogMarkdown.ReadingMinutes(Model.Post.Markdown) min read</span>
             }
         </div>
 
@@ -50,15 +50,15 @@
         <div class="alert warning">
             @if (Model.Post.Draft)
             {
-                <span>Questa è una bozza: la vedi solo tu perché hai fatto l'accesso.</span>
+                <span>This is a draft: only you can see it because you are signed in.</span>
             }
             else
             {
-                <span>Questo articolo è programmato per il @Model.Clock.Format(Model.Post.Published, "d MMMM yyyy 'alle' HH:mm"): non è ancora pubblico.</span>
+                <span>This post is scheduled for @Model.Clock.Format(Model.Post.Published, "d MMMM yyyy 'at' HH:mm"): it is not public yet.</span>
             }
             @if (isAuthor)
             {
-                <a asp-page="/Admin/Edit" asp-route-slug="@Model.Post.Slug">Modifica</a>
+                <a asp-page="/Admin/Edit" asp-route-slug="@Model.Post.Slug">Edit</a>
             }
         </div>
     }
@@ -69,15 +69,15 @@
 
     <footer class="post-footer">
         <p>
-            Scritto da @Model.AuthorName
+            Written by @Model.AuthorName
             @if (Model.Post.Updated > Model.Post.Published.AddDays(2))
             {
-                <span>· aggiornato il @Model.Clock.Format(Model.Post.Updated)</span>
+                <span>· updated on @Model.Clock.Format(Model.Post.Updated)</span>
             }
         </p>
         @if (isAuthor)
         {
-            <a class="button button-secondary" asp-page="/Admin/Edit" asp-route-slug="@Model.Post.Slug">Modifica articolo</a>
+            <a class="button button-secondary" asp-page="/Admin/Edit" asp-route-slug="@Model.Post.Slug">Edit post</a>
         }
     </footer>
 </article>

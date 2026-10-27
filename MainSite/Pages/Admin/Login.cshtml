@@ -1,12 +1,12 @@
 @page "/admin/login"
 @model MainSite.Pages.Admin.LoginModel
 @{
-    ViewData["Title"] = "Accedi";
+    ViewData["Title"] = "Sign in";
 }
 
 <div class="auth-card">
-    <p class="eyebrow">Area di scrittura</p>
-    <h1>Accedi</h1>
+    <p class="eyebrow">Writing area</p>
+    <h1>Sign in</h1>
 
     @if (Model.Error is not null)
     {
@@ -16,39 +16,39 @@
     @if (Model.Fake)
     {
         <div class="alert warning">
-            <strong>Modalità sviluppo.</strong>
-            L'accesso è finto e non passa da mailcow: in produzione questa scorciatoia non esiste.
+            <strong>Development mode.</strong>
+            Sign-in is fake and does not go through mailcow: this shortcut does not exist in production.
         </div>
-        <p>Entrerai come <strong>@Model.FakeAuthor</strong>.</p>
+        <p>You will sign in as <strong>@Model.FakeAuthor</strong>.</p>
         <form method="post">
             <input type="hidden" name="returnUrl" value="@Model.ReturnUrl" />
-            <button type="submit" class="button button-block">Entra come autore</button>
+            <button type="submit" class="button button-block">Enter as author</button>
         </form>
     }
     else if (Model.Enabled)
     {
         <p>
-            L'accesso usa la tua casella <strong>@Model.MailcowHost</strong>: verrai portato
-            sulla webmail, mailcow ti autentica (password e 2FA compresi) e poi torni qui.
-            La password non passa dal blog. Può scrivere qualunque casella di
-            <strong>@Model.MailcowHost</strong>.
+            Sign-in uses your mailbox <strong>@Model.MailcowHost</strong>: you will be taken to the
+            webmail, mailcow authenticates you (password and 2FA included) and then you come back here.
+            The password never passes through the blog. Any mailbox on
+            <strong>@Model.MailcowHost</strong> can write.
         </p>
         <form method="post">
             <input type="hidden" name="returnUrl" value="@Model.ReturnUrl" />
-            <button type="submit" class="button button-block">Accedi con mailcow</button>
+            <button type="submit" class="button button-block">Sign in with mailcow</button>
         </form>
     }
     else
     {
         <div class="alert warning">
-            L'accesso non è ancora configurato: manca il client OAuth2 di mailcow.
+            Sign-in is not configured yet: the mailcow OAuth2 client is missing.
         </div>
         <p class="muted">
-            Lato mailcow serve un'app OAuth2 con redirect
-            <code>/admin/login/callback</code>; poi il client ID e il secret vanno
-            nelle variabili <code>MAILCOW_OAUTH_*</code>.
+            On mailcow you need an OAuth2 app with redirect
+            <code>/admin/login/callback</code>; then put the client ID and secret in the
+            <code>MAILCOW_OAUTH_*</code> variables.
         </p>
     }
 
-    <p class="auth-back"><a asp-page="/Blog/Index">← Torna al blog</a></p>
+    <p class="auth-back"><a asp-page="/Blog/Index">← Back to blog</a></p>
 </div>

@@ -59,7 +59,7 @@ public sealed class BookingService
     {
         if (!_calendar.IsConfigured)
             throw new CalendarNotConfiguredException(
-                "Prenotazioni non configurate: manca l'app password del calendario (accesso DAV).");
+                "Bookings are not configured: the calendar app password (DAV access) is missing.");
 
         var now = _time.GetUtcNow();
         var today = ToLocalDate(now);
@@ -70,7 +70,7 @@ public sealed class BookingService
 
         var endDate = to ?? startDate.AddDays(_options.DefaultDays - 1);
         if (endDate < startDate)
-            throw new BookingValidationException("Intervallo al contrario: 'to' viene prima di 'from'.");
+            throw new BookingValidationException("Reversed range: 'to' comes before 'from'.");
 
         if (endDate.DayNumber - startDate.DayNumber > _options.MaxDaysPerRequest - 1)
             endDate = startDate.AddDays(_options.MaxDaysPerRequest - 1);
@@ -117,22 +117,22 @@ public sealed class BookingService
     {
         if (!_calendar.IsConfigured)
             throw new CalendarNotConfiguredException(
-                "Prenotazioni non configurate: manca l'app password del calendario (accesso DAV).");
+                "Bookings are not configured: the calendar app password (DAV access) is missing.");
 
         var name = CleanName(request.Name);
         if (name.Length is 0 or > 100)
-            throw new BookingValidationException("Il nome è obbligatorio (massimo 100 caratteri).");
+            throw new BookingValidationException("Name is required (max 100 characters).");
 
         var email = (request.Email ?? "").Trim();
         if (email.Length is 0 or > 200 || !IsValidEmail(email))
-            throw new BookingValidationException("L'indirizzo email non è valido.");
+            throw new BookingValidationException("The email address is not valid.");
 
         var note = CleanNote(request.Note);
         if (note.Length > _options.MaxNoteLength)
-            throw new BookingValidationException($"Il messaggio è troppo lungo (massimo {_options.MaxNoteLength} caratteri).");
+            throw new BookingValidationException($"The message is too long (max {_options.MaxNoteLength} characters).");
 
         if (request.Start == default)
-            throw new BookingValidationException("Manca l'orario dell'appuntamento.");
+            throw new BookingValidationException("The appointment time is missing.");
 
         // Lo slot richiesto deve essere uno di quelli PUBBLICATI: la stessa
         // funzione che alimenta la disponibilità decide, così le regole non
@@ -147,7 +147,7 @@ public sealed class BookingService
 
         if (slot is null)
             throw new SlotUnavailableException(
-                "Quell'orario non è prenotabile: è occupato, fuori orario, troppo vicino o oltre l'orizzonte.");
+                "That time is not bookable: it is busy, outside working hours, too close, or beyond the booking horizon.");
 
         var uid = $"booking-{slot.Start.UtcDateTime:yyyyMMdd'T'HHmmss'Z'}";
         var booking = new CalendarBooking(
@@ -155,7 +155,7 @@ public sealed class BookingService
             string.IsNullOrWhiteSpace(note) ? null : note);
 
         if (!await _calendar.TryCreateEventAsync(booking, ct))
-            throw new SlotUnavailableException("Qualcuno ha appena prenotato quell'orario: scegline un altro.");
+            throw new SlotUnavailableException("Someone just booked that time: choose another slot.");
 
         return new BookingResponse(uid, slot.Start, slot.End);
     }

@@ -19,7 +19,7 @@ public sealed class RequestsModel(
 {
     private static readonly int[] AllowedDays = [7, 30, 90];
     private static readonly TimeZoneInfo Rome = TimeZoneInfo.FindSystemTimeZoneById("Europe/Rome");
-    private static readonly CultureInfo Italian = CultureInfo.GetCultureInfo("it-IT");
+    private static readonly CultureInfo English = CultureInfo.GetCultureInfo("en-GB");
 
     public const int PageSize = 200;
 
@@ -46,9 +46,9 @@ public sealed class RequestsModel(
 
     public string PeriodLabel => Days switch
     {
-        7 => "ultimi 7 giorni",
-        90 => "ultimi 90 giorni",
-        _ => "ultimi 30 giorni",
+        7 => "last 7 days",
+        90 => "last 90 days",
+        _ => "last 30 days",
     };
 
     public async Task OnGetAsync(int? days, int? pageNumber, CancellationToken ct)
@@ -110,18 +110,18 @@ public sealed class RequestsModel(
 
     public string PercentLabel(int count) => TotalRequests == 0
         ? "0,0"
-        : (count * 100.0 / TotalRequests).ToString("0.0", Italian);
+        : (count * 100.0 / TotalRequests).ToString("0.0", English);
 
-    public string FormatNumber(int value) => value.ToString("N0", Italian);
+    public string FormatNumber(int value) => value.ToString("N0", English);
 
     public string BarWidth(int count) => TotalRequests == 0
         ? "0"
         : (count * 100.0 / TotalRequests).ToString("0.0", CultureInfo.InvariantCulture);
 
     public string FormatWhen(DateTimeOffset value) =>
-        TimeZoneInfo.ConvertTime(value, Rome).ToString("dd/MM/yyyy HH:mm:ss", Italian);
+        TimeZoneInfo.ConvertTime(value, Rome).ToString("dd/MM/yyyy HH:mm:ss", English);
 
-    public string FormatDuration(double milliseconds) => milliseconds.ToString("N1", Italian) + " ms";
+    public string FormatDuration(double milliseconds) => milliseconds.ToString("N1", English) + " ms";
 
     private async Task<CountryStats> LoadCountriesAsync(RequestLogStore store, DateTimeOffset from, CancellationToken ct)
     {

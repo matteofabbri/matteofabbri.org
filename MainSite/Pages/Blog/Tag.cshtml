@@ -2,7 +2,7 @@
 @model MainSite.Pages.Blog.TagModel
 @{
     ViewData["Title"] = $"Tag: {Model.TagName}";
-    ViewData["Description"] = $"Gli articoli del blog con il tag {Model.TagName}.";
+    ViewData["Description"] = $"Blog posts tagged {Model.TagName}.";
     bool isAuthor = Model.IsAuthor;
     var now = DateTimeOffset.UtcNow;
 }
@@ -14,11 +14,11 @@
         <p class="lede">
             @if (Model.Posts.Count == 1)
             {
-                <span>Un articolo con questo tag.</span>
+                <span>One post with this tag.</span>
             }
             else
             {
-                <span>@Model.Posts.Count articoli con questo tag.</span>
+                <span>@Model.Posts.Count posts with this tag.</span>
             }
         </p>
     </div>
@@ -34,7 +34,7 @@
                 @if (!visible)
                 {
                     <span class="badge @(post.Draft ? "badge-draft" : "badge-scheduled")">
-                        @(post.Draft ? "bozza" : "programmato")
+                        @(post.Draft ? "draft" : "scheduled")
                     </span>
                 }
             </div>

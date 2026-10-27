@@ -1,19 +1,19 @@
 @page "/admin"
 @model MainSite.Pages.Admin.IndexModel
 @{
-    ViewData["Title"] = "Scrivi";
+    ViewData["Title"] = "Write";
 }
 
 <div class="page-head">
     <div>
-        <p class="eyebrow">Area di scrittura</p>
-        <h1>I tuoi articoli</h1>
-        <p class="lede">@(Model.Posts.Count == 1 ? "1 articolo in totale, bozze comprese." : $"{Model.Posts.Count} articoli in totale, bozze comprese.")</p>
+        <p class="eyebrow">Writing area</p>
+        <h1>Your posts</h1>
+        <p class="lede">@(Model.Posts.Count == 1 ? "1 post in total, drafts included." : $"{Model.Posts.Count} posts in total, drafts included.")</p>
     </div>
     <div class="actions">
-        <a class="button button-secondary" asp-page="/Admin/Media">Immagini</a>
-        <a class="button button-secondary" asp-page="/Requests">Richieste del sito</a>
-        <a class="button" asp-page="/Admin/Edit">Nuovo articolo</a>
+        <a class="button button-secondary" asp-page="/Admin/Media">Images</a>
+        <a class="button button-secondary" asp-page="/Requests">Site requests</a>
+        <a class="button" asp-page="/Admin/Edit">New post</a>
     </div>
 </div>
 
@@ -29,8 +29,8 @@
 @if (Model.Posts.Count == 0)
 {
     <div class="empty">
-        <p>Non hai ancora scritto niente.</p>
-        <p><a asp-page="/Admin/Edit">Crea il primo articolo</a>.</p>
+        <p>You have not written anything yet.</p>
+        <p><a asp-page="/Admin/Edit">Create the first post</a>.</p>
     </div>
 }
 else
@@ -39,10 +39,10 @@ else
         <table class="admin-table">
             <thead>
                 <tr>
-                    <th>Titolo</th>
-                    <th>Stato</th>
-                    <th>Data</th>
-                    <th class="cell-actions">Azioni</th>
+                    <th>Title</th>
+                    <th>Status</th>
+                    <th>Date</th>
+                    <th class="cell-actions">Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -59,11 +59,11 @@ else
                         </td>
                         <td class="cell-date">@Model.Clock.Format(post.Published, "d MMM yyyy")</td>
                         <td class="cell-actions">
-                            <a asp-page="/Admin/Edit" asp-route-slug="@post.Slug">Modifica</a>
-                            <a asp-page="/Blog/Post" asp-route-slug="@post.Slug">Vedi</a>
+                            <a asp-page="/Admin/Edit" asp-route-slug="@post.Slug">Edit</a>
+                            <a asp-page="/Blog/Post" asp-route-slug="@post.Slug">View</a>
                             <form method="post" asp-page-handler="Delete" asp-route-slug="@post.Slug"
-                                  onsubmit="return confirm('Spostare questo articolo nel cestino?');">
-                                <button type="submit" class="link-button danger">Elimina</button>
+                                  onsubmit="return confirm('Move this post to the trash?');">
+                                <button type="submit" class="link-button danger">Delete</button>
                             </form>
                         </td>
                     </tr>
