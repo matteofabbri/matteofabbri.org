@@ -309,6 +309,8 @@ Il blog vive in **MainSite**:
 | `/sitemap` | sitemap leggibile |
 | `/sitemap.xml` | sitemap XML |
 | `/404` | pagina di errore con un media casuale |
+| `/info-send` | POST: salva un body grezzo nella collezione Sperone `info` |
+| `/info-bot` | elenco paginato dei payload (solo autori) |
 | `/admin/login` | accesso autori |
 | `/admin` | elenco, editor, immagini |
 
@@ -397,6 +399,20 @@ volume, si servono da `/blog/media/{file}` e il testo da incollare nell'articolo
 `_trash/` dentro il volume. Se la cancellazione è stata un errore, si recupera
 da lì.
 
+### Bot info: /info-send e /info-bot
+
+`POST /info-send` legge **tutto il body come stringa** (fino a 1 MB) e lo salva
+nella collezione Sperone `info` con un Guid generato, timestamp, IP remoto e
+paese (DB-IP). È pubblico ma limitato a **60 richieste per IP ogni 10 minuti**.
+La collezione usa la stessa retention delle richieste (90 giorni) e vive nella
+stessa istanza Sperone (`/data/sperone`).
+
+`/info-bot` elenca i payload ricevuti, dal più recente, **50 per pagina**;
+mostra Guid, IP, paese, dimensione e body grezzo. La pagina è **solo per
+autori autenticati** (stessa policy del blog), perché i payload sono dati non
+fidati inviati da bot. Link "Bot info" nella barra laterale e nell'header per
+gli autori.
+
 ### 404 e sitemap
 
 La pagina **`/404`** si apre per qualsiasi URL inesistente (`UseStatusCodePagesWithReExecute`).
@@ -407,6 +423,10 @@ nel repo (quindi nell'immagine al deploy): aggiungi immagini o video lì.
 La **`/sitemap`** è la versione leggibile (pagine, articoli pubblicati, tag);
 `/sitemap.xml` elenca home, `/requests`, articoli e tag. Entrambe sono collegate
 dal footer, insieme al login.
+
+La navigazione principale resta nell'header; sui desktop larghi c'è anche una
+**barra verticale fissa a destra** con gli stessi collegamenti (Home, Requests,
+Bot info per gli autori, RSS, Sitemap, Login).
 
 ### Backup degli articoli
 

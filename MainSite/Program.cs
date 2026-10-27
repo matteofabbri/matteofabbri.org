@@ -1,6 +1,7 @@
 using System.Threading.RateLimiting;
 using MainSite.Blog;
 using MainSite.Booking;
+using MainSite.InfoBots;
 using MainSite.RequestLogging;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
@@ -35,13 +36,16 @@ public class Program
         var requestLogOptions = builder.Configuration.GetSection(RequestLogOptions.Section).Get<RequestLogOptions>() ?? new();
         bool requestLogEnabled = requestLogOptions.Enabled;
 
+        // Lo store Sperone e il resolver GeoIP servono anche a /info-send,
+        // indipendentemente dal log delle richieste.
+        builder.Services.AddSingleton<RequestLogStore>();
+        builder.Services.AddSingleton<RequestCountryResolver>();
+        builder.Services.AddSingleton<ICountryResolver>(services => services.GetRequiredService<RequestCountryResolver>());
+
         if (requestLogEnabled)
         {
-            builder.Services.AddSingleton<RequestLogStore>();
             builder.Services.AddSingleton<RequestLogQueue>();
             builder.Services.AddSingleton<IRequestLogSink>(services => services.GetRequiredService<RequestLogQueue>());
-            builder.Services.AddSingleton<RequestCountryResolver>();
-            builder.Services.AddSingleton<ICountryResolver>(services => services.GetRequiredService<RequestCountryResolver>());
             builder.Services.AddHostedService<RequestLogWriter>();
         }
 
@@ -133,6 +137,17 @@ public class Program
                     Window = TimeSpan.FromMinutes(10),
                     QueueLimit = 0,
                 }));
+
+            // /info-send è pubblico: un tetto per IP evita che diventi un modo
+            // per riempire il disco di payload.
+            options.AddPolicy("info-send", context => RateLimitPartition.GetFixedWindowLimiter(
+                context.Connection.RemoteIpAddress?.ToString() ?? "sconosciuto",
+                _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = 60,
+                    Window = TimeSpan.FromMinutes(10),
+                    QueueLimit = 0,
+                }));
         });
 
         // Dietro il NOSTRO Caddy: fidati degli header X-Forwarded-* (serve al
@@ -202,6 +217,7 @@ public class Program
 
         // Home → blog, feed RSS e sitemap (endpoint minimali, senza view).
         app.MapBlogEndpoints();
+        app.MapInfoEndpoints();        // POST /info-send
 
         app.MapDefaultEndpoints();
 

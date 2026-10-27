@@ -147,6 +147,31 @@ public sealed class RequestLogStoreTests : IDisposable
         Assert.Single(oltre.Entries);
     }
 
+    [Fact]
+    public async Task Salva_e_pagina_i_payload_di_info_send()
+    {
+        using var store = CreateStore();
+
+        var first = await store.InsertInfoAsync("payload one", "203.0.113.7", "IT", "Italy");
+        Assert.NotNull(first);
+        Assert.NotEqual(Guid.Empty, first.Guid);
+
+        await Task.Delay(5);
+        var second = await store.InsertInfoAsync("payload two", "198.51.100.9", "US", "United States");
+        Assert.NotNull(second);
+
+        var page1 = await store.GetInfoPageAsync(1, 1);
+        Assert.Equal(2, page1.Total);
+        Assert.Equal(2, page1.PageCount);
+        Assert.Equal(second!.Id, Assert.Single(page1.Entries).Id);
+        Assert.Equal("payload two", page1.Entries[0].Payload);
+        Assert.Equal("US", page1.Entries[0].CountryCode);
+
+        var page2 = await store.GetInfoPageAsync(2, 1);
+        Assert.Equal(first!.Id, Assert.Single(page2.Entries).Id);
+        Assert.Equal("IT", page2.Entries[0].CountryCode);
+    }
+
     public void Dispose()
     {
         try

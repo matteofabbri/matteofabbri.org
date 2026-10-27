@@ -198,6 +198,24 @@
     border-color: var(--error-border);
 }
 
+.info-table td {
+    vertical-align: top;
+}
+
+.bot-payload {
+    max-width: 48rem;
+    max-height: 12rem;
+    margin: 0;
+    padding: 0.5rem 0.6rem;
+    overflow: auto;
+    background: var(--code-bg);
+    border-radius: 6px;
+    font-family: var(--mono);
+    font-size: 0.76rem;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
 .map-attribution {
     margin-top: 1rem;
 }

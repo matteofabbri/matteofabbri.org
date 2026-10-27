@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using MainSite.InfoBots;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Sperone;
@@ -16,9 +17,12 @@ namespace MainSite.RequestLogging;
 // Il database Sperone embedded: la libreria gira in-process e scrive in una
 // cartella su disco. Nessun server, nessuna connection string, nessun login.
 // Un solo oggetto Database per processo; il writer è l'unico a scriverci.
+// Oltre alle richieste ospita la collezione "info" di /info-send.
 public sealed class RequestLogStore : IDisposable
 {
     private const string CollectionDescription = "Una riga per ogni richiesta ricevuta: user-agent, IP, percorso, esito e durata";
+    private const string InfoCollection = "info";
+    private const string InfoCollectionDescription = "Payload grezzi ricevuti da POST /info-send: GUID, IP, paese e body";
 
     private readonly RequestLogOptions _options;
     private readonly IHostEnvironment _environment;
@@ -102,11 +106,28 @@ public sealed class RequestLogStore : IDisposable
                     return false;
                 }
 
+                var infoCreated = await db.Create(new CreateCollectionCommand(
+                    _options.EffectiveDatabaseName,
+                    InfoCollection)
+                {
+                    Description = InfoCollectionDescription,
+                });
+
+                if (infoCreated is not (OperationResult.Success or OperationResult.AlreadyExists))
+                {
+                    _logger.LogError(
+                        "info-send: creazione della collezione Sperone fallita ({Result}) in {Path}",
+                        infoCreated, ResolvedPath);
+                    if (ownsNew)
+                        db.Dispose();
+                    return false;
+                }
+
                 _db = db;
                 _initialized = true;
                 _logger.LogInformation(
-                    "Log richieste: Sperone embedded in {Path}, collezione {Collection}",
-                    ResolvedPath, _options.EffectiveCollection);
+                    "Log richieste: Sperone embedded in {Path}, collezioni {Collection} e {InfoCollection}",
+                    ResolvedPath, _options.EffectiveCollection, InfoCollection);
                 return true;
             }
             catch
@@ -262,6 +283,92 @@ public sealed class RequestLogStore : IDisposable
         return new RequestLogPage(entries, total, current, pageCount);
     }
 
+    // Salva il body grezzo ricevuto su POST /info-send. Restituisce la riga
+    // scritta (con il Guid generato) oppure null se Sperone non è disponibile.
+    public async Task<InfoEntry?> InsertInfoAsync(
+        string payload,
+        string? remoteIp,
+        string? countryCode,
+        string? countryName,
+        CancellationToken ct = default)
+    {
+        if (!await EnsureInitializedAsync(ct) || _db is null)
+            return null;
+
+        DateTimeOffset timestamp = _timeProvider.GetUtcNow();
+        Guid guid = Guid.NewGuid();
+        var entry = new InfoEntry
+        {
+            Id = $"{timestamp.UtcTicks:D19}-{guid:N}",
+            Guid = guid,
+            Timestamp = timestamp,
+            Payload = payload,
+            RemoteIp = remoteIp,
+            CountryCode = countryCode ?? "",
+            CountryName = countryName,
+        };
+
+        var command = new CreateElementCommand(
+            InfoCollection,
+            entry.Id,
+            InfoIndexingOf(entry),
+            _options.RetentionSeconds,
+            JsonSerializer.SerializeToUtf8Bytes(entry, InfoJsonContext.Default.InfoEntry));
+
+        var results = await _db.InsertMany([command]);
+        if (results.Count == 1 && results[0] == OperationResult.Success)
+            return entry;
+
+        _logger.LogWarning(
+            "info-send: scrittura su Sperone fallita ({Result})",
+            results.Count == 1 ? results[0] : OperationResult.Invalid);
+        return null;
+    }
+
+    // Una pagina dei payload info, dalla più recente. Il generatore timestamp
+    // enumera in ordine crescente: si legge la coda e si rovescia.
+    public async Task<InfoPage> GetInfoPageAsync(
+        int page,
+        int pageSize,
+        CancellationToken ct = default)
+    {
+        if (pageSize <= 0)
+            pageSize = 50;
+
+        if (!await EnsureInitializedAsync(ct) || _db is null)
+            return InfoPage.Empty;
+
+        var query = new QueryElementsCommand(InfoCollection,
+        [
+            new QueryStep([new QueryClause { Scalar = new ScalarQuery("timestamp", From: "0") }]),
+        ]);
+
+        var (result, items) = await _db.Query(query);
+        if (result != OperationResult.Success || items.Count == 0)
+            return InfoPage.Empty;
+
+        int total = items.Count;
+        int pageCount = Math.Max(1, (total + pageSize - 1) / pageSize);
+        int current = Math.Clamp(page, 1, pageCount);
+        int endExclusive = total - (current - 1) * pageSize;
+        int start = Math.Max(0, endExclusive - pageSize);
+
+        var entries = new List<InfoEntry>(endExclusive - start);
+        for (int i = start; i < endExclusive; i++)
+        {
+            var (found, payload) = await _db.Get(new GetElementCommand(InfoCollection, items[i]));
+            if (!found)
+                continue;
+
+            var entry = JsonSerializer.Deserialize(payload.Span, InfoJsonContext.Default.InfoEntry);
+            if (entry is not null)
+                entries.Add(entry);
+        }
+
+        entries.Reverse();
+        return new InfoPage(entries, total, current, pageCount);
+    }
+
     public void Dispose()
     {
         _initGate.Wait();
@@ -306,6 +413,16 @@ public sealed class RequestLogStore : IDisposable
     // geolocalizzati: un indice scalare non deve avere valori vuoti.
     private static string NormalizeCountry(string? code) =>
         string.IsNullOrWhiteSpace(code) ? "ZZ" : code.Trim().ToUpperInvariant();
+
+    private static IndexElementCommand InfoIndexingOf(InfoEntry entry) => new(
+        Scalar:
+        [
+            new ScalarIndexCommand("timestamp", false, entry.Timestamp.UtcTicks.ToString(CultureInfo.InvariantCulture)),
+            new ScalarIndexCommand("country", false, NormalizeCountry(entry.CountryCode)),
+        ],
+        Geographic: null,
+        Vectorial: null,
+        FullText: null);
 }
 
 public readonly record struct RequestLogWriteResult(int Ok, int Duplicates, int NotFound, int Invalid)
@@ -323,4 +440,14 @@ public sealed record RequestLogPage(
     int PageCount)
 {
     public static readonly RequestLogPage Empty = new([], 0, 1, 1);
+}
+
+// Una pagina dei payload /info-send, dalla più recente.
+public sealed record InfoPage(
+    IReadOnlyList<InfoEntry> Entries,
+    int Total,
+    int Page,
+    int PageCount)
+{
+    public static readonly InfoPage Empty = new([], 0, 1, 1);
 }

@@ -166,6 +166,51 @@ main.wrap {
     gap: 0.75rem;
 }
 
+/* --- Barra di navigazione verticale a destra ------------------------------ */
+
+.site-rail {
+    position: fixed;
+    top: 50%;
+    right: 0.75rem;
+    z-index: 50;
+    display: flex;
+    min-width: 4.4rem;
+    flex-direction: column;
+    gap: 0.15rem;
+    padding: 0.45rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.14);
+    font-size: 0.78rem;
+    text-align: center;
+    transform: translateY(-50%);
+}
+
+.site-rail a {
+    padding: 0.35rem 0.45rem;
+    border-radius: 6px;
+    color: var(--muted);
+    text-decoration: none;
+}
+
+.site-rail a:hover {
+    background: var(--code-bg);
+    color: var(--text);
+}
+
+@media (min-width: 1101px) {
+    body {
+        padding-right: 6rem;
+    }
+}
+
+@media (max-width: 1100px) {
+    .site-rail {
+        display: none;
+    }
+}
+
 .site-footer a {
     color: var(--muted);
 }
@@ -941,6 +986,7 @@ main.wrap {
 @media print {
     .site-header,
     .site-footer,
+    .site-rail,
     .skip-link,
     .post-footer .button {
         display: none;
