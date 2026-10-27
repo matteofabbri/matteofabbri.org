@@ -30,7 +30,8 @@
         <p>
             L'accesso usa la tua casella <strong>@Model.MailcowHost</strong>: verrai portato
             sulla webmail, mailcow ti autentica (password e 2FA compresi) e poi torni qui.
-            La password non passa dal blog.
+            La password non passa dal blog. Può scrivere qualunque casella di
+            <strong>@Model.MailcowHost</strong>.
         </p>
         <form method="post">
             <input type="hidden" name="returnUrl" value="@Model.ReturnUrl" />
@@ -40,14 +41,12 @@
     else
     {
         <div class="alert warning">
-            L'accesso non è ancora configurato: mancano il client OAuth2 di mailcow
-            e l'elenco delle caselle abilitate.
+            L'accesso non è ancora configurato: manca il client OAuth2 di mailcow.
         </div>
         <p class="muted">
             Lato mailcow serve un'app OAuth2 con redirect
-            <code>/admin/login/callback</code>; poi il client ID, il secret e le caselle
-            abilitate vanno nelle variabili <code>MAILCOW_OAUTH_*</code> e
-            <code>BLOG_AUTHORS</code>.
+            <code>/admin/login/callback</code>; poi il client ID e il secret vanno
+            nelle variabili <code>MAILCOW_OAUTH_*</code>.
         </p>
     }
 

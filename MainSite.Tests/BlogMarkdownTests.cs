@@ -98,19 +98,4 @@ public sealed class BlogMarkdownTests
         Assert.Equal(TimeSpan.FromHours(1), clock.ToInstant(new DateTime(2026, 12, 1, 9, 0, 0)).Offset);
         Assert.Equal("1 luglio 2026", clock.Format(clock.ToInstant(new DateTime(2026, 7, 1, 9, 0, 0))));
     }
-
-    [Fact]
-    public void L_elenco_degli_autori_ignora_le_voci_senza_indirizzo()
-    {
-        var options = new BlogOptions
-        {
-            Authors = "matteo@maddalena.me, secondo@example.com; refuso",
-        };
-
-        var authors = options.ParseAuthors();
-
-        Assert.Equal(2, authors.Count);
-        Assert.Contains("MATTEO@maddalena.me", authors);  // confronto case-insensitive
-        Assert.DoesNotContain("refuso", authors);
-    }
 }

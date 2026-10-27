@@ -1,8 +1,10 @@
 using System.Threading.RateLimiting;
 using MainSite.Blog;
 using MainSite.Booking;
+using MainSite.RequestLogging;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.AspNetCore.StaticFiles;
 
 namespace MainSite;
 
@@ -23,6 +25,26 @@ public class Program
         // usa invece Razor Pages.
         builder.Services.AddControllers();
 
+        // --- Log delle richieste su Sperone (embedded) --------------------------
+        // La libreria Sperone gira nello stesso processo e scrive in
+        // RequestLog:Path (in produzione il volume Docker /data/sperone).
+        // Middleware + coda + writer in background; Enabled=false = nessun
+        // middleware, nessun database, nessuna coda.
+        builder.Services.Configure<RequestLogOptions>(builder.Configuration.GetSection(RequestLogOptions.Section));
+
+        var requestLogOptions = builder.Configuration.GetSection(RequestLogOptions.Section).Get<RequestLogOptions>() ?? new();
+        bool requestLogEnabled = requestLogOptions.Enabled;
+
+        if (requestLogEnabled)
+        {
+            builder.Services.AddSingleton<RequestLogStore>();
+            builder.Services.AddSingleton<RequestLogQueue>();
+            builder.Services.AddSingleton<IRequestLogSink>(services => services.GetRequiredService<RequestLogQueue>());
+            builder.Services.AddSingleton<RequestRegionResolver>();
+            builder.Services.AddSingleton<IRegionResolver>(services => services.GetRequiredService<RequestRegionResolver>());
+            builder.Services.AddHostedService<RequestLogWriter>();
+        }
+
         // --- Blog: articoli su file, accesso delegato a mailcow ---------------
         // I contenuti stanno in una cartella Markdown (in produzione un volume
         // Docker, /data/blog), non in un database: sopravvivono ai deploy e si
@@ -33,8 +55,7 @@ public class Program
         var blogOptions = builder.Configuration.GetSection(BlogOptions.Section).Get<BlogOptions>() ?? new();
         var blogAuthState = new BlogAuthState(
             blogOptions.Auth,
-            builder.Environment.IsDevelopment(),
-            blogOptions.ParseAuthors());
+            builder.Environment.IsDevelopment());
 
         builder.Services.AddSingleton(blogAuthState);
         builder.Services.AddSingleton<BlogClock>();
@@ -44,15 +65,11 @@ public class Program
 
         builder.Services.AddAuthorization(options =>
         {
-            // Non basta un cookie qualsiasi: serve il claim messo da BlogAuth
-            // solo dopo il controllo dell'allowlist delle caselle. Il secondo
-            // controllo rilegge l'allowlist a ogni richiesta, così togliere una
-            // casella da Blog:Authors ha effetto subito e non solo alla scadenza
-            // del cookie.
+            // Non basta un cookie qualsiasi: serve il claim che BlogAuth mette
+            // solo dopo l'autenticazione su mailcow.
             options.AddPolicy(BlogAuth.Policy, policy => policy
                 .RequireAuthenticatedUser()
-                .RequireClaim(BlogAuth.AuthorClaim, "true")
-                .RequireAssertion(context => blogAuthState.IsAuthor(context.User)));
+                .RequireClaim(BlogAuth.AuthorClaim, "true"));
         });
 
         // Le pagine admin sono tutte protette; login e logout devono restare
@@ -156,8 +173,21 @@ public class Program
 
         app.UseForwardedHeaders();
 
-        // Serve i file statici da wwwroot (css, js, immagini, ...).
-        app.UseStaticFiles();
+        // Log richieste: dopo ForwardedHeaders (RemoteIpAddress è l'IP vero del
+        // client) e prima del resto della pipeline (così vede anche static file,
+        // 404 e richieste che l'autenticazione respinge).
+        if (requestLogEnabled)
+            app.UseMiddleware<RequestLogMiddleware>();
+
+        // Serve i file statici da wwwroot (css, js, immagini, ...). La mappa
+        // delle regioni è un .geojson: senza il mapping esplicito il middleware
+        // non lo servirebbe (estensione sconosciuta).
+        var staticFiles = new StaticFileOptions
+        {
+            ContentTypeProvider = new FileExtensionContentTypeProvider(),
+        };
+        ((FileExtensionContentTypeProvider)staticFiles.ContentTypeProvider).Mappings[".geojson"] = "application/geo+json";
+        app.UseStaticFiles(staticFiles);
         app.UseCors();
         app.UseRateLimiter();
         app.UseAuthentication();

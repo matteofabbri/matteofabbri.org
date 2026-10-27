@@ -113,10 +113,10 @@ CALDAV_PASSWORD=                         # APP PASSWORD con accesso DAV, NON la 
 
 # Blog (accesso con mailcow via OAuth2): vedi la sezione 2-quinquies.
 # Vuote = area di scrittura spenta, il blog resta leggibile da tutti.
+# Non c'è un elenco di autori: entra qualunque casella del server mailcow.
 MAILCOW_OAUTH_URL=https://mail.maddalena.me
 MAILCOW_OAUTH_CLIENT_ID=                 # da mailcow: Configuration → Access → OAuth2 Apps
 MAILCOW_OAUTH_CLIENT_SECRET=             # generato da mailcow insieme al client
-BLOG_AUTHORS=matteo@maddalena.me         # caselle abilitate a scrivere, separate da virgola
 ```
 
 > `THEQULT_DOMAIN`/`MADDALENA_DOMAIN` hanno gia' un default nell'AppHost
@@ -313,9 +313,9 @@ La password della casella **non passa mai dal sito**, e il 2FA di mailcow
 continua a funzionare. Non serve un'app password: quella del CalDAV (sezione
 2-quater) è un'altra cosa.
 
-mailcow dice *chi sei*; il blog decide *se puoi scrivere*: solo le caselle in
-`BLOG_AUTHORS` entrano. Gli account amministratore di mailcow **non** sono
-caselle e non possono accedere al blog.
+mailcow dice *chi sei* e il blog si fida: entra **qualunque casella** del
+server, senza un elenco di autori da mantenere. Gli account amministratore di
+mailcow **non** sono caselle e non possono accedere al blog.
 
 ### Configurazione (una volta sola)
 
@@ -338,13 +338,11 @@ caselle e non possono accedere al blog.
    MAILCOW_OAUTH_URL=https://mail.maddalena.me
    MAILCOW_OAUTH_CLIENT_ID=...
    MAILCOW_OAUTH_CLIENT_SECRET=...
-   BLOG_AUTHORS=matteo@maddalena.me
    ```
 
-   più caselle separate da virgola. Se `BLOG_AUTHORS` è vuoto l'area di
-   scrittura è spenta e il blog resta leggibile da tutti. Metti l'indirizzo
-   della **casella** (lo username che mailcow restituisce nel profilo), non un
-   alias che punta ad essa: l'alias non comparirebbe mai tra gli autorizzati;
+   Non serve altro: qualunque casella del server mailcow può accedere all'area
+   di scrittura. Se client ID o secret sono vuoti l'area di scrittura è spenta
+   e il blog resta leggibile da tutti;
 6. aggiorna il compose sul server: il blog aggiunge il **volume** `blog-data` e
    le variabili qui sopra, quindi il deploy automatico da solo non basta.
    Rigenera e copia il compose:
@@ -395,21 +393,163 @@ sudo docker run --rm -v matteofabbri_blog-data:/dati -v "$(pwd)":/backup alpine 
 ### Sviluppo locale
 
 `appsettings.Development.json` imposta `Blog:Auth:UseFake=true`: in locale si
-entra in `/admin/login` come primo autore configurato, senza mailcow. **In
-produzione l'accesso finto viene ignorato** anche se impostato. Il vero OAuth
-in locale richiederebbe HTTPS (il cookie di correlazione è `Secure`); per
-provare il giro completo conviene usare lo stack reale.
+entra in `/admin/login` con l'identità di sviluppo (`sviluppo@localhost`),
+senza mailcow. **In produzione l'accesso finto viene ignorato** anche se
+impostato. Il vero OAuth in locale richiederebbe HTTPS (il cookie di
+correlazione è `Secure`); per provare il giro completo conviene usare lo stack
+reale.
 
 ### Se l'accesso non funziona
 
 - **"Accesso non configurato"**: mancano le variabili nel `.env` o il container
   non è stato ricreato dopo aver aggiornato il compose.
 - **"Accesso non riuscito"**: redirect URI diverso da quello registrato, client
-  ID/secret sbagliati, casella non presente in `BLOG_AUTHORS`, oppure mailcow
-  irraggiungibile dal sito. Log: `sudo docker compose logs site`.
+  ID/secret sbagliati, oppure mailcow irraggiungibile dal sito. Log:
+  `sudo docker compose logs site`.
 - **La casella è giusta ma non entra**: controlla che sia una casella, non un
-  account admin di mailcow; e che l'indirizzo in `BLOG_AUTHORS` sia quello
-  della casella (username), completo di dominio (`nome@dominio`), non un alias.
+  account admin di mailcow: gli account amministratore non sono caselle e
+  l'OAuth non li autentica.
+
+---
+
+## 2-sexies. Log delle richieste (Sperone embedded)
+
+MainSite registra **ogni richiesta HTTP** in un database Sperone **embedded**:
+la libreria gira nello stesso processo del sito e scrive in una cartella su
+disco. Non c'è un server Sperone separato, nessuna connection string e nessun
+login. È attivo di default; `RequestLog:Enabled=false` lo spegne.
+
+Cosa finisce in ogni riga:
+
+| Campo | Esempio |
+|---|---|
+| IP remoto (quello vero, non Caddy) e porta | `203.0.113.7`, `54321` |
+| Metodo, host, percorso, query | `GET`, `matteofabbri.org`, `/blog`, `?tag=dotnet` |
+| Status e durata | `200`, `42.7` ms |
+| Browser, versione, sistema, dispositivo | `Chrome`, `126.0`, `Windows 10/11`, `desktop` |
+| User-Agent grezzo + flag bot | UA completo (troncato), `false` |
+| Referer, Accept-Language | header grezzi (troncati) |
+| Utente autenticato, se presente | `matteo@maddalena.me` |
+| Request id e trace id | per correlare con i log/tracce |
+
+La query string viene salvata, ma i valori dei parametri sensibili (`code`,
+`state`, `token`, `password`, `api_key`, …) sono sostituiti con `***`. Non
+vengono salvati body, cookie né header `Authorization`.
+
+**Come funziona.** Il middleware accoda la riga e prosegue: non aspetta mai il
+disco. Un `BackgroundService` svuota la coda ogni secondo con un `InsertMany`
+(un'unica transazione di scrittura). Se il database è lento o non disponibile le
+righe restano in coda (default 8192) e i tentativi hanno un backoff; quando la
+coda è piena le nuove si scartano e nei log del sito compare un avviso. La
+retention predefinita è 90 giorni (`RetentionDays`; `0` = per sempre), applicata
+da Sperone come TTL. Il full-text è BM25 puro: il modello semantico da ~2,3 GB è
+disattivato (`SemanticModel.ModelLocation = null`), non viene scaricato né
+caricato.
+
+**Dove stanno i dati.** In produzione nel volume Docker
+`matteofabbri_request-log-data`, montato in `/data/sperone` (la cartella è
+`RequestLog__Path`). In sviluppo in `MainSite/App_Data/sperone` (ignorata da
+git). Il workflow di deploy crea e chowna il volume a UID 1654 prima di avviare
+il sito, come per `blog-data`. Se deployi a mano, fallo anche tu prima del
+primo `up -d`:
+
+```bash
+sudo docker volume create matteofabbri_request-log-data
+sudo docker run --rm -v matteofabbri_request-log-data:/data alpine chown -R 1654:1654 /data
+```
+
+**Configurazione.** I default sono in `MainSite/appsettings.json`, sezione
+`RequestLog`:
+
+| Chiave | Default | Cosa |
+|---|---|---|
+| `Enabled` | `true` | spegne tutto |
+| `Path` | `App_Data/sperone` | cartella del database (in prod `/data/sperone`) |
+| `DatabaseName` | `matteofabbri` | nome nei metadata |
+| `Collection` | `requests` | collezione delle richieste |
+| `RetentionDays` | `90` | TTL; `0` = per sempre |
+| `QueueCapacity` | `8192` | righe in coda prima di scartare |
+| `BatchSize` | `200` | righe per `InsertMany` |
+| `FlushSeconds` | `1` | cadenza di svuotamento |
+| `HashCacheLines`, `LogMemoryBits`, `LogPageBits` | `65536`, `23`, `22` | dimensione in memoria dei cassetti FASTER |
+| `ExcludePaths` | `/health`, `/alive` | percorsi non registrati |
+
+Per cambiare un valore in produzione aggiungi la variabile corrispondente nella
+sezione `environment` dell'override (es. `RequestLog__RetentionDays: 30`) e
+ricrea il container. Non ci sono segreti da configurare.
+
+**Indici.** Ogni riga è indicizzata con scalar `timestamp`, `status`,
+`durationMs`, `bot` e `region` e full-text `path` e `host`: si possono filtrare
+gli intervalli di tempo, gli errori e la regione, e cercare per percorso/host. Il
+payload JSON completo (IP, browser, referer, ...) resta leggibile con
+`Database.Get` o con `RequestLogStore.GetAsync`.
+
+**Leggere i log.** Non c'è una UI: il database è una cartella Sperone. Per
+esplorarlo si usa la libreria (o si esporta la collezione con
+`Database.ExportCollection`). Per un backup consistente ferma il sito, copia il
+volume e riavvialo:
+
+```bash
+cd /opt/matteofabbri
+sudo docker compose stop site
+sudo docker run --rm -v matteofabbri_request-log-data:/dati -v "$(pwd)":/backup alpine \
+  tar czf /backup/request-log-$(date +%F).tar.gz -C /dati .
+sudo docker compose start site
+```
+
+**Sviluppo locale.** Non serve avviare niente: `aspire run` (o `dotnet run`)
+crea `MainSite/App_Data/sperone` alla prima richiesta. Per partire puliti basta
+cancellare quella cartella. Il percorso si può cambiare con
+`RequestLog__Path`. Su un clone nuovo serve `git submodule update --init` (o
+clonare con `--recurse-submodules`): il motore Sperone sta in
+`external/SPERONE`.
+
+**Se non scrive:** guarda i log del sito (`Log richieste su Sperone embedded`).
+Le cause tipiche sono la cartella non scrivibile (permessi del volume/UID),
+disco pieno o database corrotto. La funzione non blocca mai il sito: in caso di
+problema si perde il log, non la richiesta. Se il container non ha il volume
+`request-log-data`, i log finiscono dentro il container e spariscono al deploy
+successivo: controlla `docker compose config` / `docker inspect` del sito.
+
+### Mappa delle richieste per regione
+
+La pagina **`/admin/richieste`** (solo autori) mostra una mappa dell'Italia con
+le regioni colorate per numero di richieste, con selettore ultimi 7/30/90 giorni
+e la tabella ordinata sotto.
+
+- Mappa: [Leaflet](https://leafletjs.com) + tile
+  [OpenStreetMap](https://www.openstreetmap.org/copyright); confini delle
+  regioni da [openpolis/geojson-italy](https://github.com/openpolis/geojson-italy)
+  (ISTAT, CC BY 4.0), copiati in `MainSite/wwwroot/maps/`.
+- Geolocalizzazione: **DB-IP Lite City** (CC BY 4.0), database MMDB locale.
+  Nessun IP viene inviato a servizi esterni: la lookup è in-process.
+- Il codice regione (ISTAT 1-20) viene indicizzato in Sperone su ogni nuova
+  richiesta. Le righe registrate **prima** di configurare GeoIP non hanno la
+  regione e restano tra le "non geolocalizzate": la mappa parte dalle nuove
+  richieste.
+
+**Installazione/aggiornamento GeoIP.**
+
+- Locale: `.\deploy\update-geoip.ps1` scarica DB-IP Lite in
+  `MainSite/App_Data/geoip/dbip-city-lite.mmdb` (~122 MB). Se il sito era già in
+  esecuzione, riavvialo: il file viene memory-mapped all'avvio.
+- Produzione: il workflow di deploy copia `deploy/update-geoip.sh` in
+  `/opt/matteofabbri/update-geoip.sh`, crea `/opt/matteofabbri/geoip` e scarica
+  il DB se manca. L'override lo monta read-only in `/data/geoip`.
+  Aggiornamento mensile:
+
+  ```bash
+  sudo /opt/matteofabbri/update-geoip.sh /opt/matteofabbri/geoip
+  cd /opt/matteofabbri && sudo docker compose restart site
+  ```
+
+- Se il file manca, il log continua a funzionare (regione sconosciuta) e la
+  pagina mostra un avviso con il percorso atteso. Il percorso si cambia con
+  `RequestLog__GeoIpDatabasePath`.
+
+**Lettura.** La pagina conta per regione usando gli indici Sperone (`region` +
+`timestamp`) senza leggere i payload; i totali includono anche richieste estere,
+IP privati e righe senza regione.
 
 ---
 

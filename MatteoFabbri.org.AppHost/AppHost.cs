@@ -33,6 +33,14 @@ builder.AddDockerComposeEnvironment("matteofabbri")
             Driver = "local",
         };
 
+        // Volume del database Sperone embedded (log delle richieste): come il
+        // blog, i dati non stanno nell'immagine e sopravvivono ai deploy.
+        file.Volumes["request-log-data"] = new Volume
+        {
+            Name = "request-log-data",
+            Driver = "local",
+        };
+
         // RIAVVIO AUTOMATICO per tutti i servizi. Di suo Aspire non ne mette
         // nessuno (`restart-policy=no`), e le conseguenze sono due, entrambe
         // viste dal vivo: un container che esce per un errore passeggero — una
@@ -96,16 +104,23 @@ var caldavPassword = builder.AddParameter("caldav-password",
 // redirect URI deve essere esattamente:
 //   https://<SITE_DOMAIN>/admin/login/callback
 // Client ID e secret NON stanno nel repo: arrivano dal .env (o dai user-secrets).
-// Blog-authors è l'elenco delle caselle abilitate a scrivere, separate da
-// virgola; vuoto = accesso all'area di scrittura spento, il blog resta leggibile.
+// Qualunque casella autenticata da mailcow può scrivere: non c'è un elenco di
+// autori da configurare; senza client l'area di scrittura resta spenta.
 var mailcowOauthUrl = builder.AddParameter("mailcow-oauth-url",
     () => builder.Configuration["Parameters:mailcow-oauth-url"] ?? "https://mail.maddalena.me");
 var mailcowOauthClientId = builder.AddParameter("mailcow-oauth-client-id",
     () => builder.Configuration["Parameters:mailcow-oauth-client-id"] ?? "");
 var mailcowOauthClientSecret = builder.AddParameter("mailcow-oauth-client-secret",
     () => builder.Configuration["Parameters:mailcow-oauth-client-secret"] ?? "", secret: true);
-var blogAuthors = builder.AddParameter("blog-authors",
-    () => builder.Configuration["Parameters:blog-authors"] ?? "");
+
+// --- Log delle richieste (Sperone embedded) ----------------------------------
+// Il database è la libreria Sperone in-process, non un server: in produzione
+// vive nel volume request-log-data montato in /data/sperone, in locale accanto
+// al progetto come il blog. Nessun segreto da configurare.
+string requestLogPath = builder.ExecutionContext.IsPublishMode ? "/data/sperone" : "App_Data/sperone";
+string geoIpPath = builder.ExecutionContext.IsPublishMode
+    ? "/data/geoip/dbip-city-lite.mmdb"
+    : "App_Data/geoip/dbip-city-lite.mmdb";
 
 // In pubblicazione gli articoli stanno nel volume; in esecuzione locale (run
 // dell'AppHost) restano accanto al progetto, come con `dotnet run`.
@@ -118,7 +133,8 @@ var site = builder.AddProject<Projects.MainSite>("site")
     .WithEnvironment("Blog__Auth__BaseUrl", mailcowOauthUrl)
     .WithEnvironment("Blog__Auth__ClientId", mailcowOauthClientId)
     .WithEnvironment("Blog__Auth__ClientSecret", mailcowOauthClientSecret)
-    .WithEnvironment("Blog__Authors", blogAuthors)
+    .WithEnvironment("RequestLog__Path", requestLogPath)
+    .WithEnvironment("RequestLog__GeoIpDatabasePath", geoIpPath)
     // Gli articoli stanno fuori dall'immagine: un deploy che ricostruisce il
     // container non deve portarsi via quello che è stato scritto.
     .WithEnvironment("Blog__ContentPath", blogContentPath)
@@ -130,6 +146,15 @@ var site = builder.AddProject<Projects.MainSite>("site")
             Type = "volume",
             Source = "blog-data",
             Target = "/data/blog",
+        });
+
+        // Il database Sperone dei log vive fuori dall'immagine allo stesso modo.
+        service.AddVolume(new Volume
+        {
+            Name = "request-log-data",
+            Type = "volume",
+            Source = "request-log-data",
+            Target = "/data/sperone",
         });
     });
 

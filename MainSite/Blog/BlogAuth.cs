@@ -15,8 +15,9 @@ namespace MainSite.Blog;
 // diventa un token, il token diventa un profilo, il profilo diventa il nostro
 // cookie. La password della casella non passa mai dal sito.
 //
-// Solo le caselle elencate in Blog:Authors possono entrare: mailcow dice "chi
-// sei", il blog decide "se puoi scrivere".
+// Qualunque casella autenticata da mailcow può scrivere: non c'è un elenco di
+// autori da configurare. Gli account amministratore di mailcow non sono caselle
+// e quindi non possono entrare.
 public static class BlogAuth
 {
     public const string Scheme = "mailcow";
@@ -122,13 +123,6 @@ public static class BlogAuth
                 if (email.Length == 0)
                 {
                     context.Fail("Il profilo mailcow non contiene un indirizzo.");
-                    return;
-                }
-
-                if (!state.IsAllowed(email))
-                {
-                    logger.LogWarning("Accesso al blog negato a {Email}: la casella non è in Blog:Authors.", email);
-                    context.Fail("Questa casella non è abilitata a scrivere nel blog.");
                     return;
                 }
 

@@ -29,6 +29,7 @@
             @if (isAuthor)
             {
                 <a asp-page="/Admin/Index">Scrivi</a>
+                <a asp-page="/Admin/RequestMap">Richieste</a>
                 <form method="post" asp-page="/Admin/Logout" class="inline-form">
                     <button type="submit" class="link-button">Esci</button>
                 </form>
@@ -47,5 +48,6 @@
         <a href="/blog/feed.xml">Feed RSS</a>
     </div>
 </footer>
+@await RenderSectionAsync("Scripts", required: false)
 </body>
 </html>

@@ -29,9 +29,12 @@ env:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+        with:
+          # MainSite referenzia il motore Sperone embedded in external/SPERONE.
+          submodules: true
 
       - uses: actions/setup-dotnet@v4
         with:
@@ -71,10 +74,11 @@ jobs:
               "sudo mkdir -p /opt/matteofabbri/$ctx && sudo cp -r ~/$ctx-new/. /opt/matteofabbri/$ctx/ && rm -rf ~/$ctx-new"
           done
 
-      # Blog: il volume deve esistere ed essere scrivibile dall'utente `app`
-      # (UID 1654) PRIMA che il sito parta. L'override aggiunge mount e
-      # variabili del blog; se sul server ce n'è già uno, lo conserviamo.
-      - name: "Blog: volume e override"
+      # Blog e log richieste: i volumi devono esistere ed essere scrivibili
+      # dall'utente `app` (UID 1654) PRIMA che il sito parta. L'override
+      # aggiunge mount e variabili del blog e il volume Sperone dei log; se sul
+      # server ci sono già, li conserviamo.
+      - name: "Blog e log richieste: volumi e override"
         run: |
           scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \
             deploy/docker-compose.override.yml "$SERVER:~/site-compose.override.yml"
@@ -86,8 +90,30 @@ jobs:
             fi
             sudo mv ~/site-compose.override.yml /opt/matteofabbri/docker-compose.override.yml
             sudo chown root:root /opt/matteofabbri/docker-compose.override.yml
-            sudo docker volume create matteofabbri_blog-data >/dev/null
-            sudo docker run --rm -v matteofabbri_blog-data:/data alpine chown -R 1654:1654 /data
+            for vol in blog-data request-log-data; do
+              sudo docker volume create "matteofabbri_$vol" >/dev/null
+              sudo docker run --rm -v "matteofabbri_$vol:/data" alpine chown -R 1654:1654 /data
+            done
+          '
+
+      # GeoIP per la mappa delle richieste: DB-IP Lite City, gratuito e senza
+      # chiave. Il file è ~60 MB e sta in /opt/matteofabbri/geoip (bind mount
+      # read-only in /data/geoip). Si scarica solo se manca; lo script resta
+      # sul server per l'aggiornamento mensile. Un errore qui non blocca il
+      # deploy: il sito parte e la pagina lo segnala.
+      - name: "GeoIP: DB-IP Lite City (se manca)"
+        continue-on-error: true
+        run: |
+          scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \
+            deploy/update-geoip.sh "$SERVER:~/update-geoip.sh"
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$SERVER" '
+            set -e
+            sudo mkdir -p /opt/matteofabbri/geoip
+            sudo mv ~/update-geoip.sh /opt/matteofabbri/update-geoip.sh
+            sudo chmod +x /opt/matteofabbri/update-geoip.sh
+            if [ ! -s /opt/matteofabbri/geoip/dbip-city-lite.mmdb ]; then
+              sudo /opt/matteofabbri/update-geoip.sh /opt/matteofabbri/geoip
+            fi
           '
 
       # up -d --build ricrea SOLO i container cambiati (immagine nuova o contesto
