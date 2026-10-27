@@ -11,6 +11,8 @@
 # Segreti usati (impostati via `gh secret set`):
 #   DEPLOY_SSH_KEY   — chiave privata dedicata per ubuntu@server (la pubblica e'
 #                      in authorized_keys sul server; NON e' la chiave .ppk di Matteo)
+#   SPERONE_DEPLOY_KEY — deploy key read-only del repo privato
+#                      matteofabbri/SPERONE, il submodule di MainSite
 name: deploy
 
 on:
@@ -32,9 +34,19 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-        with:
-          # MainSite referenzia il motore Sperone embedded in external/SPERONE.
-          submodules: true
+
+      # MainSite referenzia il motore Sperone embedded in external/SPERONE, che
+      # è un repo privato: il token del workflow non può clonarlo. Si usa la
+      # deploy key read-only SPERONE_DEPLOY_KEY. PredicitiveCoding non serve
+      # alle build dei tre siti e non viene clonato.
+      - name: Submodule SPERONE
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SPERONE_DEPLOY_KEY }}" > ~/.ssh/sperone_key
+          chmod 600 ~/.ssh/sperone_key
+          GIT_SSH_COMMAND="ssh -i ~/.ssh/sperone_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new" \
+            git -c url."git@github.com:matteofabbri/SPERONE.git".insteadOf="https://github.com/matteofabbri/SPERONE.git" \
+            submodule update --init external/SPERONE
 
       - uses: actions/setup-dotnet@v4
         with:
