@@ -89,11 +89,11 @@ jobs:
               rm -f /home/ubuntu/Caddyfile.new
               exit 0
             fi
-            IMG=$(sudo docker inspect --format "{{.Image}}" "$CID")
-            sudo docker run --rm "$IMG" version
-            sudo docker run --rm --env-file /opt/matteofabbri/.env \
+            sudo docker compose config --images
+            sudo docker compose build caddy
+            sudo docker compose run --rm --no-deps \
               -v /home/ubuntu/Caddyfile.new:/etc/caddy/Caddyfile:ro \
-              "$IMG" validate --config /etc/caddy/Caddyfile --adapter caddyfile
+              caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
             rm -f /home/ubuntu/Caddyfile.new
           '
 
