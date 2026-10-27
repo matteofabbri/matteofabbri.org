@@ -10,7 +10,7 @@
         <p class="eyebrow">Booking</p>
         <h1>Book a video call</h1>
         <p class="lede">
-            Pick a free time and paste the link to the video call you want to use.
+            Pick a free day and a time, then paste the link to the video call you want to use.
             Times are in @Model.TimeZone; slots are @Model.SlotMinutes minutes.
         </p>
     </div>
@@ -21,13 +21,6 @@
     <div class="alert warning">
         <strong>Booking is not configured yet.</strong>
         The calendar app password (DAV access) is missing. Please try again later.
-    </div>
-}
-else if (Model.LoadError is not null)
-{
-    <div class="alert error">
-        <strong>Could not read the calendar.</strong>
-        @Model.LoadError
     </div>
 }
 else
@@ -70,31 +63,268 @@ else
             <textarea id="booking-note" name="note" class="input" rows="3" maxlength="@Model.MaxNoteLength">@Model.Note</textarea>
         </div>
 
-        @if (Model.Days.Count == 0)
-        {
-            <div class="empty">
-                <p>No available times in the next two weeks.</p>
+        <div id="booking-calendar" class="booking-calendar"
+             data-work-start="@Model.WorkStart"
+             data-work-end="@Model.WorkEnd"
+             data-work-days="@Model.WorkDays"
+             data-slot-minutes="@Model.SlotMinutes"
+             data-today="@Model.Today"
+             data-horizon-days="@Model.HorizonDays"
+             data-time-zone="@Model.TimeZone">
+            <div class="calendar-top">
+                <button type="button" class="calendar-nav" id="calendar-prev" aria-label="Previous month">←</button>
+                <h2 id="calendar-month"></h2>
+                <button type="button" class="calendar-nav" id="calendar-next" aria-label="Next month">→</button>
             </div>
-        }
-        else
-        {
-            <h2 class="section-title">Choose a time</h2>
-            <p class="hint">Fill in your details above, then click a time.</p>
 
-            @foreach (var day in Model.Days)
-            {
-                <section class="booking-day">
-                    <h3>@Model.FormatDay(day.Date)</h3>
-                    <div class="slot-grid">
-                        @foreach (var slot in day.Slots)
-                        {
-                            <button type="submit" class="slot-button" name="start" value="@Model.SlotValue(slot)">
-                                @Model.FormatSlot(slot)
-                            </button>
-                        }
-                    </div>
-                </section>
-            }
-        }
+            <div class="calendar-legend">
+                <span><span class="legend-dot available"></span>Available</span>
+                <span><span class="legend-dot maybe"></span>Maybe (partly free)</span>
+                <span><span class="legend-dot unavailable"></span>Unavailable</span>
+            </div>
+
+            <div id="calendar-grid" class="calendar-grid" aria-live="polite"></div>
+            <p id="calendar-status" class="hint"></p>
+        </div>
+
+        <div id="booking-slots" class="booking-slots"></div>
+
+        <input type="hidden" name="start" id="booking-start" />
+
+        <div class="booking-actions">
+            <span id="booking-selected" class="booking-selected">Pick a free day, then a time.</span>
+            <button type="submit" class="button" id="booking-submit" disabled>Book video call</button>
+        </div>
+
+        <noscript>
+            <p class="hint">Enable JavaScript to use the availability calendar.</p>
+        </noscript>
     </form>
+}
+
+@section Scripts {
+    <script>
+        (() => {
+            const root = document.getElementById('booking-calendar');
+            if (!root) return;
+
+            const grid = document.getElementById('calendar-grid');
+            const monthLabel = document.getElementById('calendar-month');
+            const prevButton = document.getElementById('calendar-prev');
+            const nextButton = document.getElementById('calendar-next');
+            const status = document.getElementById('calendar-status');
+            const slotsPanel = document.getElementById('booking-slots');
+            const startInput = document.getElementById('booking-start');
+            const bookButton = document.getElementById('booking-submit');
+            const selectedLabel = document.getElementById('booking-selected');
+
+            const slotMinutes = Number(root.dataset.slotMinutes);
+            const workStart = root.dataset.workStart;
+            const workEnd = root.dataset.workEnd;
+            const workDays = new Set(root.dataset.workDays.split(',').map(Number));
+            const timeZone = root.dataset.timeZone;
+            const today = root.dataset.today;
+            const horizonDays = Number(root.dataset.horizonDays);
+
+            const todayDate = new Date(today + 'T00:00:00Z');
+            const horizonDate = new Date(todayDate);
+            horizonDate.setUTCDate(horizonDate.getUTCDate() + horizonDays);
+
+            let viewYear = todayDate.getUTCFullYear();
+            let viewMonth = todayDate.getUTCMonth();
+            let availability = new Map();
+            let loadToken = 0;
+
+            const pad = value => String(value).padStart(2, '0');
+            const isoDate = date => date.toISOString().slice(0, 10);
+            const toMinutes = value => {
+                const parts = value.split(':').map(Number);
+                return parts[0] * 60 + parts[1];
+            };
+            const totalSlots = () => Math.max(0, Math.floor((toMinutes(workEnd) - toMinutes(workStart)) / slotMinutes));
+            const timeLabel = value => new Date(value).toLocaleTimeString('en-GB', {
+                hour: '2-digit',
+                minute: '2-digit',
+                timeZone
+            });
+            const longDate = value => new Date(value + 'T00:00:00Z').toLocaleDateString('en-GB', {
+                weekday: 'long',
+                day: 'numeric',
+                month: 'long',
+                timeZone: 'UTC'
+            });
+            const monthTitle = (year, month) => new Date(Date.UTC(year, month, 1)).toLocaleDateString('en-GB', {
+                month: 'long',
+                year: 'numeric',
+                timeZone: 'UTC'
+            });
+
+            function resetSelection() {
+                startInput.value = '';
+                bookButton.disabled = true;
+                selectedLabel.textContent = 'Pick a free day, then a time.';
+                slotsPanel.innerHTML = '';
+                document.querySelectorAll('.calendar-day.selected').forEach(el => el.classList.remove('selected'));
+            }
+
+            function selectSlot(slot, date, label, button) {
+                startInput.value = slot.start;
+                bookButton.disabled = false;
+                selectedLabel.textContent = `Selected: ${longDate(date)} at ${label}`;
+                document.querySelectorAll('.time-slot.selected').forEach(el => el.classList.remove('selected'));
+                button.classList.add('selected');
+            }
+
+            function renderTimes(date) {
+                resetSelection();
+
+                document.querySelectorAll('.calendar-day.selected').forEach(el => el.classList.remove('selected'));
+                const dayButton = document.querySelector(`.calendar-day[data-date="${date}"]`);
+                if (dayButton) dayButton.classList.add('selected');
+
+                slotsPanel.innerHTML = '';
+                const slots = availability.get(date) || [];
+                const freeByTime = new Map();
+                for (const slot of slots) freeByTime.set(timeLabel(slot.start), slot);
+
+                const heading = document.createElement('h3');
+                heading.textContent = longDate(date);
+                slotsPanel.appendChild(heading);
+
+                const line = document.createElement('div');
+                line.className = 'booking-times';
+                const total = totalSlots();
+                let freeCount = 0;
+
+                for (let index = 0; index < total; index++) {
+                    const minutes = toMinutes(workStart) + index * slotMinutes;
+                    const label = `${pad(Math.floor(minutes / 60))}:${pad(minutes % 60)}`;
+                    const slot = freeByTime.get(label);
+
+                    if (slot) {
+                        freeCount++;
+                        const button = document.createElement('button');
+                        button.type = 'button';
+                        button.className = 'time-slot';
+                        button.textContent = label;
+                        button.addEventListener('click', () => selectSlot(slot, date, label, button));
+                        line.appendChild(button);
+                    } else {
+                        const span = document.createElement('span');
+                        span.className = 'time-slot busy';
+                        span.textContent = label;
+                        span.title = 'Unavailable';
+                        line.appendChild(span);
+                    }
+                }
+
+                slotsPanel.appendChild(line);
+
+                if (freeCount === 0) {
+                    const note = document.createElement('p');
+                    note.className = 'hint';
+                    note.textContent = 'No free times on this day.';
+                    slotsPanel.appendChild(note);
+                }
+            }
+
+            function dayStatus(date, weekday, free) {
+                if (date < today || date > isoDate(horizonDate))
+                    return { css: 'day-past', disabled: true, label: 'Unavailable' };
+                if (!workDays.has(weekday))
+                    return { css: 'day-off', disabled: true, label: 'Unavailable' };
+                if (free === 0)
+                    return { css: 'day-full', disabled: true, label: 'Unavailable' };
+                if (free >= totalSlots())
+                    return { css: 'day-free', disabled: false, label: 'Available' };
+                return { css: 'day-partial', disabled: false, label: 'Maybe (partly free)' };
+            }
+
+            function renderGrid() {
+                monthLabel.textContent = monthTitle(viewYear, viewMonth);
+                prevButton.disabled = viewYear === todayDate.getUTCFullYear() && viewMonth === todayDate.getUTCMonth();
+                nextButton.disabled = new Date(Date.UTC(viewYear, viewMonth + 1, 1)) > horizonDate;
+
+                grid.innerHTML = '';
+
+                for (const label of ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']) {
+                    const cell = document.createElement('div');
+                    cell.className = 'calendar-weekday';
+                    cell.textContent = label;
+                    grid.appendChild(cell);
+                }
+
+                const offset = (new Date(Date.UTC(viewYear, viewMonth, 1)).getUTCDay() + 6) % 7;
+                for (let index = 0; index < offset; index++)
+                    grid.appendChild(document.createElement('div'));
+
+                const daysInMonth = new Date(Date.UTC(viewYear, viewMonth + 1, 0)).getUTCDate();
+                for (let day = 1; day <= daysInMonth; day++) {
+                    const date = new Date(Date.UTC(viewYear, viewMonth, day));
+                    const value = isoDate(date);
+                    const weekday = date.getUTCDay() || 7;
+                    const free = (availability.get(value) || []).length;
+                    const state = dayStatus(value, weekday, free);
+
+                    const button = document.createElement('button');
+                    button.type = 'button';
+                    button.className = `calendar-day ${state.css}`;
+                    button.dataset.date = value;
+                    button.textContent = String(day);
+                    button.title = `${longDate(value)} — ${state.label}`;
+                    button.disabled = state.disabled;
+                    if (!state.disabled)
+                        button.addEventListener('click', () => renderTimes(value));
+
+                    grid.appendChild(button);
+                }
+            }
+
+            async function loadMonth() {
+                resetSelection();
+                status.textContent = 'Loading availability…';
+                const first = isoDate(new Date(Date.UTC(viewYear, viewMonth, 1)));
+                const last = isoDate(new Date(Date.UTC(viewYear, viewMonth + 1, 0)));
+                const token = ++loadToken;
+
+                try {
+                    const response = await fetch(`/api/booking/availability?from=${first}&to=${last}`);
+                    if (!response.ok)
+                        throw new Error(`HTTP ${response.status}`);
+
+                    const data = await response.json();
+                    if (token !== loadToken) return;
+
+                    availability = new Map((data.days || []).map(day => [day.date, day.slots || []]));
+                    status.textContent = '';
+                    renderGrid();
+                } catch (error) {
+                    if (token !== loadToken) return;
+                    availability = new Map();
+                    status.textContent = 'Could not load availability. Try again in a moment.';
+                    renderGrid();
+                }
+            }
+
+            prevButton.addEventListener('click', () => {
+                viewMonth--;
+                if (viewMonth < 0) {
+                    viewMonth = 11;
+                    viewYear--;
+                }
+                loadMonth();
+            });
+
+            nextButton.addEventListener('click', () => {
+                viewMonth++;
+                if (viewMonth > 11) {
+                    viewMonth = 0;
+                    viewYear++;
+                }
+                loadMonth();
+            });
+
+            loadMonth();
+        })();
+    </script>
 }
