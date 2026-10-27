@@ -310,7 +310,7 @@ Il blog vive in **MainSite**:
 | `/sitemap.xml` | sitemap XML |
 | `/404` | pagina di errore con un media casuale |
 | `/info-send` | POST: salva un body grezzo nella collezione Sperone `info` |
-| `/info-bot` | elenco paginato dei payload (solo autori) |
+| `/info-bot` | elenco paginato dei payload |
 | `/admin/login` | accesso autori |
 | `/admin` | elenco, editor, immagini |
 
@@ -408,10 +408,8 @@ La collezione usa la stessa retention delle richieste (90 giorni) e vive nella
 stessa istanza Sperone (`/data/sperone`).
 
 `/info-bot` elenca i payload ricevuti, dal più recente, **50 per pagina**;
-mostra Guid, IP, paese, dimensione e body grezzo. La pagina è **solo per
-autori autenticati** (stessa policy del blog), perché i payload sono dati non
-fidati inviati da bot. Link "Bot info" nella barra laterale e nell'header per
-gli autori.
+mostra Guid, IP, paese, dimensione e body grezzo. La pagina è **pubblica**
+(come `/requests`), linkata da header, barra laterale e sitemap.
 
 ### 404 e sitemap
 

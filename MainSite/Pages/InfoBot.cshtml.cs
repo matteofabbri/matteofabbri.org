@@ -1,16 +1,12 @@
 using System.Globalization;
 using System.Text;
-using MainSite.Blog;
 using MainSite.InfoBots;
 using MainSite.RequestLogging;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 
 namespace MainSite.Pages;
 
-// Payload ricevuti da POST /info-send. Dati grezzi (spesso robaccia inviata da
-// bot): visibili solo agli autori autenticati.
-[Authorize(Policy = BlogAuth.Policy)]
+// Payload ricevuti da POST /info-send, pubblici come la pagina delle richieste.
 public sealed class InfoBotModel(RequestLogStore store, ILogger<InfoBotModel> logger) : PageModel
 {
     public const int PageSize = 50;

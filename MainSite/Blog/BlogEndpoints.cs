@@ -79,6 +79,8 @@ public static class BlogEndpoints
                     new XElement(ns + "loc", $"{baseUrl}/")),
                 new XElement(ns + "url",
                     new XElement(ns + "loc", $"{baseUrl}/requests")),
+                new XElement(ns + "url",
+                    new XElement(ns + "loc", $"{baseUrl}/info-bot")),
                 posts.Select(post => new XElement(ns + "url",
                     new XElement(ns + "loc", $"{baseUrl}/blog/{post.Slug}"),
                     new XElement(ns + "lastmod", post.Updated.UtcDateTime.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)))),
