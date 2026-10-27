@@ -409,7 +409,7 @@ stessa istanza Sperone (`/data/sperone`).
 
 `/info-bot` elenca i payload ricevuti, dal più recente, **50 per pagina**;
 mostra Guid, IP, paese, dimensione e body grezzo. La pagina è **pubblica**
-(come `/requests`), linkata da header, barra laterale e sitemap.
+(come `/requests`), linkata da header e sitemap.
 
 ### 404 e sitemap
 
@@ -419,12 +419,13 @@ MP4, WebM, MOV e M4V; se la cartella è vuota mostra un messaggio. I file vanno
 nel repo (quindi nell'immagine al deploy): aggiungi immagini o video lì.
 
 La **`/sitemap`** è la versione leggibile (pagine, articoli pubblicati, tag);
-`/sitemap.xml` elenca home, `/requests`, articoli e tag. Entrambe sono collegate
-dal footer, insieme al login.
+`/sitemap.xml` elenca home, `/requests`, `/info-bot`, articoli e tag. Entrambe
+sono collegate dal footer, insieme al login.
 
-La navigazione principale resta nell'header; sui desktop larghi c'è anche una
-**barra verticale fissa a destra** con gli stessi collegamenti (Home, Requests,
-Bot info per gli autori, RSS, Sitemap, Login).
+La home del blog ha un **jumbotron** con una foto a caso da
+`MainSite/wwwroot/photos` (JPG, PNG, GIF, WebP, AVIF); se la cartella è vuota
+usa un gradiente di riserva. Sopra il jumbotron c'è una barra con i pulsanti
+verso GitHub, Instagram e TikTok. Aggiungi le foto al repo e fai deploy.
 
 ### Backup degli articoli
 

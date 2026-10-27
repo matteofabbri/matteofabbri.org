@@ -90,27 +90,7 @@
 </header>
 
 <main id="contenuto" class="wrap">
-    <div class="main-layout">
-        <div class="main-content">
-            @RenderBody()
-        </div>
-
-        <nav class="site-rail" aria-label="Side navigation">
-            <a asp-page="/Blog/Index">Home</a>
-            <a asp-page="/Requests">Requests</a>
-            <a asp-page="/InfoBot">Bot info</a>
-            @if (isAuthor)
-            {
-                <a asp-page="/Admin/Index">Write</a>
-            }
-            <a href="/blog/feed.xml">RSS</a>
-            <a asp-page="/Sitemap">Sitemap</a>
-            @if (!isAuthor)
-            {
-                <a asp-page="/Admin/Login">Login</a>
-            }
-        </nav>
-    </div>
+    @RenderBody()
 </main>
 
 <footer class="site-footer">

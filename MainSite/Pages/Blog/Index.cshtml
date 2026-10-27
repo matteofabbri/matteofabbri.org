@@ -4,19 +4,26 @@
     ViewData["Title"] = "Blog";
     bool isAuthor = Model.IsAuthor;
     var now = DateTimeOffset.UtcNow;
+    string? jumboStyle = Model.PhotoUrl is null ? null : $"background-image: url('{Model.PhotoUrl}')";
 }
 
-<div class="page-head">
-    <div>
+<div class="social-bar" aria-label="Social links">
+    <a class="button button-secondary" href="https://github.com/matteofabbri" target="_blank" rel="noopener">GitHub</a>
+    <a class="button button-secondary" href="https://www.instagram.com/il_qulto/" target="_blank" rel="noopener">Instagram</a>
+    <a class="button button-secondary" href="https://www.tiktok.com/@@the_qult" target="_blank" rel="noopener">TikTok</a>
+</div>
+
+<section class="jumbotron @(Model.PhotoUrl is null ? "no-photo" : null)" style="@jumboStyle">
+    <div class="jumbotron-inner">
         <p class="eyebrow">Notes</p>
         <h1>Blog</h1>
         <p class="lede">Projects, ideas and things worth telling.</p>
+        @if (isAuthor)
+        {
+            <a class="button" asp-page="/Admin/Edit">New post</a>
+        }
     </div>
-    @if (isAuthor)
-    {
-        <a class="button" asp-page="/Admin/Edit">New post</a>
-    }
-</div>
+</section>
 
 @if (Model.Posts.Count == 0)
 {

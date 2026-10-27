@@ -166,55 +166,68 @@ main.wrap {
     gap: 0.75rem;
 }
 
-/* --- Barra di navigazione verticale a destra, dentro main ---------------- */
+/* --- Home del blog: barra social e jumbotron ------------------------------ */
 
-.main-layout {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 4.6rem;
-    align-items: start;
-    gap: 1.5rem;
-}
-
-.main-content {
-    min-width: 0;
-}
-
-.site-rail {
-    position: sticky;
-    top: 1.5rem;
+.social-bar {
     display: flex;
-    min-width: 4.4rem;
-    flex-direction: column;
-    gap: 0.15rem;
-    padding: 0.45rem;
-    background: var(--surface);
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.6rem;
+    margin: 0 0 1rem;
+}
+
+.jumbotron {
+    position: relative;
+    display: flex;
+    align-items: flex-end;
+    min-height: clamp(260px, 38vw, 460px);
+    margin-bottom: 2rem;
+    overflow: hidden;
+    background-color: var(--code-bg);
+    background-position: center;
+    background-size: cover;
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.1);
-    font-size: 0.78rem;
-    text-align: center;
 }
 
-.site-rail a {
-    padding: 0.35rem 0.45rem;
-    border-radius: 6px;
-    color: var(--muted);
-    text-decoration: none;
+.jumbotron.no-photo {
+    background-image: linear-gradient(135deg, #206f68 0%, #141413 70%);
 }
 
-.site-rail a:hover {
-    background: var(--code-bg);
-    color: var(--text);
+.jumbotron::after {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, rgba(0, 0, 0, 0.05), rgba(0, 0, 0, 0.7));
+    pointer-events: none;
+    content: "";
 }
 
-@media (max-width: 1100px) {
-    .main-layout {
-        grid-template-columns: 1fr;
-    }
+.jumbotron-inner {
+    position: relative;
+    z-index: 1;
+    max-width: 70ch;
+    padding: clamp(1.4rem, 4vw, 2.6rem);
+    color: #fff;
+}
 
-    .site-rail {
-        display: none;
-    }
+.jumbotron-inner .eyebrow {
+    color: rgba(255, 255, 255, 0.82);
+}
+
+.jumbotron-inner h1 {
+    margin: 0.2rem 0 0.5rem;
+    font-family: var(--serif);
+    font-size: clamp(2.4rem, 6vw, 4.2rem);
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+}
+
+.jumbotron-inner .lede {
+    color: rgba(255, 255, 255, 0.92);
+}
+
+.jumbotron-inner .button {
+    margin-top: 1rem;
 }
 
 .site-footer a {
@@ -992,7 +1005,6 @@ main.wrap {
 @media print {
     .site-header,
     .site-footer,
-    .site-rail,
     .skip-link,
     .post-footer .button {
         display: none;
