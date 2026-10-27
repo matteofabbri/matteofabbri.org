@@ -51,10 +51,10 @@ public sealed class RequestsModel(
         _ => "ultimi 30 giorni",
     };
 
-    public async Task OnGetAsync(int? days, int? page, CancellationToken ct)
+    public async Task OnGetAsync(int? days, int? pageNumber, CancellationToken ct)
     {
         Days = AllowedDays.Contains(days ?? 0) ? days!.Value : 30;
-        int requestedPage = page is > 0 ? page.Value : 1;
+        int requestedPage = pageNumber is > 0 ? pageNumber.Value : 1;
 
         var resolver = services.GetService<RequestCountryResolver>();
         GeoIpAvailable = resolver?.Available ?? false;
