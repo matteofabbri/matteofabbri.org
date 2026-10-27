@@ -2,25 +2,28 @@
 @model MainSite.Pages.Blog.IndexModel
 @{
     ViewData["Title"] = "Blog";
-    bool isAuthor = Model.IsAuthor;
     var now = DateTimeOffset.UtcNow;
     string? jumboStyle = Model.PhotoUrl is null ? null : $"background-image: url('{Model.PhotoUrl}')";
 }
 
-<div class="social-bar" aria-label="Social links">
-    <a class="button button-secondary" href="https://github.com/matteofabbri" target="_blank" rel="noopener">GitHub</a>
-    <a class="button button-secondary" href="https://www.instagram.com/il_qulto/" target="_blank" rel="noopener">Instagram</a>
-    <a class="button button-secondary" href="https://www.tiktok.com/@@the_qult" target="_blank" rel="noopener">TikTok</a>
-</div>
-
 <section class="jumbotron @(Model.PhotoUrl is null ? "no-photo" : null)" style="@jumboStyle">
+    <nav class="social-bar" aria-label="Social links">
+        <a class="social-link" href="https://github.com/matteofabbri" target="_blank" rel="noopener" aria-label="GitHub" title="GitHub">
+            <img src="~/lib/social/github.svg" alt="" width="20" height="20" asp-append-version="true" />
+        </a>
+        <a class="social-link" href="https://www.instagram.com/il_qulto/" target="_blank" rel="noopener" aria-label="Instagram" title="Instagram">
+            <img src="~/lib/social/instagram.svg" alt="" width="20" height="20" asp-append-version="true" />
+        </a>
+        <a class="social-link" href="https://www.tiktok.com/@@the_qult" target="_blank" rel="noopener" aria-label="TikTok" title="TikTok">
+            <img src="~/lib/social/tiktok.svg" alt="" width="20" height="20" asp-append-version="true" />
+        </a>
+    </nav>
+
     <div class="jumbotron-inner">
-        <p class="eyebrow">Notes</p>
-        <h1>Blog</h1>
-        <p class="lede">Projects, ideas and things worth telling.</p>
-        @if (isAuthor)
+        <h1>Matteo Fabbri</h1>
+        @if (!string.IsNullOrWhiteSpace(Model.Lede))
         {
-            <a class="button" asp-page="/Admin/Edit">New post</a>
+            <p class="lede">@Model.Lede</p>
         }
     </div>
 </section>
@@ -29,10 +32,6 @@
 {
     <div class="empty">
         <p>There is nothing to read yet.</p>
-        @if (isAuthor)
-        {
-            <p><a asp-page="/Admin/Edit">Write the first post</a>.</p>
-        }
     </div>
 }
 else

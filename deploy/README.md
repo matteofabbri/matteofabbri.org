@@ -312,7 +312,8 @@ Il blog vive in **MainSite**:
 | `/info-send` | POST: salva un body grezzo nella collezione Sperone `info` |
 | `/info-bot` | elenco paginato dei payload |
 | `/admin/login` | accesso autori |
-| `/admin` | elenco, editor, immagini |
+| `/admin` | amministrazione: post, lede, immagini, richieste |
+| `/admin/ledes` | lista editabile delle frasi del jumbotron |
 
 Gli articoli sono file **Markdown con front matter YAML**. In produzione stanno
 nel volume Docker `blog-data`, montato in `/data/blog`: un deploy ricostruisce
@@ -424,8 +425,22 @@ sono collegate dal footer, insieme al login.
 
 La home del blog ha un **jumbotron** con una foto a caso da
 `MainSite/wwwroot/photos` (JPG, PNG, GIF, WebP, AVIF); se la cartella è vuota
-usa un gradiente di riserva. Sopra il jumbotron c'è una barra con i pulsanti
-verso GitHub, Instagram e TikTok. Aggiungi le foto al repo e fai deploy.
+usa un gradiente di riserva. Le icone di GitHub, Instagram e TikTok sono
+sovrapposte in alto a destra. Il lede sotto il titolo è scelto a caso tra quelli
+gestiti in `/admin/ledes` (Sperone, collezione `ledes`); se non ce ne sono, non
+viene mostrato. Aggiungi le foto al repo e fai deploy.
+
+### Amministrazione e lede
+
+**`/admin`** è la pagina di amministrazione: la raggiunge qualunque casella
+registrata su mailcow (non c'è allowlist). Da lì si crea un post con **New
+post**, si gestiscono i **lede**, le immagini e si vedono le richieste. Il
+pulsante di creazione non sta nella home.
+
+In **`/admin/ledes`** c'è la lista editabile delle frasi del jumbotron: si
+aggiungono, si modificano in riga e si eliminano (massimo 300 caratteri). La
+home ne sceglie una a caso a ogni apertura; la collezione Sperone `ledes` è
+permanente e vive nella stessa istanza `/data/sperone`.
 
 ### Backup degli articoli
 

@@ -1,4 +1,5 @@
 using MainSite.Blog;
+using MainSite.RequestLogging;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 
 namespace MainSite.Pages.Blog;
@@ -8,7 +9,9 @@ public sealed class IndexModel(
     BlogClock clock,
     TimeProvider time,
     BlogAuthState auth,
-    IWebHostEnvironment environment) : PageModel
+    IWebHostEnvironment environment,
+    RequestLogStore requestLogStore,
+    ILogger<IndexModel> logger) : PageModel
 {
     private static readonly HashSet<string> PhotoExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -19,11 +22,21 @@ public sealed class IndexModel(
     public IReadOnlyList<string> Tags { get; private set; } = [];
     public bool IsAuthor { get; private set; }
     public string? PhotoUrl { get; private set; }
+    public string? Lede { get; private set; }
     public BlogClock Clock => clock;
 
     public async Task OnGetAsync(CancellationToken ct)
     {
         PhotoUrl = PickPhoto();
+
+        try
+        {
+            Lede = (await requestLogStore.GetRandomLedeAsync(ct))?.Text;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Impossibile leggere i lede da Sperone");
+        }
 
         var now = time.GetUtcNow();
         IsAuthor = auth.IsAuthor(User);

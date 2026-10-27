@@ -172,6 +172,32 @@ public sealed class RequestLogStoreTests : IDisposable
         Assert.Equal("IT", page2.Entries[0].CountryCode);
     }
 
+    [Fact]
+    public async Task Gestisce_i_lede_del_jumbotron()
+    {
+        using var store = CreateStore();
+
+        Assert.Null(await store.AddLedeAsync("   "));
+
+        var first = await store.AddLedeAsync("First lede");
+        var second = await store.AddLedeAsync("Second lede");
+        Assert.NotNull(first);
+        Assert.NotNull(second);
+
+        Assert.Equal(2, (await store.GetLedesAsync()).Count);
+
+        var updated = await store.UpdateLedeAsync(first!.Id, "First updated");
+        Assert.NotNull(updated);
+        Assert.Equal("First updated", updated.Text);
+
+        var random = await store.GetRandomLedeAsync();
+        Assert.NotNull(random);
+        Assert.Contains(random.Text, new[] { "First updated", "Second lede" });
+
+        Assert.True(await store.DeleteLedeAsync(second!.Id));
+        Assert.Single(await store.GetLedesAsync());
+    }
+
     public void Dispose()
     {
         try

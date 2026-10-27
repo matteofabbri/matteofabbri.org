@@ -23,6 +23,8 @@ public sealed class RequestLogStore : IDisposable
     private const string CollectionDescription = "Una riga per ogni richiesta ricevuta: user-agent, IP, percorso, esito e durata";
     private const string InfoCollection = "info";
     private const string InfoCollectionDescription = "Payload grezzi ricevuti da POST /info-send: GUID, IP, paese e body";
+    private const string LedeCollection = "ledes";
+    private const string LedeCollectionDescription = "Frasi brevi mostrate a caso nel jumbotron della home";
 
     private readonly RequestLogOptions _options;
     private readonly IHostEnvironment _environment;
@@ -123,11 +125,28 @@ public sealed class RequestLogStore : IDisposable
                     return false;
                 }
 
+                var ledesCreated = await db.Create(new CreateCollectionCommand(
+                    _options.EffectiveDatabaseName,
+                    LedeCollection)
+                {
+                    Description = LedeCollectionDescription,
+                });
+
+                if (ledesCreated is not (OperationResult.Success or OperationResult.AlreadyExists))
+                {
+                    _logger.LogError(
+                        "Lede: creazione della collezione Sperone fallita ({Result}) in {Path}",
+                        ledesCreated, ResolvedPath);
+                    if (ownsNew)
+                        db.Dispose();
+                    return false;
+                }
+
                 _db = db;
                 _initialized = true;
                 _logger.LogInformation(
-                    "Log richieste: Sperone embedded in {Path}, collezioni {Collection} e {InfoCollection}",
-                    ResolvedPath, _options.EffectiveCollection, InfoCollection);
+                    "Log richieste: Sperone embedded in {Path}, collezioni {Collection}, {InfoCollection} e {LedeCollection}",
+                    ResolvedPath, _options.EffectiveCollection, InfoCollection, LedeCollection);
                 return true;
             }
             catch
@@ -369,6 +388,115 @@ public sealed class RequestLogStore : IDisposable
         return new InfoPage(entries, total, current, pageCount);
     }
 
+    // --- Lede del jumbotron --------------------------------------------------
+
+    public async Task<IReadOnlyList<LedeEntry>> GetLedesAsync(CancellationToken ct = default)
+    {
+        if (!await EnsureInitializedAsync(ct) || _db is null)
+            return [];
+
+        var query = new QueryElementsCommand(LedeCollection,
+        [
+            new QueryStep([new QueryClause { Scalar = new ScalarQuery("timestamp", From: "0") }]),
+        ]);
+
+        var (result, items) = await _db.Query(query);
+        if (result != OperationResult.Success || items.Count == 0)
+            return [];
+
+        var ledes = new List<LedeEntry>(items.Count);
+        foreach (string id in items)
+        {
+            var (found, payload) = await _db.Get(new GetElementCommand(LedeCollection, id));
+            if (!found)
+                continue;
+
+            var entry = JsonSerializer.Deserialize(payload.Span, LedeJsonContext.Default.LedeEntry);
+            if (entry is not null)
+                ledes.Add(entry);
+        }
+
+        // La home non ha bisogno di un ordine; l'admin mostra i più recenti.
+        ledes.Reverse();
+        return ledes;
+    }
+
+    public async Task<LedeEntry?> GetRandomLedeAsync(CancellationToken ct = default)
+    {
+        var ledes = await GetLedesAsync(ct);
+        return ledes.Count == 0 ? null : ledes[Random.Shared.Next(ledes.Count)];
+    }
+
+    public async Task<LedeEntry?> AddLedeAsync(string text, CancellationToken ct = default)
+    {
+        text = (text ?? "").Trim();
+        if (text.Length == 0)
+            return null;
+
+        if (!await EnsureInitializedAsync(ct) || _db is null)
+            return null;
+
+        DateTimeOffset now = _timeProvider.GetUtcNow();
+        var entry = new LedeEntry
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            Text = text,
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+
+        var result = await _db.Insert(new CreateElementCommand(
+            LedeCollection,
+            entry.Id,
+            LedeIndexingOf(entry),
+            null,
+            JsonSerializer.SerializeToUtf8Bytes(entry, LedeJsonContext.Default.LedeEntry)));
+
+        return result == OperationResult.Success ? entry : null;
+    }
+
+    public async Task<LedeEntry?> UpdateLedeAsync(string id, string text, CancellationToken ct = default)
+    {
+        text = (text ?? "").Trim();
+        if (text.Length == 0 || string.IsNullOrWhiteSpace(id))
+            return null;
+
+        if (!await EnsureInitializedAsync(ct) || _db is null)
+            return null;
+
+        var (found, payload) = await _db.Get(new GetElementCommand(LedeCollection, id));
+        if (!found)
+            return null;
+
+        var existing = JsonSerializer.Deserialize(payload.Span, LedeJsonContext.Default.LedeEntry);
+        if (existing is null)
+            return null;
+
+        var updated = existing with
+        {
+            Text = text,
+            UpdatedAt = _timeProvider.GetUtcNow(),
+        };
+
+        var result = await _db.Update(new UpdateElementCommand(
+            LedeCollection,
+            id,
+            LedeIndexingOf(updated),
+            null,
+            JsonSerializer.SerializeToUtf8Bytes(updated, LedeJsonContext.Default.LedeEntry)));
+
+        return result == OperationResult.Success ? updated : null;
+    }
+
+    public async Task<bool> DeleteLedeAsync(string id, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(id) || !await EnsureInitializedAsync(ct) || _db is null)
+            return false;
+
+        var result = await _db.Delete(new DeleteElementCommand(LedeCollection, id));
+        return result == OperationResult.Success;
+    }
+
     public void Dispose()
     {
         _initGate.Wait();
@@ -419,6 +547,15 @@ public sealed class RequestLogStore : IDisposable
         [
             new ScalarIndexCommand("timestamp", false, entry.Timestamp.UtcTicks.ToString(CultureInfo.InvariantCulture)),
             new ScalarIndexCommand("country", false, NormalizeCountry(entry.CountryCode)),
+        ],
+        Geographic: null,
+        Vectorial: null,
+        FullText: null);
+
+    private static IndexElementCommand LedeIndexingOf(LedeEntry entry) => new(
+        Scalar:
+        [
+            new ScalarIndexCommand("timestamp", false, entry.CreatedAt.UtcTicks.ToString(CultureInfo.InvariantCulture)),
         ],
         Geographic: null,
         Vectorial: null,

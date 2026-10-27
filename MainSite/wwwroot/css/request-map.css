@@ -120,12 +120,6 @@
     background: var(--accent);
 }
 
-.section-title {
-    margin: 2rem 0 0.75rem;
-    font-family: var(--serif);
-    font-size: 1.25rem;
-}
-
 .requests-table td {
     vertical-align: top;
 }

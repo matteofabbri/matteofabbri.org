@@ -1,21 +1,25 @@
 @page "/admin"
 @model MainSite.Pages.Admin.IndexModel
 @{
-    ViewData["Title"] = "Write";
+    ViewData["Title"] = "Administration";
 }
 
 <div class="page-head">
     <div>
-        <p class="eyebrow">Writing area</p>
-        <h1>Your posts</h1>
-        <p class="lede">@(Model.Posts.Count == 1 ? "1 post in total, drafts included." : $"{Model.Posts.Count} posts in total, drafts included.")</p>
+        <p class="eyebrow">Administration</p>
+        <h1>Administration</h1>
+        <p class="lede">Manage posts, ledes and site content.</p>
     </div>
     <div class="actions">
+        <a class="button" asp-page="/Admin/Edit">New post</a>
+        <a class="button button-secondary" asp-page="/Admin/Ledes">Ledes</a>
         <a class="button button-secondary" asp-page="/Admin/Media">Images</a>
         <a class="button button-secondary" asp-page="/Requests">Site requests</a>
-        <a class="button" asp-page="/Admin/Edit">New post</a>
     </div>
 </div>
+
+<h2 class="section-title">Posts</h2>
+<p class="hint">@(Model.Posts.Count == 1 ? "1 post in total, drafts included." : $"{Model.Posts.Count} posts in total, drafts included.")</p>
 
 @if (TempData["Messaggio"] is string message)
 {
