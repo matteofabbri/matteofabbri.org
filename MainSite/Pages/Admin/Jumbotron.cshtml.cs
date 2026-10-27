@@ -8,7 +8,7 @@ namespace MainSite.Pages.Admin;
 // del blog, in jumbotron/, e vengono scelti a caso in home.
 public sealed class JumbotronModel(JumbotronMediaStore media) : PageModel
 {
-    public IReadOnlyList<JumbotronMediaFile> Files { get; private set; } = [];
+    public IReadOnlyList<MediaFile> Files { get; private set; } = [];
 
     [BindProperty]
     public IFormFile? Upload { get; set; }

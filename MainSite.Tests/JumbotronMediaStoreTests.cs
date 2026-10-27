@@ -55,7 +55,7 @@ public sealed class JumbotronMediaStoreTests : IDisposable
 
         using var big = new MemoryStream(new byte[16]);
         await Assert.ThrowsAsync<BlogValidationException>(() =>
-            store.SaveAsync("big.png", big, JumbotronMediaStore.MaxImageBytes + 1));
+            store.SaveAsync("big.png", big, MediaLibrary.MaxImageBytes + 1));
     }
 
     public void Dispose()

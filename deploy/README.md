@@ -315,6 +315,7 @@ Il blog vive in **MainSite**:
 | `/admin` | amministrazione: post, lede, immagini, richieste |
 | `/admin/ledes` | lista editabile delle frasi del jumbotron |
 | `/admin/jumbotron` | upload e gestione di foto/video del jumbotron |
+| `/admin/404` | upload e gestione di foto/video della pagina 404 |
 
 Gli articoli sono file **Markdown con front matter YAML**. In produzione stanno
 nel volume Docker `blog-data`, montato in `/data/blog`: un deploy ricostruisce
@@ -416,9 +417,11 @@ mostra Guid, IP, paese, dimensione e body grezzo. La pagina è **pubblica**
 ### 404 e sitemap
 
 La pagina **`/404`** si apre per qualsiasi URL inesistente (`UseStatusCodePagesWithReExecute`).
-Pesca a caso un file da `MainSite/wwwroot/404` tra JPG, PNG, GIF, WebP, AVIF,
-MP4, WebM, MOV e M4V; se la cartella è vuota mostra un messaggio. I file vanno
-nel repo (quindi nell'immagine al deploy): aggiungi immagini o video lì.
+Pesca a caso un media caricato da **`/admin/404`** (stanno in `404/` nel volume
+del blog, `/data/blog/404`, e si servono da `/404-media/{file}`) tra JPG, PNG,
+GIF, WebP, AVIF, MP4, WebM, MOV e M4V; se non ce ne sono usa i file committati
+in `MainSite/wwwroot/404`; se anche quella cartella è vuota mostra un messaggio.
+Immagini max 15 MB, video max 25 MB.
 
 La **`/sitemap`** è la versione leggibile (pagine, articoli pubblicati, tag);
 `/sitemap.xml` elenca home, `/requests`, `/info-bot`, articoli e tag. Entrambe
@@ -438,8 +441,9 @@ ce ne sono, non viene mostrato.
 
 **`/admin`** è la pagina di amministrazione: la raggiunge qualunque casella
 registrata su mailcow (non c'è allowlist). Da lì si crea un post con **New
-post**, si gestiscono i **lede**, i **media del jumbotron**, le immagini e si
-vedono le richieste. Il pulsante di creazione non sta nella home.
+post**, si gestiscono i **lede**, i **media del jumbotron**, i **media della
+404**, le immagini e si vedono le richieste. Il pulsante di creazione non sta
+nella home.
 
 In **`/admin/ledes`** c'è la lista editabile delle frasi del jumbotron: si
 aggiungono, si modificano in riga e si eliminano (massimo 300 caratteri). La

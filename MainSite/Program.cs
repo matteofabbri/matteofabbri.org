@@ -66,6 +66,7 @@ public class Program
         builder.Services.AddSingleton<BlogStore>();
         builder.Services.AddSingleton<BlogMediaStore>();
         builder.Services.AddSingleton<JumbotronMediaStore>();
+        builder.Services.AddSingleton<NotFoundMediaStore>();
         builder.AddBlogAuthentication(blogAuthState);
 
         builder.Services.AddAuthorization(options =>

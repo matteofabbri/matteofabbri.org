@@ -1,10 +1,11 @@
+using MainSite.Blog;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 
 namespace MainSite.Pages;
 
-// Pagina 404: pesca a caso un'immagine o un video dalla cartella
-// wwwroot/404, così ogni errore ha un contenuto diverso.
-public sealed class NotFoundModel(IWebHostEnvironment environment) : PageModel
+// Pagina 404: pesca a caso un media caricato da /admin/404 (nel volume del
+// blog). Se non ce ne sono, usa le immagini/video committati in wwwroot/404.
+public sealed class NotFoundModel(NotFoundMediaStore uploaded, IWebHostEnvironment environment) : PageModel
 {
     private static readonly HashSet<string> ImageExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -22,6 +23,15 @@ public sealed class NotFoundModel(IWebHostEnvironment environment) : PageModel
 
     public void OnGet()
     {
+        var media = uploaded.PickRandom();
+        if (media is not null)
+        {
+            MediaUrl = media.Url;
+            MediaName = media.FileName;
+            IsVideo = media.IsVideo;
+            return;
+        }
+
         string webRoot = environment.WebRootPath
             ?? Path.Combine(environment.ContentRootPath, "wwwroot");
         string directory = Path.Combine(webRoot, "404");
