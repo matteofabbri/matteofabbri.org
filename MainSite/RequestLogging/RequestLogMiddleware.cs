@@ -78,6 +78,11 @@ public sealed class RequestLogMiddleware
         string? userAgent = Truncate(headers.UserAgent.ToString(), 512);
         var agent = UserAgentParser.Parse(userAgent);
         var country = _countryResolver?.Resolve(context.Connection.RemoteIpAddress) ?? CountryInfo.Unknown;
+        _logger.LogInformation(
+            "DEBUG log richieste: remote={Remote} xff={ForwardedFor} country={Country}",
+            context.Connection.RemoteIpAddress,
+            headers["X-Forwarded-For"].ToString(),
+            country.Code);
 
         var entry = new RequestLogEntry
         {
