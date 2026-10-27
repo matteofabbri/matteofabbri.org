@@ -166,13 +166,22 @@ main.wrap {
     gap: 0.75rem;
 }
 
-/* --- Barra di navigazione verticale a destra ------------------------------ */
+/* --- Barra di navigazione verticale a destra, dentro main ---------------- */
+
+.main-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 4.6rem;
+    align-items: start;
+    gap: 1.5rem;
+}
+
+.main-content {
+    min-width: 0;
+}
 
 .site-rail {
-    position: fixed;
-    top: 50%;
-    right: 0.75rem;
-    z-index: 50;
+    position: sticky;
+    top: 1.5rem;
     display: flex;
     min-width: 4.4rem;
     flex-direction: column;
@@ -181,10 +190,9 @@ main.wrap {
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.14);
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.1);
     font-size: 0.78rem;
     text-align: center;
-    transform: translateY(-50%);
 }
 
 .site-rail a {
@@ -199,13 +207,11 @@ main.wrap {
     color: var(--text);
 }
 
-@media (min-width: 1101px) {
-    body {
-        padding-right: 6rem;
-    }
-}
-
 @media (max-width: 1100px) {
+    .main-layout {
+        grid-template-columns: 1fr;
+    }
+
     .site-rail {
         display: none;
     }
