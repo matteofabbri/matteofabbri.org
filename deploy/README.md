@@ -436,8 +436,8 @@ Cosa finisce in ogni riga:
 | IP remoto (quello vero, non Caddy) e porta | `203.0.113.7`, `54321` |
 | Metodo, host, percorso, query | `GET`, `matteofabbri.org`, `/blog`, `?tag=dotnet` |
 | Status e durata | `200`, `42.7` ms |
-| Browser, versione, sistema, dispositivo | `Chrome`, `126.0`, `Windows 10/11`, `desktop` |
-| User-Agent grezzo + flag bot | UA completo (troncato), `false` |
+| User-Agent grezzo | stringa completa (troncata a 512 caratteri), nessun parsing |
+| Client ID | 16 caratteri esadecimali, hash di IP + User-Agent |
 | Referer, Accept-Language | header grezzi (troncati) |
 | Utente autenticato, se presente | `matteo@maddalena.me` |
 | Request id e trace id | per correlare con i log/tracce |
@@ -489,10 +489,11 @@ sezione `environment` dell'override (es. `RequestLog__RetentionDays: 30`) e
 ricrea il container. Non ci sono segreti da configurare.
 
 **Indici.** Ogni riga è indicizzata con scalar `timestamp`, `status`,
-`durationMs`, `bot`, `country` e `public` e full-text `path` e `host`: si possono
+`durationMs`, `country` e `public` e full-text `path` e `host`: si possono
 filtrare gli intervalli di tempo, gli errori e il paese, escludere le pagine
-`/admin` e cercare per percorso/host. Il payload JSON completo (IP, client,
-referer, ...) resta leggibile con `Database.Get` o con `RequestLogStore.GetAsync`.
+`/admin` e cercare per percorso/host. Il payload JSON completo (IP, User-Agent
+grezzo, Client ID, referer, ...) resta leggibile con `Database.Get` o con
+`RequestLogStore.GetAsync`.
 
 **Leggere i log.** La pagina pubblica `/requests` è la UI: mappa per paese e
 ultime richieste. Per esplorare il database in altro modo si usa la libreria (o
@@ -524,10 +525,10 @@ successivo: controlla `docker compose config` / `docker inspect` del sito.
 ### Mappa delle richieste per paese
 
 La pagina **`/requests`** è pubblica e mostra una mappa del mondo con i paesi
-colorati per numero di richieste, il selettore ultimi 7/30/90 giorni, la
-tabella ordinata e le ultime 50 richieste con paese, client (browser/sistema) e
-dispositivo. È aggregata su tutto il sito: non mostra IP né utenti autenticati,
-e le pagine `/admin` non compaiono nell'elenco.
+colorati per numero di richieste e il selettore ultimi 7/30/90 giorni. Sotto ci
+sono la tabella ordinata e le richieste pubbliche **pagine da 200**, con paese,
+IP, Client ID e User-Agent grezzo. È aggregata su tutto il sito: non mostra
+utenti autenticati e le pagine `/admin` non compaiono nell'elenco.
 
 - Mappa: [Leaflet](https://leafletjs.com) + tile
   [OpenStreetMap](https://www.openstreetmap.org/copyright); confini dei paesi da
@@ -536,10 +537,10 @@ e le pagine `/admin` non compaiono nell'elenco.
 - Geolocalizzazione: **DB-IP Lite City** (CC BY 4.0), database MMDB locale.
   Nessun IP viene inviato a servizi esterni: la lookup è in-process.
 - Il codice paese (ISO 3166-1 alpha-2, es. `IT`) viene indicizzato in Sperone su
-  ogni nuova richiesta; il client compatto (`Chrome 126 · Windows 10/11`) è
-  salvato nel payload. Le righe registrate **prima** di questa versione non
-  hanno il paese e restano tra le "non geolocalizzate": la mappa parte dalle
-  nuove richieste.
+  ogni nuova richiesta; IP, User-Agent grezzo e Client ID (hash di IP + UA)
+  sono salvati nel payload. Le righe registrate **prima** di questa versione
+  non hanno il paese e restano tra le "non geolocalizzate": la mappa parte
+  dalle nuove richieste.
 
 **Installazione/aggiornamento GeoIP.**
 
@@ -562,8 +563,8 @@ e le pagine `/admin` non compaiono nell'elenco.
 
 **Lettura.** La pagina conta per paese usando gli indici Sperone (`country` +
 `timestamp`) senza leggere i payload; i totali includono anche IP privati e
-righe senza paese. L'elenco delle ultime richieste usa `timestamp` + `public`
-e legge solo i payload delle righe mostrate (max 50).
+righe senza paese. L'elenco delle richieste usa `timestamp` + `public`, mostra
+200 righe per pagina e legge solo i payload delle righe mostrate.
 
 ---
 

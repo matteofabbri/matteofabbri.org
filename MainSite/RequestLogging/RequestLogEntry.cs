@@ -33,13 +33,10 @@ public sealed record RequestLogEntry
     public string? ForwardedFor { get; init; }
 
     public string? UserAgent { get; init; }
-    public string? Client { get; init; }
-    public string? Browser { get; init; }
-    public string? BrowserVersion { get; init; }
-    public string? OperatingSystem { get; init; }
-    public string? OperatingSystemVersion { get; init; }
-    public string? DeviceType { get; init; }
-    public bool IsBot { get; init; }
+
+    // Identificativo stabile del client, senza cookie e senza parsing dello
+    // User-Agent: hash troncato di IP + User-Agent.
+    public string? ClientId { get; init; }
 
     // Paese dell'IP (ISO 3166-1 alpha-2, es. "IT"; vuoto = privato o non
     // geolocalizzato). Il codice è indicizzato in Sperone; il nome è comodo

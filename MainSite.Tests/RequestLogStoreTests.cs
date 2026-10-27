@@ -26,7 +26,8 @@ public sealed class RequestLogStoreTests : IDisposable
         Assert.Equal(entry.Id, back.Id);
         Assert.Equal(entry.Path, back.Path);
         Assert.Equal(entry.QueryString, back.QueryString);
-        Assert.Equal(entry.Browser, back.Browser);
+        Assert.Equal(entry.UserAgent, back.UserAgent);
+        Assert.Equal(entry.ClientId, back.ClientId);
         Assert.Equal(entry.RemoteIp, back.RemoteIp);
         Assert.Equal(entry.StatusCode, back.StatusCode);
     }
@@ -97,37 +98,53 @@ public sealed class RequestLogStoreTests : IDisposable
     }
 
     [Fact]
-    public async Task Le_ultime_richieste_saltano_l_area_admin_e_partono_dalla_piu_recente()
+    public async Task La_lista_pagina_le_richieste_pubbliche_dalla_piu_recente_e_salta_admin()
     {
         using var store = CreateStore();
         var now = DateTimeOffset.UtcNow;
         var from = now.AddHours(-1);
 
-        var blog = CreateEntry("req-blog") with
+        var uno = CreateEntry("req-uno") with
         {
-            Timestamp = now.AddMinutes(-30),
+            Timestamp = now.AddMinutes(-40),
             Path = "/blog/uno",
             CountryCode = "IT",
         };
-        var admin = CreateEntry("req-admin") with
+        var due = CreateEntry("req-due") with
+        {
+            Timestamp = now.AddMinutes(-30),
+            Path = "/blog/due",
+            CountryCode = "IT",
+        };
+        var tre = CreateEntry("req-tre") with
         {
             Timestamp = now.AddMinutes(-20),
+            Path = "/blog/tre",
+            CountryCode = "US",
+        };
+        var admin = CreateEntry("req-admin") with
+        {
+            Timestamp = now.AddMinutes(-10),
             Path = "/admin/edit/bozza",
             CountryCode = "IT",
         };
-        var nuova = CreateEntry("req-nuova") with
-        {
-            Timestamp = now.AddMinutes(-10),
-            Path = "/blog/due",
-            CountryCode = "US",
-        };
 
-        await store.InsertManyAsync([blog, admin, nuova], CancellationToken.None);
+        await store.InsertManyAsync([uno, due, tre, admin], CancellationToken.None);
 
-        var recent = await store.GetRecentAsync(5, from);
+        var prima = await store.GetPageAsync(1, 2, from);
+        Assert.Equal(["req-tre", "req-due"], prima.Entries.Select(entry => entry.Id));
+        Assert.Equal(3, prima.Total);
+        Assert.Equal(2, prima.PageCount);
+        Assert.Equal(1, prima.Page);
 
-        Assert.Equal(["req-nuova", "req-blog"], recent.Select(entry => entry.Id));
-        Assert.Single(await store.GetRecentAsync(1, from));
+        var seconda = await store.GetPageAsync(2, 2, from);
+        Assert.Equal(["req-uno"], seconda.Entries.Select(entry => entry.Id));
+        Assert.Equal(2, seconda.Page);
+
+        // Una pagina oltre il fondo viene riportata all'ultima.
+        var oltre = await store.GetPageAsync(99, 2, from);
+        Assert.Equal(2, oltre.Page);
+        Assert.Single(oltre.Entries);
     }
 
     public void Dispose()
@@ -175,13 +192,7 @@ public sealed class RequestLogStoreTests : IDisposable
         RemoteIp = "203.0.113.7",
         RemotePort = 54321,
         UserAgent = "Mozilla/5.0",
-        Client = "Chrome 126.0.0.0 · Windows 10/11",
-        Browser = "Chrome",
-        BrowserVersion = "126.0.0.0",
-        OperatingSystem = "Windows 10/11",
-        OperatingSystemVersion = "10.0",
-        DeviceType = "desktop",
-        IsBot = false,
+        ClientId = "0123456789abcdef",
         CountryCode = "IT",
         CountryName = "Italia",
         Referer = "https://example.org/",

@@ -18,7 +18,7 @@ namespace MainSite.RequestLogging;
 // Un solo oggetto Database per processo; il writer è l'unico a scriverci.
 public sealed class RequestLogStore : IDisposable
 {
-    private const string CollectionDescription = "Una riga per ogni richiesta ricevuta: client, browser, percorso, esito e durata";
+    private const string CollectionDescription = "Una riga per ogni richiesta ricevuta: user-agent, IP, percorso, esito e durata";
 
     private readonly RequestLogOptions _options;
     private readonly IHostEnvironment _environment;
@@ -213,16 +213,20 @@ public sealed class RequestLogStore : IDisposable
         return result == OperationResult.Success ? items.Count : 0;
     }
 
-    // Ultime richieste pubbliche del periodo, dalla più recente. Le pagine
-    // /admin restano fuori: sono protette e possono contenere slug di bozze.
-    // L'indice "public" scarta le altre senza leggerne il payload.
-    public async Task<IReadOnlyList<RequestLogEntry>> GetRecentAsync(
-        int limit,
+    // Una pagina di richieste pubbliche del periodo, dalla più recente. Le
+    // pagine /admin restano fuori: sono protette e possono contenere slug di
+    // bozze. L'indice "public" scarta le altre senza leggerne il payload.
+    public async Task<RequestLogPage> GetPageAsync(
+        int page,
+        int pageSize,
         DateTimeOffset from,
         CancellationToken ct = default)
     {
-        if (limit <= 0 || !await EnsureInitializedAsync(ct) || _db is null)
-            return [];
+        if (pageSize <= 0)
+            pageSize = 200;
+
+        if (!await EnsureInitializedAsync(ct) || _db is null)
+            return RequestLogPage.Empty;
 
         var query = new QueryElementsCommand(_options.EffectiveCollection,
         [
@@ -232,13 +236,18 @@ public sealed class RequestLogStore : IDisposable
 
         var (result, items) = await _db.Query(query);
         if (result != OperationResult.Success || items.Count == 0)
-            return [];
+            return RequestLogPage.Empty;
 
-        int take = Math.Min(limit, items.Count);
-        int first = items.Count - take;
+        int total = items.Count;
+        int pageCount = Math.Max(1, (total + pageSize - 1) / pageSize);
+        int current = Math.Clamp(page, 1, pageCount);
 
-        var entries = new List<RequestLogEntry>(take);
-        for (int i = first; i < items.Count; i++)
+        // IDs in ordine crescente di timestamp: la pagina 1 è la coda.
+        int endExclusive = total - (current - 1) * pageSize;
+        int start = Math.Max(0, endExclusive - pageSize);
+
+        var entries = new List<RequestLogEntry>(endExclusive - start);
+        for (int i = start; i < endExclusive; i++)
         {
             var (found, payload) = await _db.Get(new GetElementCommand(_options.EffectiveCollection, items[i]));
             if (!found)
@@ -249,10 +258,8 @@ public sealed class RequestLogStore : IDisposable
                 entries.Add(entry);
         }
 
-        // Il generatore timestamp enumera in ordine crescente: la lista parte
-        // dalla richiesta più recente.
         entries.Reverse();
-        return entries;
+        return new RequestLogPage(entries, total, current, pageCount);
     }
 
     public void Dispose()
@@ -274,7 +281,7 @@ public sealed class RequestLogStore : IDisposable
         }
     }
 
-    // Indexing per ogni riga. Scalar su timestamp/status/durata/bot/paese
+    // Indexing per ogni riga. Scalar su timestamp/status/durata/paese
     // servono per i filtri; full-text su percorso e host per la ricerca libera.
     private static IndexElementCommand IndexingOf(RequestLogEntry entry) => new(
         Scalar:
@@ -282,7 +289,6 @@ public sealed class RequestLogStore : IDisposable
             new ScalarIndexCommand("timestamp", false, entry.Timestamp.UtcTicks.ToString(CultureInfo.InvariantCulture)),
             new ScalarIndexCommand("status", false, entry.StatusCode.ToString(CultureInfo.InvariantCulture)),
             new ScalarIndexCommand("durationMs", false, ((long)Math.Round(entry.DurationMs)).ToString(CultureInfo.InvariantCulture)),
-            new ScalarIndexCommand("bot", false, entry.IsBot ? "1" : "0"),
             new ScalarIndexCommand("country", false, NormalizeCountry(entry.CountryCode)),
             new ScalarIndexCommand("public", false, entry.Path.StartsWith("/admin", StringComparison.OrdinalIgnoreCase) ? "0" : "1"),
         ],
@@ -306,4 +312,15 @@ public readonly record struct RequestLogWriteResult(int Ok, int Duplicates, int 
 {
     public int Total => Ok + Duplicates + NotFound + Invalid;
     public int Failed => NotFound + Invalid;
+}
+
+// Una pagina della lista pubblica: le righe sono già ordinate dalla più
+// recente; Total conta solo le richieste pubbliche del periodo.
+public sealed record RequestLogPage(
+    IReadOnlyList<RequestLogEntry> Entries,
+    int Total,
+    int Page,
+    int PageCount)
+{
+    public static readonly RequestLogPage Empty = new([], 0, 1, 1);
 }

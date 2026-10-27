@@ -41,12 +41,8 @@ public sealed class RequestLogMiddlewareTests
         Assert.Equal("203.0.113.7", entry.RemoteIp);
         Assert.Equal(54321, entry.RemotePort);
         Assert.Equal(ChromeWindows, entry.UserAgent);
-        Assert.Equal("Chrome 126.0.0.0 · Windows 10/11", entry.Client);
-        Assert.Equal("Chrome", entry.Browser);
-        Assert.Equal("126.0.0.0", entry.BrowserVersion);
-        Assert.Equal("Windows 10/11", entry.OperatingSystem);
-        Assert.Equal("desktop", entry.DeviceType);
-        Assert.False(entry.IsBot);
+        Assert.Equal(ClientIds.For("203.0.113.7", ChromeWindows), entry.ClientId);
+        Assert.Equal(16, entry.ClientId!.Length);
         Assert.Equal("https://example.org/", entry.Referer);
         Assert.Equal("it-IT,it;q=0.9", entry.AcceptLanguage);
         Assert.Equal("text/plain", entry.ContentType);

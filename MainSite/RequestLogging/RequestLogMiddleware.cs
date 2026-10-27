@@ -76,7 +76,7 @@ public sealed class RequestLogMiddleware
         var headers = request.Headers;
 
         string? userAgent = Truncate(headers.UserAgent.ToString(), 512);
-        var agent = UserAgentParser.Parse(userAgent);
+        string? remoteIp = NormalizeIp(context.Connection.RemoteIpAddress);
         var country = _countryResolver?.Resolve(context.Connection.RemoteIpAddress) ?? CountryInfo.Unknown;
 
         var entry = new RequestLogEntry
@@ -95,18 +95,12 @@ public sealed class RequestLogMiddleware
             StatusCode = statusCode,
             DurationMs = Math.Round(Stopwatch.GetElapsedTime(started).TotalMilliseconds, 3),
 
-            RemoteIp = NormalizeIp(context.Connection.RemoteIpAddress),
+            RemoteIp = remoteIp,
             RemotePort = context.Connection.RemotePort > 0 ? context.Connection.RemotePort : null,
             ForwardedFor = Truncate(headers["X-Forwarded-For"].ToString(), 512),
 
             UserAgent = userAgent,
-            Client = agent.ClientLabel,
-            Browser = agent.Browser,
-            BrowserVersion = agent.BrowserVersion,
-            OperatingSystem = agent.OperatingSystem,
-            OperatingSystemVersion = agent.OperatingSystemVersion,
-            DeviceType = agent.DeviceType,
-            IsBot = agent.IsBot,
+            ClientId = ClientIds.For(remoteIp, userAgent),
 
             CountryCode = country.Code,
             CountryName = country.IsKnown ? country.Name : null,

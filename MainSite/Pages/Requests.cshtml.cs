@@ -7,10 +7,10 @@ using Microsoft.Extensions.Options;
 
 namespace MainSite.Pages;
 
-// Mappa e lista delle richieste del sito. La pagina è pubblica e aggregata per
-// paese: non mostra né IP né utenti autenticati. I conteggi vengono dagli
-// indici Sperone (scalar country + timestamp); la lista legge solo le ultime
-// righe e lascia fuori le pagine /admin (possono contenere slug di bozze).
+// Mappa e lista delle richieste del sito. È pubblica e aggregata per paese;
+// la lista mostra le richieste pubbliche a pagine da 200, con user-agent e IP
+// così come sono stati registrati (nessun parsing) e un id cliente stabile
+// calcolato da IP + user-agent.
 public sealed class RequestsModel(
     IServiceProvider services,
     IOptions<RequestLogOptions> options,
@@ -20,9 +20,16 @@ public sealed class RequestsModel(
     private static readonly int[] AllowedDays = [7, 30, 90];
     private static readonly TimeZoneInfo Rome = TimeZoneInfo.FindSystemTimeZoneById("Europe/Rome");
     private static readonly CultureInfo Italian = CultureInfo.GetCultureInfo("it-IT");
-    private const int RecentLimit = 50;
+
+    public const int PageSize = 200;
 
     public int Days { get; private set; } = 30;
+    public int PageNumber { get; private set; } = 1;
+    public int PageCount { get; private set; } = 1;
+    public int PublicTotal { get; private set; }
+    public int FirstOnPage => PublicTotal == 0 ? 0 : (PageNumber - 1) * PageSize + 1;
+    public int LastOnPage => Math.Min(PageNumber * PageSize, PublicTotal);
+
     public bool LogEnabled => options.Value.Enabled;
     public bool GeoIpAvailable { get; private set; }
     public bool LoadFailed { get; private set; }
@@ -44,9 +51,10 @@ public sealed class RequestsModel(
         _ => "ultimi 30 giorni",
     };
 
-    public async Task OnGetAsync(int? days, CancellationToken ct)
+    public async Task OnGetAsync(int? days, int? page, CancellationToken ct)
     {
         Days = AllowedDays.Contains(days ?? 0) ? days!.Value : 30;
+        int requestedPage = page is > 0 ? page.Value : 1;
 
         var resolver = services.GetService<RequestCountryResolver>();
         GeoIpAvailable = resolver?.Available ?? false;
@@ -62,36 +70,39 @@ public sealed class RequestsModel(
 
         try
         {
-            string cacheKey = $"richieste:paesi:{Days}";
-            if (!cache.TryGetValue(cacheKey, out PageData? data) || data is null)
+            DateTimeOffset from = DateTimeOffset.UtcNow.AddDays(-Days);
+
+            string countsKey = $"requests:countries:{Days}";
+            if (!cache.TryGetValue(countsKey, out CountryStats? stats) || stats is null)
             {
-                data = await LoadAsync(store, ct);
-                cache.Set(cacheKey, data, TimeSpan.FromSeconds(20));
+                stats = await LoadCountriesAsync(store, from, ct);
+                cache.Set(countsKey, stats, TimeSpan.FromSeconds(20));
             }
 
-            TotalRequests = data.Total;
-            GeocodedRequests = data.Geocoded;
-            Countries = data.Counts
+            TotalRequests = stats.Total;
+            GeocodedRequests = stats.Geocoded;
+            Countries = stats.Counts
                 .Select(pair => new CountryCount(pair.Key, WorldCountries.NameOf(pair.Key), pair.Value))
                 .OrderByDescending(country => country.Count)
                 .ThenBy(country => country.Name, StringComparer.CurrentCultureIgnoreCase)
                 .ToList();
-            CountsJson = JsonSerializer.Serialize(data.Counts);
-            Recent = data.Recent
-                .Select(entry => new RequestRow(
-                    entry.Timestamp,
-                    entry.Method,
-                    entry.Path + entry.QueryString,
-                    entry.StatusCode,
-                    WorldCountries.NameOf(entry.CountryCode),
-                    entry.Client ?? "Sconosciuto",
-                    entry.DeviceType,
-                    entry.DurationMs))
-                .ToList();
+            CountsJson = JsonSerializer.Serialize(stats.Counts);
+
+            string pageKey = $"requests:page:{Days}:{requestedPage}";
+            if (!cache.TryGetValue(pageKey, out RequestLogPage? logPage) || logPage is null)
+            {
+                logPage = await store.GetPageAsync(requestedPage, PageSize, from, ct);
+                cache.Set(pageKey, logPage, TimeSpan.FromSeconds(20));
+            }
+
+            PageNumber = logPage.Page;
+            PageCount = logPage.PageCount;
+            PublicTotal = logPage.Total;
+            Recent = logPage.Entries.Select(ToRow).ToList();
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            logger.LogWarning(ex, "Richieste: impossibile leggere i conteggi da Sperone");
+            logger.LogWarning(ex, "Richieste: impossibile leggere i dati da Sperone");
             LoadFailed = true;
             Empty();
         }
@@ -112,18 +123,8 @@ public sealed class RequestsModel(
 
     public string FormatDuration(double milliseconds) => milliseconds.ToString("N1", Italian) + " ms";
 
-    public string DeviceLabel(string? device) => device switch
+    private async Task<CountryStats> LoadCountriesAsync(RequestLogStore store, DateTimeOffset from, CancellationToken ct)
     {
-        "desktop" => "Desktop",
-        "mobile" => "Mobile",
-        "tablet" => "Tablet",
-        "bot" => "Bot",
-        _ => "Sconosciuto",
-    };
-
-    private async Task<PageData> LoadAsync(RequestLogStore store, CancellationToken ct)
-    {
-        DateTimeOffset from = DateTimeOffset.UtcNow.AddDays(-Days);
         int total = await store.CountSinceAsync(from, ct);
 
         var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
@@ -138,9 +139,19 @@ public sealed class RequestsModel(
             geocoded += count;
         }
 
-        var recent = await store.GetRecentAsync(RecentLimit, from, ct);
-        return new PageData(total, geocoded, counts, recent);
+        return new CountryStats(total, geocoded, counts);
     }
+
+    private static RequestRow ToRow(RequestLogEntry entry) => new(
+        entry.Timestamp,
+        entry.Method,
+        entry.Path + entry.QueryString,
+        entry.StatusCode,
+        WorldCountries.NameOf(entry.CountryCode),
+        entry.RemoteIp ?? "—",
+        entry.ClientId ?? ClientIds.For(entry.RemoteIp, entry.UserAgent) ?? "—",
+        entry.UserAgent ?? "—",
+        entry.DurationMs);
 
     private void Empty()
     {
@@ -149,13 +160,15 @@ public sealed class RequestsModel(
         Countries = [];
         Recent = [];
         CountsJson = "{}";
+        PageNumber = 1;
+        PageCount = 1;
+        PublicTotal = 0;
     }
 
-    private sealed record PageData(
+    private sealed record CountryStats(
         int Total,
         int Geocoded,
-        IReadOnlyDictionary<string, int> Counts,
-        IReadOnlyList<RequestLogEntry> Recent);
+        IReadOnlyDictionary<string, int> Counts);
 }
 
 public sealed record CountryCount(string Code, string Name, int Count);
@@ -166,6 +179,7 @@ public sealed record RequestRow(
     string Path,
     int StatusCode,
     string Country,
-    string Client,
-    string? DeviceType,
+    string RemoteIp,
+    string ClientId,
+    string UserAgent,
     double DurationMs);

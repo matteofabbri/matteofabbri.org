@@ -15,7 +15,7 @@
         <h1>Richieste nel mondo</h1>
         <p class="lede">
             Da quali paesi arrivano le richieste, @Model.PeriodLabel.
-            Dati aggregati di tutto il sito: nessun IP e nessun utente.
+            User-agent e IP sono mostrati così come registrati; nessun utente autenticato.
         </p>
     </div>
     <form method="get" class="map-controls">
@@ -128,7 +128,7 @@ else if (Model.GeoIpUpdated is { } updated)
     </div>
 }
 
-<h2 class="section-title">Ultime richieste</h2>
+<h2 class="section-title">Richieste</h2>
 
 @if (Model.Recent.Count == 0)
 {
@@ -144,8 +144,9 @@ else
                     <th>Richiesta</th>
                     <th>Esito</th>
                     <th>Paese</th>
-                    <th>Client</th>
-                    <th>Dispositivo</th>
+                    <th>IP</th>
+                    <th>Client ID</th>
+                    <th>User-Agent</th>
                     <th class="cell-number">Durata</th>
                 </tr>
             </thead>
@@ -157,14 +158,41 @@ else
                         <td><code class="request-path">@row.Method @row.Path</code></td>
                         <td><span class="status status-@(row.StatusCode / 100)xx">@row.StatusCode</span></td>
                         <td>@row.Country</td>
-                        <td>@row.Client</td>
-                        <td>@Model.DeviceLabel(row.DeviceType)</td>
+                        <td><code class="remote-ip">@row.RemoteIp</code></td>
+                        <td><code class="client-id">@row.ClientId</code></td>
+                        <td><code class="user-agent">@row.UserAgent</code></td>
                         <td class="cell-number">@Model.FormatDuration(row.DurationMs)</td>
                     </tr>
                 }
             </tbody>
         </table>
     </div>
+
+    <nav class="pagination" aria-label="Paginazione delle richieste">
+        @if (Model.PageNumber > 1)
+        {
+            <a class="button button-secondary" asp-page="/Requests" asp-route-days="@Model.Days" asp-route-page="@(Model.PageNumber - 1)" rel="prev">← Precedenti</a>
+        }
+        else
+        {
+            <span class="button button-secondary pagination-disabled">← Precedenti</span>
+        }
+
+        <span class="pagination-info">
+            @(Model.PublicTotal == 0
+                ? "Nessuna richiesta pubblica"
+                : $"Richieste {Model.FormatNumber(Model.FirstOnPage)}–{Model.FormatNumber(Model.LastOnPage)} di {Model.FormatNumber(Model.PublicTotal)} · pagina {Model.PageNumber} di {Model.PageCount}")
+        </span>
+
+        @if (Model.PageNumber < Model.PageCount)
+        {
+            <a class="button button-secondary" asp-page="/Requests" asp-route-days="@Model.Days" asp-route-page="@(Model.PageNumber + 1)" rel="next">Successive →</a>
+        }
+        else
+        {
+            <span class="button button-secondary pagination-disabled">Successive →</span>
+        }
+    </nav>
 }
 
 <p class="hint map-attribution">
