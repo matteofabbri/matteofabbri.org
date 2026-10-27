@@ -10,8 +10,8 @@
         <p class="eyebrow">Booking</p>
         <h1>Book a video call</h1>
         <p class="lede">
-            Pick a free day and a time, then paste the link to the video call you want to use.
-            Times are in @Model.TimeZone; slots are @Model.SlotMinutes minutes.
+            Drag on a day from the time you want to the time you want: the free space around my
+            existing appointments is yours to pick. Times are in @Model.TimeZone.
         </p>
     </div>
 </div>
@@ -38,8 +38,43 @@ else
         </div>
     }
 
-    <form method="post" class="booking-form">
-        <div class="field-row">
+    <form method="post" class="booking-form" id="booking-form">
+        <div id="booking-calendar" class="booking-calendar week-calendar"
+             data-work-start="@Model.WorkStart"
+             data-work-end="@Model.WorkEnd"
+             data-work-days="@Model.WorkDays"
+             data-today="@Model.Today"
+             data-horizon-date="@Model.HorizonDate"
+             data-week-start="@Model.WeekStart"
+             data-time-zone="@Model.TimeZone"
+             data-buffer-minutes="@Model.BufferMinutes"
+             data-min-duration="@Model.MinDurationMinutes"
+             data-min-start="@Model.MinStart">
+            <div class="week-toolbar">
+                <button type="button" class="week-nav" id="week-prev" aria-label="Previous week">←</button>
+                <button type="button" class="week-nav" id="week-next" aria-label="Next week">→</button>
+                <button type="button" class="week-today" id="week-today">Today</button>
+                <h2 class="week-title" id="week-range"></h2>
+                <div class="week-legend">
+                    <span><span class="legend-dot free"></span>Free</span>
+                    <span><span class="legend-dot busy"></span>Busy</span>
+                    <span><span class="legend-dot closed"></span>Closed</span>
+                </div>
+            </div>
+
+            <div class="week-scroll">
+                <div class="week-board">
+                    <div class="week-head" id="week-head"></div>
+                    <div class="week-body">
+                        <div class="week-axis" id="week-axis"></div>
+                        <div class="week-columns" id="week-columns"></div>
+                    </div>
+                </div>
+            </div>
+            <p class="hint" id="week-status" role="status"></p>
+        </div>
+
+        <div class="booking-details">
             <div class="field">
                 <label for="booking-name">Name</label>
                 <input id="booking-name" name="name" class="input" value="@Model.Name" maxlength="100" required autocomplete="name" />
@@ -48,51 +83,24 @@ else
                 <label for="booking-email">Email</label>
                 <input id="booking-email" name="email" class="input" type="email" value="@Model.Email" maxlength="200" required autocomplete="email" />
             </div>
-        </div>
-
-        <div class="field">
-            <label for="booking-meeting">Video call link</label>
-            <input id="booking-meeting" name="meetingUrl" class="input" type="url"
-                   value="@Model.MeetingUrl" maxlength="500" required
-                   placeholder="https://meet.google.com/..." autocomplete="off" />
-            <span class="hint">Google Meet, Zoom, Teams, ... — the link ends up in the calendar event.</span>
-        </div>
-
-        <div class="field">
-            <label for="booking-note">Note</label>
-            <textarea id="booking-note" name="note" class="input" rows="3" maxlength="@Model.MaxNoteLength">@Model.Note</textarea>
-        </div>
-
-        <div id="booking-calendar" class="booking-calendar"
-             data-work-start="@Model.WorkStart"
-             data-work-end="@Model.WorkEnd"
-             data-work-days="@Model.WorkDays"
-             data-slot-minutes="@Model.SlotMinutes"
-             data-today="@Model.Today"
-             data-horizon-days="@Model.HorizonDays"
-             data-time-zone="@Model.TimeZone">
-            <div class="calendar-top">
-                <button type="button" class="calendar-nav" id="calendar-prev" aria-label="Previous month">←</button>
-                <h2 id="calendar-month"></h2>
-                <button type="button" class="calendar-nav" id="calendar-next" aria-label="Next month">→</button>
+            <div class="field field-wide">
+                <label for="booking-meeting">Video call link</label>
+                <input id="booking-meeting" name="meetingUrl" class="input" type="url"
+                       value="@Model.MeetingUrl" maxlength="500" required
+                       placeholder="https://meet.google.com/..." autocomplete="off" />
+                <span class="hint">Google Meet, Zoom, Teams, ... — the link ends up in the calendar event.</span>
             </div>
-
-            <div class="calendar-legend">
-                <span><span class="legend-dot available"></span>Available</span>
-                <span><span class="legend-dot maybe"></span>Maybe (partly free)</span>
-                <span><span class="legend-dot unavailable"></span>Unavailable</span>
+            <div class="field field-wide">
+                <label for="booking-note">Note</label>
+                <textarea id="booking-note" name="note" class="input" rows="3" maxlength="@Model.MaxNoteLength">@Model.Note</textarea>
             </div>
-
-            <div id="calendar-grid" class="calendar-grid" aria-live="polite"></div>
-            <p id="calendar-status" class="hint"></p>
         </div>
-
-        <div id="booking-slots" class="booking-slots"></div>
 
         <input type="hidden" name="start" id="booking-start" />
+        <input type="hidden" name="end" id="booking-end" />
 
         <div class="booking-actions">
-            <span id="booking-selected" class="booking-selected">Pick a free day, then a time.</span>
+            <span id="booking-selected" class="booking-selected">Drag on a day to choose a time range.</span>
             <button type="submit" class="button" id="booking-submit" disabled>Book video call</button>
         </div>
 
@@ -108,223 +116,503 @@ else
             const root = document.getElementById('booking-calendar');
             if (!root) return;
 
-            const grid = document.getElementById('calendar-grid');
-            const monthLabel = document.getElementById('calendar-month');
-            const prevButton = document.getElementById('calendar-prev');
-            const nextButton = document.getElementById('calendar-next');
-            const status = document.getElementById('calendar-status');
-            const slotsPanel = document.getElementById('booking-slots');
+            const form = document.getElementById('booking-form');
+            const head = document.getElementById('week-head');
+            const axis = document.getElementById('week-axis');
+            const columns = document.getElementById('week-columns');
+            const rangeLabel = document.getElementById('week-range');
+            const status = document.getElementById('week-status');
+            const prevButton = document.getElementById('week-prev');
+            const nextButton = document.getElementById('week-next');
+            const todayButton = document.getElementById('week-today');
             const startInput = document.getElementById('booking-start');
-            const bookButton = document.getElementById('booking-submit');
+            const endInput = document.getElementById('booking-end');
             const selectedLabel = document.getElementById('booking-selected');
+            const bookButton = document.getElementById('booking-submit');
 
-            const slotMinutes = Number(root.dataset.slotMinutes);
-            const workStart = root.dataset.workStart;
-            const workEnd = root.dataset.workEnd;
+            const HOUR_HEIGHT = 56;
+            const SNAP_MINUTES = 15;
+            const MIN_RANGE = Number(root.dataset.minDuration || 15);
+
+            const workStart = toMinutes(root.dataset.workStart);
+            const workEnd = toMinutes(root.dataset.workEnd);
             const workDays = new Set(root.dataset.workDays.split(',').map(Number));
             const timeZone = root.dataset.timeZone;
             const today = root.dataset.today;
-            const horizonDays = Number(root.dataset.horizonDays);
+            const horizonDate = root.dataset.horizonDate;
+            const initialWeek = root.dataset.weekStart;
+            const bufferMinutes = Number(root.dataset.bufferMinutes || 0);
+            const minStart = new Date(root.dataset.minStart);
 
-            const todayDate = new Date(today + 'T00:00:00Z');
-            const horizonDate = new Date(todayDate);
-            horizonDate.setUTCDate(horizonDate.getUTCDate() + horizonDays);
-
-            let viewYear = todayDate.getUTCFullYear();
-            let viewMonth = todayDate.getUTCMonth();
-            let availability = new Map();
+            let weekStart = initialWeek;
+            let busy = new Map();
+            let selection = null;
+            let drag = null;
+            let loading = false;
             let loadToken = 0;
 
+            // --- Tempo -------------------------------------------------------
+
             const pad = value => String(value).padStart(2, '0');
-            const isoDate = date => date.toISOString().slice(0, 10);
-            const toMinutes = value => {
+
+            function toMinutes(value) {
                 const parts = value.split(':').map(Number);
                 return parts[0] * 60 + parts[1];
-            };
-            const totalSlots = () => Math.max(0, Math.floor((toMinutes(workEnd) - toMinutes(workStart)) / slotMinutes));
-            const timeLabel = value => new Date(value).toLocaleTimeString('en-GB', {
+            }
+
+            const clock = minutes => `${pad(Math.floor(minutes / 60))}:${pad(minutes % 60)}`;
+            const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+            const snap = minutes => Math.round(minutes / SNAP_MINUTES) * SNAP_MINUTES;
+
+            function parseDate(iso) {
+                const [year, month, day] = iso.split('-').map(Number);
+                return new Date(Date.UTC(year, month - 1, day));
+            }
+
+            const isoDate = date => date.toISOString().slice(0, 10);
+            const addDays = (iso, days) => isoDate(new Date(parseDate(iso).getTime() + days * 86400000));
+
+            function weekday(iso) {
+                const day = parseDate(iso).getUTCDay();
+                return day === 0 ? 7 : day;
+            }
+
+            function longDate(iso) {
+                return parseDate(iso).toLocaleDateString('en-GB', {
+                    weekday: 'long',
+                    day: 'numeric',
+                    month: 'long',
+                    timeZone: 'UTC'
+                });
+            }
+
+            function rangeTitle(start) {
+                const end = addDays(start, 6);
+                const first = parseDate(start);
+                const last = parseDate(end);
+                const month = date => date.toLocaleDateString('en-GB', { month: 'long', timeZone: 'UTC' });
+                const sameYear = first.getUTCFullYear() === last.getUTCFullYear();
+                const sameMonth = sameYear && first.getUTCMonth() === last.getUTCMonth();
+
+                if (sameMonth)
+                    return `${first.getUTCDate()} – ${last.getUTCDate()} ${month(last)} ${last.getUTCFullYear()}`;
+                if (sameYear)
+                    return `${first.getUTCDate()} ${month(first)} – ${last.getUTCDate()} ${month(last)} ${last.getUTCFullYear()}`;
+                return `${first.getUTCDate()} ${month(first)} ${first.getUTCFullYear()} – ${last.getUTCDate()} ${month(last)} ${last.getUTCFullYear()}`;
+            }
+
+            // Il browser non conosce l'offset di Europe/Rome: lo ricava da Intl,
+            // così gli istanti inviati hanno l'offset giusto anche d'estate.
+            const partsFormat = new Intl.DateTimeFormat('en-US', {
+                timeZone,
+                hour12: false,
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
                 hour: '2-digit',
                 minute: '2-digit',
-                timeZone
-            });
-            const longDate = value => new Date(value + 'T00:00:00Z').toLocaleDateString('en-GB', {
-                weekday: 'long',
-                day: 'numeric',
-                month: 'long',
-                timeZone: 'UTC'
-            });
-            const monthTitle = (year, month) => new Date(Date.UTC(year, month, 1)).toLocaleDateString('en-GB', {
-                month: 'long',
-                year: 'numeric',
-                timeZone: 'UTC'
+                second: '2-digit'
             });
 
-            function resetSelection() {
-                startInput.value = '';
-                bookButton.disabled = true;
-                selectedLabel.textContent = 'Pick a free day, then a time.';
-                slotsPanel.innerHTML = '';
-                document.querySelectorAll('.calendar-day.selected').forEach(el => el.classList.remove('selected'));
+            function wallClock(instant) {
+                const parts = {};
+                for (const part of partsFormat.formatToParts(instant))
+                    parts[part.type] = part.value;
+
+                let hour = Number(parts.hour);
+                if (hour === 24) hour = 0;
+
+                return {
+                    date: `${parts.year}-${parts.month}-${parts.day}`,
+                    minutes: hour * 60 + Number(parts.minute)
+                };
             }
 
-            function selectSlot(slot, date, label, button) {
-                startInput.value = slot.start;
-                bookButton.disabled = false;
-                selectedLabel.textContent = `Selected: ${longDate(date)} at ${label}`;
-                document.querySelectorAll('.time-slot.selected').forEach(el => el.classList.remove('selected'));
-                button.classList.add('selected');
+            function offsetMinutes(instant) {
+                const parts = {};
+                for (const part of partsFormat.formatToParts(instant))
+                    parts[part.type] = part.value;
+
+                let hour = Number(parts.hour);
+                if (hour === 24) hour = 0;
+
+                const asUtc = Date.UTC(
+                    Number(parts.year), Number(parts.month) - 1, Number(parts.day),
+                    hour, Number(parts.minute), Number(parts.second));
+                return Math.round((asUtc - Math.floor(instant.getTime() / 1000) * 1000) / 60000);
             }
 
-            function renderTimes(date) {
-                resetSelection();
+            function zonedIso(iso, minutes) {
+                const [year, month, day] = iso.split('-').map(Number);
+                const hours = Math.floor(minutes / 60);
+                const mins = minutes % 60;
+                const wall = Date.UTC(year, month - 1, day, hours, mins);
 
-                document.querySelectorAll('.calendar-day.selected').forEach(el => el.classList.remove('selected'));
-                const dayButton = document.querySelector(`.calendar-day[data-date="${date}"]`);
-                if (dayButton) dayButton.classList.add('selected');
+                let offset = offsetMinutes(new Date(wall));
+                let instant = wall - offset * 60000;
+                offset = offsetMinutes(new Date(instant));
+                instant = wall - offset * 60000;
+                offset = offsetMinutes(new Date(instant));
 
-                slotsPanel.innerHTML = '';
-                const slots = availability.get(date) || [];
-                const freeByTime = new Map();
-                for (const slot of slots) freeByTime.set(timeLabel(slot.start), slot);
+                const sign = offset >= 0 ? '+' : '-';
+                const absolute = Math.abs(offset);
+                return `${iso}T${pad(hours)}:${pad(mins)}:00${sign}${pad(Math.floor(absolute / 60))}:${pad(absolute % 60)}`;
+            }
 
-                const heading = document.createElement('h3');
-                heading.textContent = longDate(date);
-                slotsPanel.appendChild(heading);
+            function durationLabel(minutes) {
+                const hours = Math.floor(minutes / 60);
+                const mins = minutes % 60;
+                if (hours && mins) return `${hours} h ${mins} min`;
+                if (hours) return `${hours} h`;
+                return `${mins} min`;
+            }
 
-                const line = document.createElement('div');
-                line.className = 'booking-times';
-                const total = totalSlots();
-                let freeCount = 0;
+            // --- Disponibilità -------------------------------------------------
 
-                for (let index = 0; index < total; index++) {
-                    const minutes = toMinutes(workStart) + index * slotMinutes;
-                    const label = `${pad(Math.floor(minutes / 60))}:${pad(minutes % 60)}`;
-                    const slot = freeByTime.get(label);
+            function busyFor(date) {
+                return busy.get(date) || [];
+            }
 
-                    if (slot) {
-                        freeCount++;
-                        const button = document.createElement('button');
-                        button.type = 'button';
-                        button.className = 'time-slot';
-                        button.textContent = label;
-                        button.addEventListener('click', () => selectSlot(slot, date, label, button));
-                        line.appendChild(button);
-                    } else {
-                        const span = document.createElement('span');
-                        span.className = 'time-slot busy';
-                        span.textContent = label;
-                        span.title = 'Unavailable';
-                        line.appendChild(span);
+            // Le parti della giornata non prenotabili: giorni non lavorativi,
+            // fuori orizzonte, e il preavviso minimo (LeadHours).
+            function closedParts(date) {
+                if (date < today || date > horizonDate || !workDays.has(weekday(date)))
+                    return { full: true, from: null, to: null };
+
+                const lead = wallClock(minStart);
+                if (date < lead.date)
+                    return { full: true, from: null, to: null };
+
+                if (date === lead.date && lead.minutes > workStart) {
+                    if (lead.minutes >= workEnd)
+                        return { full: true, from: null, to: null };
+                    return { full: false, from: workStart, to: lead.minutes };
+                }
+
+                return { full: false, from: null, to: null };
+            }
+
+            // --- Disegno -------------------------------------------------------
+
+            function dayDates() {
+                return Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
+            }
+
+            function render() {
+                const dates = dayDates();
+
+                rangeLabel.textContent = rangeTitle(weekStart);
+                prevButton.disabled = weekStart <= initialWeek;
+                nextButton.disabled = addDays(weekStart, 7) > horizonDate;
+                todayButton.disabled = weekStart === initialWeek;
+
+                head.innerHTML = '';
+                head.appendChild(Object.assign(document.createElement('div'), { className: 'week-gutter-head' }));
+
+                for (const date of dates) {
+                    const cell = document.createElement('div');
+                    cell.className = 'week-day-head' + (date === today ? ' is-today' : '');
+                    cell.title = longDate(date);
+
+                    const name = document.createElement('span');
+                    name.className = 'week-day-name';
+                    name.textContent = parseDate(date).toLocaleDateString('en-GB', { weekday: 'short', timeZone: 'UTC' });
+
+                    const number = document.createElement('span');
+                    number.className = 'week-day-date';
+                    number.textContent = parseDate(date).toLocaleDateString('en-GB', { day: 'numeric', timeZone: 'UTC' });
+
+                    cell.append(name, number);
+                    head.appendChild(cell);
+                }
+
+                const totalMinutes = workEnd - workStart;
+                const boardHeight = (totalMinutes / 60) * HOUR_HEIGHT;
+
+                axis.innerHTML = '';
+                axis.style.height = `${boardHeight}px`;
+                for (let minutes = workStart; minutes <= workEnd; minutes += 60)
+                    axis.appendChild(hourLabel(minutes, workStart, HOUR_HEIGHT));
+                if ((workEnd - workStart) % 60 !== 0)
+                    axis.appendChild(hourLabel(workEnd, workStart, HOUR_HEIGHT));
+
+                columns.innerHTML = '';
+                for (const date of dates) {
+                    const column = document.createElement('div');
+                    column.className = 'week-col';
+                    column.dataset.date = date;
+                    column.style.height = `${boardHeight}px`;
+
+                    const closed = closedParts(date);
+                    if (closed.full) column.classList.add('is-closed');
+
+                    for (const range of busyFor(date)) {
+                        const start = Math.max(range.start, workStart);
+                        const end = Math.min(range.end, workEnd);
+                        if (end <= start) continue;
+
+                        const block = document.createElement('div');
+                        block.className = 'week-busy';
+                        block.style.top = `${((start - workStart) / 60) * HOUR_HEIGHT}px`;
+                        block.style.height = `${((end - start) / 60) * HOUR_HEIGHT}px`;
+                        block.title = `Busy ${clock(start)}–${clock(end)}`;
+                        if (end - start >= 30) block.textContent = 'Busy';
+                        column.appendChild(block);
+                    }
+
+                    if (!closed.full && closed.from !== null && closed.to !== null) {
+                        const start = Math.max(closed.from, workStart);
+                        const end = Math.min(closed.to, workEnd);
+                        if (end > start) {
+                            const overlay = document.createElement('div');
+                            overlay.className = 'week-closed';
+                            overlay.style.top = `${((start - workStart) / 60) * HOUR_HEIGHT}px`;
+                            overlay.style.height = `${((end - start) / 60) * HOUR_HEIGHT}px`;
+                            overlay.title = 'Not available yet';
+                            column.appendChild(overlay);
+                        }
+                    }
+
+                    if (!closed.full) attachDrag(column);
+                    columns.appendChild(column);
+                }
+
+                renderSelection();
+            }
+
+            function hourLabel(minutes, start, height) {
+                const label = document.createElement('div');
+                label.className = 'week-hour';
+                label.textContent = clock(minutes);
+                label.style.top = `${((minutes - start) / 60) * height}px`;
+                return label;
+            }
+
+            function renderSelection(preview) {
+                document.querySelectorAll('.week-selection').forEach(element => element.remove());
+
+                const current = preview || selection;
+                if (!current) return;
+
+                const column = columns.querySelector(`.week-col[data-date="${current.date}"]`);
+                if (!column) return;
+
+                const start = Math.max(current.start, workStart);
+                const end = Math.min(current.end, workEnd);
+                if (end <= start) return;
+
+                const element = document.createElement('div');
+                element.className = 'week-selection';
+                element.style.top = `${((start - workStart) / 60) * HOUR_HEIGHT}px`;
+                element.style.height = `${((end - start) / 60) * HOUR_HEIGHT}px`;
+                element.textContent = `${clock(start)}–${clock(end)}`;
+                if (preview) element.style.opacity = '0.7';
+                column.appendChild(element);
+            }
+
+            // --- Selezione -----------------------------------------------------
+
+            function timeAt(column, event) {
+                const rect = column.getBoundingClientRect();
+                const offset = ((event.clientY - rect.top) / HOUR_HEIGHT) * 60;
+                return clamp(snap(workStart + offset), workStart, workEnd);
+            }
+
+            function dragRange() {
+                let start = Math.min(drag.anchor, clamp(drag.current, workStart, workEnd));
+                let end = Math.max(drag.anchor, clamp(drag.current, workStart, workEnd));
+
+                if (end - start < MIN_RANGE) {
+                    if (start + MIN_RANGE <= workEnd) end = start + MIN_RANGE;
+                    else start = Math.max(workStart, end - MIN_RANGE);
+                }
+
+                return { start, end };
+            }
+
+            function attachDrag(column) {
+                column.addEventListener('pointerdown', event => {
+                    if (loading) return;
+                    if (event.pointerType === 'mouse' && event.button !== 0) return;
+
+                    event.preventDefault();
+                    column.setPointerCapture(event.pointerId);
+
+                    const anchor = clamp(timeAt(column, event), workStart, workEnd - MIN_RANGE);
+                    drag = {
+                        column,
+                        date: column.dataset.date,
+                        anchor,
+                        current: anchor + MIN_RANGE,
+                        startY: event.clientY,
+                        moved: false,
+                        pointerId: event.pointerId
+                    };
+
+                    renderSelection({ date: drag.date, start: anchor, end: anchor + MIN_RANGE });
+                    status.textContent = 'Release where the call should end.';
+                });
+
+                column.addEventListener('pointermove', event => {
+                    if (!drag || drag.column !== column || drag.pointerId !== event.pointerId) return;
+
+                    if (Math.abs(event.clientY - drag.startY) > 4) drag.moved = true;
+                    drag.current = timeAt(column, event);
+
+                    const range = dragRange();
+                    renderSelection({ date: drag.date, start: range.start, end: range.end });
+                });
+
+                column.addEventListener('pointerup', event => {
+                    if (!drag || drag.column !== column) return;
+
+                    const range = dragRange();
+                    const clicked = !drag.moved;
+                    const date = drag.date;
+                    drag = null;
+
+                    if (clicked) range.end = Math.min(range.start + 60, workEnd);
+                    if (range.end - range.start < MIN_RANGE)
+                        range.start = Math.max(workStart, range.end - MIN_RANGE);
+
+                    commitSelection(date, range.start, range.end);
+                });
+
+                column.addEventListener('pointercancel', () => {
+                    drag = null;
+                    renderSelection();
+                    status.textContent = '';
+                });
+            }
+
+            function commitSelection(date, start, end) {
+                const closed = closedParts(date);
+                if (closed.full) {
+                    rejectSelection('That day is not available.');
+                    return;
+                }
+                if (closed.from !== null && closed.to !== null && start < closed.to && closed.from < end) {
+                    rejectSelection('That time is too soon: bookings need a little notice.');
+                    return;
+                }
+                for (const range of busyFor(date)) {
+                    const busyStart = Math.max(range.start, workStart);
+                    const busyEnd = Math.min(range.end, workEnd);
+                    if (busyStart < end && start < busyEnd) {
+                        rejectSelection('That range overlaps an existing appointment. Pick the free space around it.');
+                        return;
                     }
                 }
 
-                slotsPanel.appendChild(line);
-
-                if (freeCount === 0) {
-                    const note = document.createElement('p');
-                    note.className = 'hint';
-                    note.textContent = 'No free times on this day.';
-                    slotsPanel.appendChild(note);
-                }
+                selection = { date, start, end };
+                startInput.value = zonedIso(date, start);
+                endInput.value = zonedIso(date, end);
+                bookButton.disabled = false;
+                selectedLabel.textContent = `${longDate(date)}, ${clock(start)}–${clock(end)} (${durationLabel(end - start)})`;
+                status.textContent = '';
+                renderSelection();
             }
 
-            function dayStatus(date, weekday, free) {
-                if (date < today || date > isoDate(horizonDate))
-                    return { css: 'day-past', disabled: true, label: 'Unavailable' };
-                if (!workDays.has(weekday))
-                    return { css: 'day-off', disabled: true, label: 'Unavailable' };
-                if (free === 0)
-                    return { css: 'day-full', disabled: true, label: 'Unavailable' };
-                if (free >= totalSlots())
-                    return { css: 'day-free', disabled: false, label: 'Available' };
-                return { css: 'day-partial', disabled: false, label: 'Maybe (partly free)' };
+            function rejectSelection(message) {
+                status.textContent = message;
+                clearSelection();
             }
 
-            function renderGrid() {
-                monthLabel.textContent = monthTitle(viewYear, viewMonth);
-                prevButton.disabled = viewYear === todayDate.getUTCFullYear() && viewMonth === todayDate.getUTCMonth();
-                nextButton.disabled = new Date(Date.UTC(viewYear, viewMonth + 1, 1)) > horizonDate;
-
-                grid.innerHTML = '';
-
-                for (const label of ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']) {
-                    const cell = document.createElement('div');
-                    cell.className = 'calendar-weekday';
-                    cell.textContent = label;
-                    grid.appendChild(cell);
-                }
-
-                const offset = (new Date(Date.UTC(viewYear, viewMonth, 1)).getUTCDay() + 6) % 7;
-                for (let index = 0; index < offset; index++)
-                    grid.appendChild(document.createElement('div'));
-
-                const daysInMonth = new Date(Date.UTC(viewYear, viewMonth + 1, 0)).getUTCDate();
-                for (let day = 1; day <= daysInMonth; day++) {
-                    const date = new Date(Date.UTC(viewYear, viewMonth, day));
-                    const value = isoDate(date);
-                    const weekday = date.getUTCDay() || 7;
-                    const free = (availability.get(value) || []).length;
-                    const state = dayStatus(value, weekday, free);
-
-                    const button = document.createElement('button');
-                    button.type = 'button';
-                    button.className = `calendar-day ${state.css}`;
-                    button.dataset.date = value;
-                    button.textContent = String(day);
-                    button.title = `${longDate(value)} — ${state.label}`;
-                    button.disabled = state.disabled;
-                    if (!state.disabled)
-                        button.addEventListener('click', () => renderTimes(value));
-
-                    grid.appendChild(button);
-                }
+            function clearSelection() {
+                selection = null;
+                startInput.value = '';
+                endInput.value = '';
+                bookButton.disabled = true;
+                selectedLabel.textContent = 'Drag on a day to choose a time range.';
+                renderSelection();
             }
 
-            async function loadMonth() {
-                resetSelection();
+            // --- Caricamento ---------------------------------------------------
+
+            async function loadWeek() {
+                loading = true;
+                clearSelection();
                 status.textContent = 'Loading availability…';
-                const first = isoDate(new Date(Date.UTC(viewYear, viewMonth, 1)));
-                const last = isoDate(new Date(Date.UTC(viewYear, viewMonth + 1, 0)));
+                render();
+
                 const token = ++loadToken;
+                const from = weekStart;
+                const to = addDays(weekStart, 6);
 
                 try {
-                    const response = await fetch(`/api/booking/availability?from=${first}&to=${last}`);
-                    if (!response.ok)
-                        throw new Error(`HTTP ${response.status}`);
+                    const response = await fetch(`/api/booking/busy?from=${from}&to=${to}`);
+                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
                     const data = await response.json();
                     if (token !== loadToken) return;
 
-                    availability = new Map((data.days || []).map(day => [day.date, day.slots || []]));
+                    busy = new Map();
+                    for (const block of data.blocks || []) {
+                        const start = Math.max(0, toMinutes(block.start) - bufferMinutes);
+                        const end = Math.min(1440, toMinutes(block.end) + bufferMinutes);
+                        const ranges = busy.get(block.date) || [];
+                        ranges.push({ start, end });
+                        busy.set(block.date, ranges);
+                    }
+
+                    for (const [date, ranges] of busy) {
+                        ranges.sort((a, b) => a.start - b.start);
+                        const merged = [];
+                        for (const range of ranges) {
+                            const last = merged[merged.length - 1];
+                            if (last && range.start <= last.end) last.end = Math.max(last.end, range.end);
+                            else merged.push({ ...range });
+                        }
+                        busy.set(date, merged);
+                    }
+
                     status.textContent = '';
-                    renderGrid();
                 } catch (error) {
                     if (token !== loadToken) return;
-                    availability = new Map();
+                    busy = new Map();
                     status.textContent = 'Could not load availability. Try again in a moment.';
-                    renderGrid();
+                } finally {
+                    if (token === loadToken) {
+                        loading = false;
+                        render();
+                    }
                 }
             }
 
             prevButton.addEventListener('click', () => {
-                viewMonth--;
-                if (viewMonth < 0) {
-                    viewMonth = 11;
-                    viewYear--;
-                }
-                loadMonth();
+                weekStart = addDays(weekStart, -7);
+                loadWeek();
             });
 
             nextButton.addEventListener('click', () => {
-                viewMonth++;
-                if (viewMonth > 11) {
-                    viewMonth = 0;
-                    viewYear++;
-                }
-                loadMonth();
+                weekStart = addDays(weekStart, 7);
+                loadWeek();
             });
 
-            loadMonth();
+            todayButton.addEventListener('click', () => {
+                weekStart = initialWeek;
+                loadWeek();
+            });
+
+            form.addEventListener('submit', event => {
+                if (!selection) {
+                    event.preventDefault();
+                    status.textContent = 'Choose a time range on the calendar first.';
+                    return;
+                }
+
+                startInput.value = zonedIso(selection.date, selection.start);
+                endInput.value = zonedIso(selection.date, selection.end);
+            });
+
+            document.addEventListener('keydown', event => {
+                if (event.key === 'Escape' && selection) {
+                    clearSelection();
+                    status.textContent = '';
+                }
+            });
+
+            loadWeek();
         })();
     </script>
 }

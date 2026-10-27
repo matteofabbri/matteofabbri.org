@@ -6,9 +6,10 @@ using Microsoft.Extensions.Options;
 
 namespace MainSite.Pages;
 
-// Pagina pubblica di prenotazione: il calendario mensile è disegnato lato
-// client (JS) usando /api/booking/availability. Verde = libero, giallo =
-// parzialmente libero ("forse"), rosso = occupato/non prenotabile.
+// Pagina pubblica di prenotazione: una vista settimanale tipo Outlook, disegnata
+// lato client con /api/booking/busy. Gli impegni del calendario diventano
+// blocchi occupati; il resto è selezionabile trascinando (o cliccando inizio e
+// fine). Nessuno slot fisso: la durata la sceglie chi prenota.
 public sealed class BookingModel(BookingService booking, IOptions<BookingOptions> options) : PageModel
 {
     private static readonly CultureInfo English = CultureInfo.GetCultureInfo("en-GB");
@@ -24,18 +25,24 @@ public sealed class BookingModel(BookingService booking, IOptions<BookingOptions
     public string Note { get; private set; } = "";
 
     public string TimeZone => options.Value.TimeZone;
-    public int SlotMinutes => options.Value.SlotMinutes;
     public int MaxNoteLength => options.Value.MaxNoteLength;
     public int HorizonDays => options.Value.HorizonDays;
+    public int BufferMinutes => options.Value.BufferMinutes;
+    public int MinDurationMinutes => options.Value.MinDurationMinutes;
     public string WorkStart => options.Value.WorkStart;
     public string WorkEnd => options.Value.WorkEnd;
     public string WorkDays => string.Join(',', options.Value.WorkDays);
-    public string Today => TimeZoneInfo
-        .ConvertTime(DateTimeOffset.UtcNow, Zone)
-        .ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+
+    public string Today => LocalDate(DateTimeOffset.UtcNow);
+    public string HorizonDate => LocalDate(DateTimeOffset.UtcNow.AddDays(HorizonDays));
+    public string WeekStart => StartOfWeek(LocalToday);
+    public string MinStart => DateTimeOffset.UtcNow
+        .AddHours(options.Value.LeadHours)
+        .ToString("O", CultureInfo.InvariantCulture);
 
     public async Task<IActionResult> OnPostAsync(
         string? start,
+        string? end,
         string? name,
         string? email,
         string? meetingUrl,
@@ -47,9 +54,10 @@ public sealed class BookingModel(BookingService booking, IOptions<BookingOptions
         MeetingUrl = (meetingUrl ?? "").Trim();
         Note = note ?? "";
 
-        if (!DateTimeOffset.TryParse(start, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var parsed))
+        if (!DateTimeOffset.TryParse(start, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var startAt)
+            || !DateTimeOffset.TryParse(end, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var endAt))
         {
-            Error = "Pick a time from the calendar.";
+            Error = "Pick the start and end time from the calendar.";
             return Page();
         }
 
@@ -57,7 +65,8 @@ public sealed class BookingModel(BookingService booking, IOptions<BookingOptions
         {
             Confirmed = await booking.BookAsync(new BookingRequest
             {
-                Start = parsed,
+                Start = startAt,
+                End = endAt,
                 Name = Name,
                 Email = Email,
                 MeetingUrl = MeetingUrl,
@@ -87,9 +96,30 @@ public sealed class BookingModel(BookingService booking, IOptions<BookingOptions
         return Page();
     }
 
-    public string FormatConfirmedDay() => Confirmed is null
-        ? ""
-        : TimeZoneInfo.ConvertTime(Confirmed.Start, Zone).ToString("dddd d MMMM 'at' HH:mm", English);
+    public string FormatConfirmedDay()
+    {
+        if (Confirmed is null) return "";
+
+        var start = TimeZoneInfo.ConvertTime(Confirmed.Start, Zone);
+        var end = TimeZoneInfo.ConvertTime(Confirmed.End, Zone);
+        return $"{start.ToString("dddd d MMMM 'from' HH:mm", English)}–{end.ToString("HH:mm", English)}";
+    }
+
+    public string FormatTime(DateTimeOffset value)
+        => TimeZoneInfo.ConvertTime(value, Zone).ToString("HH:mm", CultureInfo.InvariantCulture);
+
+    private DateOnly LocalToday => DateOnly.FromDateTime(
+        TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, Zone).DateTime);
+
+    private string LocalDate(DateTimeOffset instant)
+        => DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(instant, Zone).DateTime)
+            .ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+
+    private static string StartOfWeek(DateOnly date)
+    {
+        var iso = date.DayOfWeek == DayOfWeek.Sunday ? 7 : (int)date.DayOfWeek;
+        return date.AddDays(-(iso - 1)).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+    }
 
     private TimeZoneInfo? _zone;
     private TimeZoneInfo Zone => _zone ??= TimeZoneInfo.FindSystemTimeZoneById(TimeZone);

@@ -11,15 +11,24 @@ namespace MainSite.Controllers;
 [Route("api/booking")]
 public sealed class BookingController(BookingService booking) : ControllerBase
 {
-    // GET /api/booking/availability?from=2026-11-01&to=2026-11-30
-    // Senza parametri: i prossimi Booking:DefaultDays giorni.
-    [HttpGet("availability")]
-    public async Task<IActionResult> GetAvailability(
+    private TimeZoneInfo? _zone;
+    private TimeZoneInfo Zone => _zone ??= TimeZoneInfo.FindSystemTimeZoneById(booking.TimeZoneId);
+
+    // GET /api/booking/busy?from=2026-11-02&to=2026-11-08
+    // Gli intervalli già occupati in calendario, spezzati per giorno e in ora
+    // locale. Senza parametri: la settimana corrente.
+    [HttpGet("busy")]
+    public async Task<IActionResult> GetBusy(
         [FromQuery] DateOnly? from, [FromQuery] DateOnly? to, CancellationToken ct)
     {
+        var today = DateOnly.FromDateTime(
+            TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, Zone).DateTime);
+        var start = from ?? today;
+        var end = to ?? start.AddDays(6);
+
         try
         {
-            return Ok(await booking.GetAvailabilityAsync(from, to, ct));
+            return Ok(new BusyResponse(await booking.GetBusyAsync(start, end, ct)));
         }
         catch (BookingValidationException ex)
         {
@@ -36,8 +45,8 @@ public sealed class BookingController(BookingService booking) : ControllerBase
     }
 
     // POST /api/booking/appointments
-    // { "start": "2026-11-03T10:00:00+01:00", "name": "...", "email": "...", "note": "...",
-    //   "meetingUrl": "https://meet.google.com/..." }
+    // { "start": "2026-11-03T10:00:00+01:00", "end": "2026-11-03T11:00:00+01:00",
+    //   "name": "...", "email": "...", "note": "...", "meetingUrl": "https://..." }
     [HttpPost("appointments")]
     [EnableRateLimiting("booking")]
     public async Task<IActionResult> Book([FromBody] BookingRequest request, CancellationToken ct)
@@ -67,3 +76,5 @@ public sealed class BookingController(BookingService booking) : ControllerBase
 }
 
 public sealed record ApiError(string Error);
+
+public sealed record BusyResponse(IReadOnlyList<BusyBlock> Blocks);

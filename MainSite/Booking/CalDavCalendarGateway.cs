@@ -16,7 +16,7 @@ namespace MainSite.Booking;
 //  - REPORT calendar-query sulla finestra di interesse: il server manda gli
 //    eventi che la intersecano (ricorrenze incluse, il server le espande lui);
 //  - PUT di un .ics con If-None-Match: * : crea l'evento SOLO se quel file non
-//    esiste. Il nome del file è derivato dallo slot, quindi due prenotazioni
+//    esiste. Il nome del file è derivato dall'intervallo, quindi due prenotazioni
 //    dello stesso orario collidono (412) invece di sovrapporsi.
 //
 // SOGo vuole Basic auth con email + app password DAV, non la password della
@@ -95,7 +95,7 @@ public sealed class CalDavCalendarGateway : ICalendarGateway
 
         using var response = await SendAsync(request, "writing to the calendar", ct);
 
-        // 412/409: lo slot è già occupato (non è un guasto).
+        // 412/409: l'intervallo è già occupato (non è un guasto).
         if (response.StatusCode is HttpStatusCode.PreconditionFailed or HttpStatusCode.Conflict)
             return false;
 

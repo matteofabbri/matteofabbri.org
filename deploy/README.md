@@ -196,21 +196,22 @@ l'unico modo per arrivarci. La casella è **hardcodata**:
 `matteo@matteofabbri.org`.
 
 ```
-GET  /booking                         calendario mensile di disponibilità
-GET  /api/booking/availability?from=2026-11-01&to=2026-11-30
+GET  /booking                         vista settimanale con gli impegni già occupati
+GET  /api/booking/busy?from=2026-11-02&to=2026-11-08
 POST /api/booking/appointments
 ```
 
-La pagina **`/booking`** è client-side: carica `/api/booking/availability` per
-il mese visibile e colora i giorni — **verde** = tutti gli slot liberi,
-**giallo** = parzialmente libero ("forse"), **rosso** = occupato/non
-prenotabile; weekend e giorni passati sono spenti. Cliccando un giorno si
-aprono gli orari: quelli liberi sono selezionabili, quelli occupati barrati.
-Il form chiede nome, email, **link alla video call** e nota; la prenotazione
-crea l'evento con il link nella descrizione.
+La pagina **`/booking`** è una settimana tipo Outlook, larga quanto il resto del
+sito: una colonna per giorno e righe da un'ora. Gli impegni letti dal calendario
+sono dipinti come blocchi **occupati** (con il buffer attorno), il resto è
+libero: si trascina dal minuto di inizio a quello di fine (o si clicca per un'ora
+intera) e si ottiene una finestra qualunque, arrotondata a 15 minuti. Non
+esistono più gli slot da mezz'ora. Weekend, giorni passati, preavviso minimo e
+oltre l'orizzonte sono chiusi. Il form chiede nome, email, **link alla video
+call** e nota; la prenotazione crea l'evento con il link nella descrizione.
 
-Il POST accetta anche `meetingUrl` (link http/https alla video call scelta da
-chi prenota); finisce nella descrizione dell'evento in calendario.
+Il POST accetta `start` **e** `end` (ISO 8601 con offset) più `meetingUrl` (link
+http/https alla video call scelta da chi prenota), `name`, `email` e `note`.
 
 ### Le credenziali: un'app password, non la password vera
 
@@ -243,45 +244,42 @@ siti. Un vecchio `CALDAV_USERNAME` nel `.env` viene ignorato.
 ### Come si decide cosa è prenotabile
 
 Le regole stanno in `MainSite/appsettings.json`, sezione `Booking` (si possono
-sovrascrivere da ambiente con `Booking__SlotMinutes`, `Booking__WorkStart`, ...):
+sovrascrivere da ambiente con `Booking__WorkStart`, `Booking__BufferMinutes`, ...):
 
 | Regola | Default | Nota |
 |---|---|---|
-| fuso | `Europe/Rome` | gli slot escono con l'offset reale (+01:00/+02:00) |
+| fuso | `Europe/Rome` | gli orari si vedono con l'offset reale (+01:00/+02:00) |
 | giorni | lun–ven | ISO (`1` = lunedì) |
 | orario | 09:00–18:00 | |
-| slot | 30 min | è anche il passo della griglia |
+| durata minima | 15 min | la griglia si trascina a passi di 15' |
 | buffer | 15 min | libero prima e dopo ogni impegno già in calendario |
 | preavviso | 24 h | niente "tra un'ora" |
-| orizzonte | 60 giorni | oltre, niente slot |
-| giorni per richiesta | 14 (max 31) | il cliente può chiedere un intervallo |
+| orizzonte | 60 giorni | oltre, nessun giorno selezionabile |
+| giorni per richiesta | max 31 | tetto di una singola lettura degli impegni |
 
 Gli impegni si leggono dal calendario con una `REPORT calendar-query` (ricorrenze
 incluse, espanse da Ical.Net); `TRANSP:TRANSPARENT` e gli eventi annullati non
 contano. **Dei tuoi impegni l'API non espone mai nulla**: restituisce solo gli
-slot liberi.
+intervalli occupati, senza titolo né dettagli.
 
-La stessa funzione che pubblica la disponibilità valida la prenotazione, quindi
-le due cose non possono divergere. La scrittura è un `PUT` del `.ics` con
-`If-None-Match: *`: il nome del file deriva dallo slot, così due prenotazioni
-dello stesso orario **collidono (409) invece di sovrascriversi**. Il titolo
-dell'evento è `Appuntamento con <nome>`, la descrizione contiene email e
+La scrittura è un `PUT` del `.ics` con `If-None-Match: *`: il nome del file
+deriva dall'intervallo, così due prenotazioni dello stesso orario **collidono
+(409) invece di sovrascriversi**. Prima di scrivere il servizio rilegge gli
+impegni del giorno e rifiuta ogni sovrapposizione, buffer compreso. Il titolo
+dell'evento è `Video call with <nome>`, la descrizione contiene link, email e
 messaggio del richiedente.
 
 ### Esempi
 
 ```bash
-curl "https://matteofabbri.org/api/booking/availability?from=2026-11-02&to=2026-11-06"
+curl "https://matteofabbri.org/api/booking/busy?from=2026-11-02&to=2026-11-08"
 ```
 
 ```json
 {
-  "timeZone": "Europe/Rome",
-  "slotMinutes": 30,
-  "days": [
-    { "date": "2026-11-02", "slots": [
-        { "start": "2026-11-02T09:00:00+01:00", "end": "2026-11-02T09:30:00+01:00" }
-    ] }
+  "blocks": [
+    { "date": "2026-11-02", "start": "10:00", "end": "11:00" },
+    { "date": "2026-11-03", "start": "14:30", "end": "16:00" }
   ]
 }
 ```
@@ -289,12 +287,12 @@ curl "https://matteofabbri.org/api/booking/availability?from=2026-11-02&to=2026-
 ```bash
 curl -X POST https://matteofabbri.org/api/booking/appointments \
   -H "Content-Type: application/json" \
-  -d '{"start":"2026-11-02T09:00:00+01:00","name":"Mario Rossi","email":"mario@example.com","note":"Di cosa parliamo"}'
+  -d '{"start":"2026-11-02T09:00:00+01:00","end":"2026-11-02T10:00:00+01:00","name":"Mario Rossi","email":"mario@example.com","meetingUrl":"https://meet.google.com/abc-defg-hij","note":"Di cosa parliamo"}'
 ```
 
-Risposte: `201` con l'id; `400` dati non validi; `409` slot non più libero;
-`429` troppe richieste (5 in 10 minuti per IP); `503` prenotazioni non
-configurate; `502` calendario irraggiungibile o credenziali rifiutate.
+Risposte: `201` con l'id; `400` dati o orario non validi; `409` intervallo non
+più libero; `429` troppe richieste (5 in 10 minuti per IP); `503` prenotazioni
+non configurate; `502` calendario irraggiungibile o credenziali rifiutate.
 
 ### Sviluppo locale senza credenziali
 

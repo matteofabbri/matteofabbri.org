@@ -15,7 +15,7 @@ public sealed class FakeCalendarGateway : ICalendarGateway
         _seeded =
         [
             // Domani mattina e dopodomani pomeriggio, in UTC: servono solo a far
-            // vedere che gli slot attorno si chiudono.
+            // vedere i blocchi occupati nella settimana.
             new BusyPeriod(
                 new DateTimeOffset(today.AddDays(1).AddHours(9), TimeSpan.Zero),
                 new DateTimeOffset(today.AddDays(1).AddHours(10), TimeSpan.Zero)),

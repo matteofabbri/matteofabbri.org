@@ -5,25 +5,18 @@ using Microsoft.Extensions.Options;
 
 namespace MainSite.Booking;
 
-// Il cuore: trasforma "il mio calendario + le mie regole" in slot prenotabili,
-// e trasforma una richiesta in un evento sul calendario.
+// Il cuore: legge gli impegni dal calendario e crea eventi per una finestra
+// scelta liberamente (start/end), senza slot fissi.
 //
-// Le regole, nell'ordine in cui si applicano:
-//  1. giorni lavorativi e finestra oraria (in BookingOptions, nel fuso indicato);
-//  2. griglia di slot di SlotMinutes dentro la finestra;
-//  3. niente slot nei LeadHours successivi (il "tra un'ora" non si accetta);
-//  4. niente slot che toccano un impegno, allargato di BufferMinutes;
-//  5. niente oltre HorizonDays.
-// Il fuso è quello di BookingOptions: gli slot escono con il loro offset reale
-// (es. 10:00+01:00 d'inverno, 10:00+02:00 d'estate), così il frontend non deve
-// indovinare niente.
+// Le regole: giorni lavorativi, finestra WorkStart-WorkEnd nel fuso indicato,
+// LeadHours di preavviso, HorizonDays, e nessuna sovrapposizione con gli
+// impegni già presenti (allargati di BufferMinutes).
 public sealed class BookingService
 {
     private readonly ICalendarGateway _calendar;
     private readonly BookingOptions _options;
     private readonly TimeOnly _workStart;
     private readonly TimeOnly _workEnd;
-    private readonly long _slotTicks;
     private readonly TimeSpan _buffer;
     private readonly TimeZoneInfo _timeZone;
     private readonly TimeProvider _time;
@@ -39,76 +32,39 @@ public sealed class BookingService
         _workEnd = _options.WorkEndTime;
         if (_workStart >= _workEnd)
             throw new InvalidOperationException("Booking:WorkStart deve precedere Booking:WorkEnd.");
-        if (_options.SlotMinutes is < 5 or > 480)
-            throw new InvalidOperationException("Booking:SlotMinutes deve stare tra 5 e 480.");
         if (_options.BufferMinutes < 0 || _options.LeadHours < 0 || _options.HorizonDays < 1
-            || _options.DefaultDays < 1 || _options.MaxDaysPerRequest < 1)
+            || _options.MaxDaysPerRequest < 1)
             throw new InvalidOperationException("Booking: i limiti di tempo non possono essere negativi (buffer, lead, orizzonte, giorni).");
 
-        _slotTicks = TimeSpan.FromMinutes(_options.SlotMinutes).Ticks;
         _buffer = TimeSpan.FromMinutes(_options.BufferMinutes);
     }
 
     public bool IsConfigured => _calendar.IsConfigured;
     public string TimeZoneId => _timeZone.Id;
 
-    // --- Disponibilità -------------------------------------------------------
+    // --- Impegni del calendario ---------------------------------------------
 
-    public async Task<AvailabilityResponse> GetAvailabilityAsync(
-        DateOnly? from, DateOnly? to, CancellationToken ct)
+    // Intervalli occupati tra due date locali, già spezzati per giorno e
+    // convertiti in HH:mm nel fuso del booking. Nessun dettaglio degli eventi.
+    public async Task<IReadOnlyList<BusyBlock>> GetBusyAsync(
+        DateOnly from, DateOnly to, CancellationToken ct)
     {
         if (!_calendar.IsConfigured)
             throw new CalendarNotConfiguredException(
                 "Bookings are not configured: the calendar app password (DAV access) is missing.");
 
-        var now = _time.GetUtcNow();
-        var today = ToLocalDate(now);
-        var lastBookableDay = ToLocalDate(now.AddDays(_options.HorizonDays));
-
-        var startDate = from ?? today;
-        if (startDate < today) startDate = today;
-
-        var endDate = to ?? startDate.AddDays(_options.DefaultDays - 1);
-        if (endDate < startDate)
+        if (to < from)
             throw new BookingValidationException("Reversed range: 'to' comes before 'from'.");
 
-        if (endDate.DayNumber - startDate.DayNumber > _options.MaxDaysPerRequest - 1)
-            endDate = startDate.AddDays(_options.MaxDaysPerRequest - 1);
-        if (endDate > lastBookableDay)
-            endDate = lastBookableDay;
+        if (to.DayNumber - from.DayNumber > _options.MaxDaysPerRequest - 1)
+            to = from.AddDays(_options.MaxDaysPerRequest - 1);
 
-        var days = new List<DayAvailability>();
-        if (startDate > endDate)
-            return new AvailabilityResponse(_timeZone.Id, _options.SlotMinutes, days);
-
-        var earliest = now.AddHours(_options.LeadHours);
         var busy = await _calendar.GetBusyAsync(
-            AtLocal(startDate.ToDateTime(TimeOnly.MinValue)),
-            AtLocal(endDate.AddDays(1).ToDateTime(TimeOnly.MinValue)),
+            AtLocal(from.ToDateTime(TimeOnly.MinValue)),
+            AtLocal(to.AddDays(1).ToDateTime(TimeOnly.MinValue)),
             ct);
 
-        for (var date = startDate; date <= endDate; date = date.AddDays(1))
-        {
-            if (!IsWorkDay(date)) continue;
-
-            var slots = new List<Slot>();
-            for (var time = _workStart; time.Ticks + _slotTicks <= _workEnd.Ticks; time = time.AddMinutes(_options.SlotMinutes))
-            {
-                var start = AtLocal(date.ToDateTime(time));
-                var end = AtLocal(date.ToDateTime(time.AddMinutes(_options.SlotMinutes)));
-
-                if (start < earliest) continue;
-                if (TouchesBusy(start, end, busy)) continue;
-
-                slots.Add(new Slot(start, end));
-            }
-
-            days.Add(new DayAvailability(
-                date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
-                slots));
-        }
-
-        return new AvailabilityResponse(_timeZone.Id, _options.SlotMinutes, days);
+        return ToBlocks(busy, from, to);
     }
 
     // --- Prenotazione --------------------------------------------------------
@@ -131,38 +87,62 @@ public sealed class BookingService
         if (note.Length > _options.MaxNoteLength)
             throw new BookingValidationException($"The message is too long (max {_options.MaxNoteLength} characters).");
 
-        if (request.Start == default)
-            throw new BookingValidationException("The appointment time is missing.");
-
         var meetingUrl = (request.MeetingUrl ?? "").Trim();
         if (meetingUrl.Length > 500 || !IsValidMeetingUrl(meetingUrl))
             throw new BookingValidationException("A valid video call link (http or https) is required.");
 
-        // Lo slot richiesto deve essere uno di quelli PUBBLICATI: la stessa
-        // funzione che alimenta la disponibilità decide, così le regole non
-        // possono divergere fra "vedere" e "prenotare".
-        var requested = TimeZoneInfo.ConvertTime(request.Start, _timeZone);
-        var date = DateOnly.FromDateTime(requested.DateTime);
-        var availability = await GetAvailabilityAsync(date, date, ct);
+        if (request.Start == default || request.End == default)
+            throw new BookingValidationException("The start and end time are required.");
+        if (request.End <= request.Start)
+            throw new BookingValidationException("The end time must be after the start time.");
+        if (request.End - request.Start < TimeSpan.FromMinutes(_options.MinDurationMinutes))
+            throw new BookingValidationException(
+                $"The call must last at least {_options.MinDurationMinutes} minutes.");
 
-        var slot = availability.Days
-            .SelectMany(day => day.Slots)
-            .FirstOrDefault(candidate => candidate.Start == request.Start);
+        var startLocal = TimeZoneInfo.ConvertTime(request.Start, _timeZone);
+        var endLocal = TimeZoneInfo.ConvertTime(request.End, _timeZone);
+        var date = DateOnly.FromDateTime(startLocal.DateTime);
 
-        if (slot is null)
-            throw new SlotUnavailableException(
-                "That time is not bookable: it is busy, outside working hours, too close, or beyond the booking horizon.");
+        if (DateOnly.FromDateTime(endLocal.DateTime) != date)
+            throw new BookingValidationException("The booking must start and end on the same day.");
+        if (!IsWorkDay(date))
+            throw new BookingValidationException("That day is not available.");
 
-        var uid = $"booking-{slot.Start.UtcDateTime:yyyyMMdd'T'HHmmss'Z'}";
+        var startTime = TimeOnly.FromDateTime(startLocal.DateTime);
+        var endTime = TimeOnly.FromDateTime(endLocal.DateTime);
+        if (startTime < _workStart || endTime > _workEnd)
+            throw new BookingValidationException(
+                $"Bookings are available between {_options.WorkStart} and {_options.WorkEnd}.");
+
+        var now = _time.GetUtcNow();
+        if (request.Start < now.AddHours(_options.LeadHours))
+            throw new BookingValidationException(
+                $"Bookings require at least {_options.LeadHours} hours of notice.");
+        if (date > ToLocalDate(now.AddDays(_options.HorizonDays)))
+            throw new BookingValidationException("That date is beyond the booking horizon.");
+
+        var busy = await _calendar.GetBusyAsync(
+            AtLocal(date.ToDateTime(TimeOnly.MinValue)),
+            AtLocal(date.AddDays(1).ToDateTime(TimeOnly.MinValue)),
+            ct);
+
+        foreach (var period in busy)
+        {
+            if (request.Start < period.EndUtc + _buffer && period.StartUtc - _buffer < request.End)
+                throw new SlotUnavailableException(
+                    "That range overlaps an existing appointment: choose another time.");
+        }
+
+        var uid = $"booking-{request.Start.UtcDateTime:yyyyMMdd'T'HHmmss'Z'}-{request.End.UtcDateTime:HHmmss'Z'}";
         var booking = new CalendarBooking(
-            uid, slot.Start, slot.End, name, email,
+            uid, request.Start, request.End, name, email,
             string.IsNullOrWhiteSpace(note) ? null : note,
             meetingUrl);
 
         if (!await _calendar.TryCreateEventAsync(booking, ct))
-            throw new SlotUnavailableException("Someone just booked that time: choose another slot.");
+            throw new SlotUnavailableException("Someone just booked that time: choose another range.");
 
-        return new BookingResponse(uid, slot.Start, slot.End);
+        return new BookingResponse(uid, request.Start, request.End);
     }
 
     // --- Regole e conversioni ------------------------------------------------
@@ -174,14 +154,43 @@ public sealed class BookingService
         return _options.WorkDays.Contains(iso);
     }
 
-    private bool TouchesBusy(DateTimeOffset start, DateTimeOffset end, IReadOnlyList<BusyPeriod> busy)
+    private IReadOnlyList<BusyBlock> ToBlocks(
+        IReadOnlyList<BusyPeriod> busy,
+        DateOnly from,
+        DateOnly to)
     {
+        var blocks = new List<BusyBlock>();
         foreach (var period in busy)
         {
-            if (start < period.EndUtc + _buffer && period.StartUtc - _buffer < end)
-                return true;
+            var start = TimeZoneInfo.ConvertTime(period.StartUtc, _timeZone).DateTime;
+            var end = TimeZoneInfo.ConvertTime(period.EndUtc, _timeZone).DateTime;
+            var firstDate = DateOnly.FromDateTime(start);
+            var lastDate = DateOnly.FromDateTime(end);
+
+            for (var date = firstDate; date <= lastDate; date = date.AddDays(1))
+            {
+                if (date < from || date > to)
+                    continue;
+
+                var dayStart = date.ToDateTime(TimeOnly.MinValue);
+                var dayEnd = dayStart.AddDays(1);
+                var blockStart = start > dayStart ? start : dayStart;
+                var blockEnd = end < dayEnd ? end : dayEnd;
+                if (blockEnd <= blockStart)
+                    continue;
+
+                var endLabel = blockEnd == dayEnd
+                    ? "24:00"
+                    : blockEnd.ToString("HH:mm", CultureInfo.InvariantCulture);
+
+                blocks.Add(new BusyBlock(
+                    date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                    blockStart.ToString("HH:mm", CultureInfo.InvariantCulture),
+                    endLabel));
+            }
         }
-        return false;
+
+        return blocks;
     }
 
     private DateTimeOffset AtLocal(DateTime local)
