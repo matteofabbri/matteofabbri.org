@@ -78,12 +78,6 @@ public sealed class RequestLogMiddleware
         string? userAgent = Truncate(headers.UserAgent.ToString(), 512);
         var agent = UserAgentParser.Parse(userAgent);
         var country = _countryResolver?.Resolve(context.Connection.RemoteIpAddress) ?? CountryInfo.Unknown;
-        _logger.LogInformation(
-            "DEBUG log richieste: remote={Remote}:{Port} path={Path} country={Country}",
-            context.Connection.RemoteIpAddress,
-            context.Connection.RemotePort,
-            request.Path,
-            country.Code);
 
         var entry = new RequestLogEntry
         {

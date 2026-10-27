@@ -133,9 +133,10 @@ docker compose up -d --build
 > **PROXY protocol** (`proxy_protocol v1` verso `127.0.0.1:8443`): senza, il
 > sito vedrebbe tutte le richieste da `127.0.0.1` e GeoIP/rate limit per IP
 > sarebbero inutili. Il server HTTP rilegge l'header con il listener wrapper
-> `proxy_protocol`, disponibile in Caddy ≥ 2.8. Il workflow di deploy valida il
-> Caddyfile con l'immagine già in uso **prima** di sostituirlo: un errore ferma
-> il deploy senza toccare siti e posta.
+> `proxy_protocol` e `fallback_policy use` (con `IGNORE`, il default, l'indirizzo
+> verrebbe scartato), disponibile in Caddy ≥ 2.8. Il workflow di deploy valida
+> il Caddyfile con l'immagine già in uso **prima** di sostituirlo: un errore
+> ferma il deploy senza toccare siti e posta.
 
 ---
 

@@ -40,9 +40,13 @@
 	# PROXY protocol l'IP del client collasserebbe su 127.0.0.1 (GeoIP, rate
 	# limit per IP e log vedrebbero tutti uguali). Il wrapper va prima di tls,
 	# che altrimenti leggerebbe l'header come inizio dell'handshake.
+	# fallback_policy use: usa l'indirizzo del header quando c'è; le
+	# connessioni senza header (es. la porta 8080 interna) passano lo stesso.
 	servers {
 		listener_wrappers {
-			proxy_protocol
+			proxy_protocol {
+				fallback_policy use
+			}
 			tls
 		}
 	}

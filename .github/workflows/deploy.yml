@@ -89,8 +89,6 @@ jobs:
               rm -f /home/ubuntu/Caddyfile.new
               exit 0
             fi
-            sudo docker compose config --images
-            sudo docker compose config | grep -nE "SITE_UPSTREAM|network_mode|^  (site|caddy):|^    (ports|expose|networks):|^      - (aspire|matteo-shared)" | head -40
             sudo docker compose build caddy
             sudo docker compose run --rm --no-deps \
               -v /home/ubuntu/Caddyfile.new:/etc/caddy/Caddyfile:ro \
