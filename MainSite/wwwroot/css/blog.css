@@ -83,6 +83,12 @@ a {
     padding: 0 1.25rem;
 }
 
+/* Pagine di dati (mappa e tabella richieste): più larghe della misura di
+   lettura del blog. */
+.wrap-wide {
+    max-width: 1400px;
+}
+
 main.wrap {
     padding-top: 3rem;
     padding-bottom: 4rem;

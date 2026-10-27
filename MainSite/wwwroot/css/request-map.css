@@ -145,7 +145,7 @@
 
 .user-agent {
     display: block;
-    max-width: 34rem;
+    max-width: 40rem;
     font-family: var(--mono);
     font-size: 0.78rem;
     overflow-wrap: anywhere;
