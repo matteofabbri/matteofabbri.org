@@ -93,6 +93,33 @@ else if (Model.GeoIpUpdated is { } updated)
     </div>
 </div>
 
+@if (Model.UniqueVisitors > 0)
+{
+    <div class="map-card">
+        <div class="map-header">
+            <h2>Unique visitors per day</h2>
+            <span class="hint">@Model.FormatNumber(Model.UniqueVisitors) distinct visitors in the period</span>
+        </div>
+        <svg class="visitors-chart" viewBox="0 0 720 190" role="img"
+             aria-label="Bar chart of unique visitors per day, @Model.PeriodLabel">
+            <line class="chart-grid" x1="0" y1="20" x2="720" y2="20" />
+            <text class="chart-max" x="4" y="14">@Model.ChartMax()</text>
+            <line class="chart-axis" x1="0" y1="170" x2="720" y2="170" />
+            @foreach (var bar in Model.ChartBars())
+            {
+                <rect class="chart-bar" x="@bar.X" y="@bar.Y" width="@bar.Width" height="@bar.Height">
+                    <title>@bar.Title</title>
+                </rect>
+                @if (bar.TickLabel is not null)
+                {
+                    @:<text class="chart-tick" x="@(bar.TickX)" y="187" text-anchor="middle">@(bar.TickLabel)</text>
+                }
+            }
+        </svg>
+        <p class="hint">A visitor is a Client ID: same IP and same user-agent count once per day.</p>
+    </div>
+}
+
 @if (Model.TotalRequests == 0)
 {
     <div class="empty">

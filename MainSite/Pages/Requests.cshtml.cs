@@ -11,7 +11,8 @@ namespace MainSite.Pages;
 // Mappa e lista delle richieste del sito. È pubblica e aggregata per paese;
 // la lista mostra le richieste pubbliche a pagine da 200, con user-agent e IP
 // così come sono stati registrati (nessun parsing) e un id cliente stabile
-// calcolato da IP + user-agent.
+// calcolato da IP + user-agent. Un grafico a barre conta i visitatori unici
+// (client distinti) di ogni giorno.
 public sealed class RequestsModel(
     IServiceProvider services,
     IOptions<RequestLogOptions> options,
@@ -51,6 +52,8 @@ public sealed class RequestsModel(
     public IReadOnlyList<CountryCount> Countries { get; private set; } = [];
     public IReadOnlyList<RequestRow> Recent { get; private set; } = [];
     public string CountsJson { get; private set; } = "{}";
+    public IReadOnlyList<DailyVisitorCount> DailyVisitors { get; private set; } = [];
+    public int UniqueVisitors { get; private set; }
 
     public string PeriodLabel => Days switch
     {
@@ -102,7 +105,8 @@ public sealed class RequestsModel(
                     cache.Set(entriesKey, entries, TimeSpan.FromSeconds(20));
                 }
 
-                ApplyFiltered(entries, requestedPage);
+                var filtered = ApplyFiltered(entries, requestedPage);
+                SetVisitors(filtered, RomeDay(from), RomeDay(DateTimeOffset.UtcNow));
                 return;
             }
 
@@ -121,6 +125,17 @@ public sealed class RequestsModel(
                 .ThenBy(country => country.Name, StringComparer.CurrentCultureIgnoreCase)
                 .ToList();
             CountsJson = JsonSerializer.Serialize(stats.Counts);
+
+            // I visitatori unici vengono dalle righe pubbliche, che non c'erano
+            // nella lettura solo-indice dei conteggi: stessa cache dei filtri.
+            string visitorsKey = $"requests:public:{Days}";
+            if (!cache.TryGetValue(visitorsKey, out IReadOnlyList<RequestLogEntry>? publicEntries) || publicEntries is null)
+            {
+                publicEntries = await store.GetPublicEntriesAsync(from, ct);
+                cache.Set(visitorsKey, publicEntries, TimeSpan.FromSeconds(20));
+            }
+
+            SetVisitors(publicEntries, RomeDay(from), RomeDay(DateTimeOffset.UtcNow));
 
             string pageKey = $"requests:page:{Days}:{requestedPage}";
             if (!cache.TryGetValue(pageKey, out RequestLogPage? logPage) || logPage is null)
@@ -142,7 +157,7 @@ public sealed class RequestsModel(
         }
     }
 
-    private void ApplyFiltered(IReadOnlyList<RequestLogEntry> entries, int requestedPage)
+    private IReadOnlyList<RequestLogEntry> ApplyFiltered(IReadOnlyList<RequestLogEntry> entries, int requestedPage)
     {
         var filtered = entries.Where(Matches).ToList();
 
@@ -173,6 +188,7 @@ public sealed class RequestsModel(
 
         int skip = (PageNumber - 1) * PageSize;
         Recent = filtered.Skip(skip).Take(PageSize).Select(ToRow).ToList();
+        return filtered;
     }
 
     private bool Matches(RequestLogEntry entry)
@@ -324,6 +340,83 @@ public sealed class RequestsModel(
         return new CountryStats(total, geocoded, counts);
     }
 
+    // Visitatori unici al giorno: client distinti per giorno di Roma. Le righe
+    // senza id cliente (nessun IP e nessun user-agent) restano fuori perché non
+    // identificano nessuno; la serie copre sempre l'intero periodo scelto,
+    // compresi i giorni senza traffico.
+    private void SetVisitors(IReadOnlyList<RequestLogEntry> entries, DateOnly firstDay, DateOnly lastDay)
+    {
+        var perDay = new Dictionary<DateOnly, HashSet<string>>();
+        var known = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var entry in entries)
+        {
+            string clientId = ClientIdOf(entry);
+            if (string.IsNullOrEmpty(clientId))
+                continue;
+
+            DateOnly day = RomeDay(entry.Timestamp);
+            if (!perDay.TryGetValue(day, out var visitors))
+                perDay[day] = visitors = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            visitors.Add(clientId);
+            known.Add(clientId);
+        }
+
+        var series = new List<DailyVisitorCount>();
+        for (DateOnly day = firstDay; day <= lastDay; day = day.AddDays(1))
+            series.Add(new DailyVisitorCount(day, perDay.TryGetValue(day, out var visitors) ? visitors.Count : 0));
+
+        DailyVisitors = series;
+        UniqueVisitors = known.Count;
+    }
+
+    // Geometria del grafico: coordinate già formattate con il punto decimale,
+    // perché una cultura diversa da en scriverebbe la virgola nell'SVG.
+    public IReadOnlyList<VisitorChartBar> ChartBars()
+    {
+        if (DailyVisitors.Count == 0)
+            return [];
+
+        const double width = 720;
+        const double plotHeight = 150;
+        const double baseline = 170;
+
+        int max = DailyVisitors.Max(day => day.Visitors);
+        double slot = width / DailyVisitors.Count;
+        double barWidth = Math.Max(1.5, slot - Math.Min(5, slot * 0.28));
+        int tickStep = DailyVisitors.Count <= 14 ? 1 : DailyVisitors.Count <= 40 ? 5 : 15;
+
+        var bars = new List<VisitorChartBar>(DailyVisitors.Count);
+        for (int i = 0; i < DailyVisitors.Count; i++)
+        {
+            DailyVisitorCount day = DailyVisitors[i];
+            double height = max > 0 && day.Visitors > 0
+                ? Math.Max(2, day.Visitors * plotHeight / max)
+                : 0;
+
+            bars.Add(new VisitorChartBar(
+                Num(i * slot + (slot - barWidth) / 2),
+                Num(barWidth),
+                Num(baseline - height),
+                Num(height),
+                $"{day.Day.ToString("dddd d MMMM yyyy", English)}: {FormatNumber(day.Visitors)} unique visitors",
+                i % tickStep == 0 ? day.Day.ToString("d MMM", English) : null,
+                Num(i * slot + slot / 2)));
+        }
+
+        return bars;
+    }
+
+    public string ChartMax() => DailyVisitors.Count == 0
+        ? "0"
+        : FormatNumber(DailyVisitors.Max(day => day.Visitors));
+
+    private static string Num(double value) => value.ToString("0.##", CultureInfo.InvariantCulture);
+
+    private static DateOnly RomeDay(DateTimeOffset value) =>
+        DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(value, Rome).DateTime);
+
     private static RequestRow ToRow(RequestLogEntry entry)
     {
         string clientId = ClientIdOf(entry);
@@ -347,6 +440,8 @@ public sealed class RequestsModel(
         Countries = [];
         Recent = [];
         CountsJson = "{}";
+        DailyVisitors = [];
+        UniqueVisitors = 0;
         PageNumber = 1;
         PageCount = 1;
         PublicTotal = 0;
@@ -359,6 +454,19 @@ public sealed class RequestsModel(
 }
 
 public sealed record CountryCount(string Code, string Name, int Count);
+
+// Una barra del grafico: giorno e visitatori unici, con le coordinate SVG già
+// pronte (stringhe con il punto decimale).
+public sealed record DailyVisitorCount(DateOnly Day, int Visitors);
+
+public sealed record VisitorChartBar(
+    string X,
+    string Width,
+    string Y,
+    string Height,
+    string Title,
+    string? TickLabel,
+    string TickX);
 
 public sealed record RequestRow(
     DateTimeOffset When,

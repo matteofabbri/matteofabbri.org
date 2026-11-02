@@ -93,6 +93,39 @@ public sealed class RequestsModelTests : IDisposable
         Assert.Single(model.ActiveFilters);
     }
 
+    [Fact]
+    public async Task The_visitor_chart_counts_distinct_clients_per_day()
+    {
+        var now = DateTimeOffset.UtcNow;
+        await _store.InsertManyAsync(
+        [
+            Entry("req-a", now, "IT", "203.0.113.7", "0123456789abcdef", "Mozilla/5.0"),
+            Entry("req-b", now.AddMinutes(-1), "IT", "203.0.113.7", "0123456789abcdef", "Mozilla/5.0"),
+            Entry("req-c", now.AddMinutes(-2), "IT", "203.0.113.8", "1111111111111111", "curl/8"),
+            Entry("req-d", now.AddDays(-2), "IT", "203.0.113.8", "1111111111111111", "curl/8"),
+        ], default);
+
+        var model = CreateModel();
+        await model.OnGetAsync(30, 1, null, null, null, null, default);
+
+        Assert.Equal(2, model.UniqueVisitors);
+        Assert.True(model.DailyVisitors.Count >= 30);
+        Assert.Equal(model.DailyVisitors, model.DailyVisitors.OrderBy(day => day.Day));
+        Assert.Equal(2, model.DailyVisitors[^1].Visitors);
+
+        var rome = TimeZoneInfo.FindSystemTimeZoneById("Europe/Rome");
+        var twoDaysAgo = DateOnly.FromDateTime(
+            TimeZoneInfo.ConvertTime(now.AddDays(-2), rome).DateTime);
+        Assert.Equal(1, model.DailyVisitors.Single(day => day.Day == twoDaysAgo).Visitors);
+
+        var bars = model.ChartBars();
+        Assert.Equal(model.DailyVisitors.Count, bars.Count);
+
+        await model.OnGetAsync(30, 1, null, null, "0123456789abcdef", null, default);
+        Assert.Equal(1, model.UniqueVisitors);
+        Assert.Equal(1, model.DailyVisitors[^1].Visitors);
+    }
+
     public void Dispose()
     {
         _store.Dispose();
