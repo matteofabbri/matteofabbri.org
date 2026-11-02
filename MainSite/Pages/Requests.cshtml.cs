@@ -19,13 +19,13 @@ public sealed class RequestsModel(
     IMemoryCache cache,
     ILogger<RequestsModel> logger) : PageModel
 {
-    private static readonly int[] AllowedDays = [7, 30, 90];
+    private static readonly int[] AllowedDays = [1, 7, 30, 90];
     private static readonly TimeZoneInfo Rome = TimeZoneInfo.FindSystemTimeZoneById("Europe/Rome");
     private static readonly CultureInfo English = CultureInfo.GetCultureInfo("en-GB");
 
     public const int PageSize = 200;
 
-    public int Days { get; private set; } = 30;
+    public int Days { get; private set; } = 1;
     public int PageNumber { get; private set; } = 1;
     public int PageCount { get; private set; } = 1;
     public int PublicTotal { get; private set; }
@@ -52,15 +52,21 @@ public sealed class RequestsModel(
     public IReadOnlyList<CountryCount> Countries { get; private set; } = [];
     public IReadOnlyList<RequestRow> Recent { get; private set; } = [];
     public string CountsJson { get; private set; } = "{}";
-    public IReadOnlyList<DailyVisitorCount> DailyVisitors { get; private set; } = [];
+    public IReadOnlyList<VisitorBucket> VisitorBuckets { get; private set; } = [];
     public int UniqueVisitors { get; private set; }
+
+    // Le ultime 24 ore hanno barre orarie; i periodi più lunghi barre giornaliere.
+    public bool HourlyPeriod => Days == 1;
 
     public string PeriodLabel => Days switch
     {
+        1 => "last 24 hours",
         7 => "last 7 days",
         90 => "last 90 days",
         _ => "last 30 days",
     };
+
+    public string ChartTitle => HourlyPeriod ? "Unique visitors per hour" : "Unique visitors per day";
 
     public async Task OnGetAsync(
         int? days,
@@ -71,7 +77,7 @@ public sealed class RequestsModel(
         string? userAgent,
         CancellationToken ct)
     {
-        Days = AllowedDays.Contains(days ?? 0) ? days!.Value : 30;
+        Days = AllowedDays.Contains(days ?? 0) ? days!.Value : 1;
         int requestedPage = pageNumber is > 0 ? pageNumber.Value : 1;
 
         CountryFilter = NormalizeCountryFilter(country);
@@ -94,7 +100,8 @@ public sealed class RequestsModel(
 
         try
         {
-            DateTimeOffset from = DateTimeOffset.UtcNow.AddDays(-Days);
+            DateTimeOffset to = DateTimeOffset.UtcNow;
+            DateTimeOffset from = to.AddDays(-Days);
 
             if (HasFilters)
             {
@@ -106,7 +113,7 @@ public sealed class RequestsModel(
                 }
 
                 var filtered = ApplyFiltered(entries, requestedPage);
-                SetVisitors(filtered, RomeDay(from), RomeDay(DateTimeOffset.UtcNow));
+                SetVisitors(filtered, from, to);
                 return;
             }
 
@@ -135,7 +142,7 @@ public sealed class RequestsModel(
                 cache.Set(visitorsKey, publicEntries, TimeSpan.FromSeconds(20));
             }
 
-            SetVisitors(publicEntries, RomeDay(from), RomeDay(DateTimeOffset.UtcNow));
+            SetVisitors(publicEntries, from, to);
 
             string pageKey = $"requests:page:{Days}:{requestedPage}";
             if (!cache.TryGetValue(pageKey, out RequestLogPage? logPage) || logPage is null)
@@ -340,77 +347,138 @@ public sealed class RequestsModel(
         return new CountryStats(total, geocoded, counts);
     }
 
-    // Visitatori unici al giorno: client distinti per giorno di Roma. Le righe
-    // senza id cliente (nessun IP e nessun user-agent) restano fuori perché non
-    // identificano nessuno; la serie copre sempre l'intero periodo scelto,
-    // compresi i giorni senza traffico.
-    private void SetVisitors(IReadOnlyList<RequestLogEntry> entries, DateOnly firstDay, DateOnly lastDay)
+    // Visitatori unici: client distinti per bucket. Nelle ultime 24 ore il
+    // bucket è un'ora (barre allineate all'ora UTC, etichette in ora di Roma);
+    // nei periodi più lunghi è un giorno di Roma, compresi quelli senza
+    // traffico. Le righe senza id cliente (nessun IP e nessun user-agent)
+    // restano fuori perché non identificano nessuno.
+    private void SetVisitors(IReadOnlyList<RequestLogEntry> entries, DateTimeOffset from, DateTimeOffset to)
     {
-        var perDay = new Dictionary<DateOnly, HashSet<string>>();
         var known = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var entry in entries)
+        if (HourlyPeriod)
         {
-            string clientId = ClientIdOf(entry);
-            if (string.IsNullOrEmpty(clientId))
-                continue;
+            DateTimeOffset first = HourStart(from);
+            int count = Math.Max(1, (int)(HourStart(to).AddHours(1) - first).TotalHours);
+            var sets = NewVisitorSets(count);
 
-            DateOnly day = RomeDay(entry.Timestamp);
-            if (!perDay.TryGetValue(day, out var visitors))
-                perDay[day] = visitors = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var entry in entries)
+            {
+                string clientId = ClientIdOf(entry);
+                if (string.IsNullOrEmpty(clientId))
+                    continue;
 
-            visitors.Add(clientId);
-            known.Add(clientId);
+                int index = (int)(entry.Timestamp - first).TotalHours;
+                if (index < 0 || index >= count)
+                    continue;
+
+                sets[index].Add(clientId);
+                known.Add(clientId);
+            }
+
+            VisitorBuckets = Enumerable.Range(0, count)
+                .Select(i => new VisitorBucket(first.AddHours(i), TimeSpan.FromHours(1), sets[i].Count))
+                .ToList();
+        }
+        else
+        {
+            DateOnly firstDay = RomeDay(from);
+            DateOnly lastDay = RomeDay(to);
+            int count = lastDay.DayNumber - firstDay.DayNumber + 1;
+            var sets = NewVisitorSets(count);
+
+            foreach (var entry in entries)
+            {
+                string clientId = ClientIdOf(entry);
+                if (string.IsNullOrEmpty(clientId))
+                    continue;
+
+                int index = RomeDay(entry.Timestamp).DayNumber - firstDay.DayNumber;
+                if (index < 0 || index >= count)
+                    continue;
+
+                sets[index].Add(clientId);
+                known.Add(clientId);
+            }
+
+            var buckets = new List<VisitorBucket>(count);
+            for (int i = 0; i < count; i++)
+                buckets.Add(new VisitorBucket(RomeMidnight(firstDay.AddDays(i)), TimeSpan.FromDays(1), sets[i].Count));
+
+            VisitorBuckets = buckets;
         }
 
-        var series = new List<DailyVisitorCount>();
-        for (DateOnly day = firstDay; day <= lastDay; day = day.AddDays(1))
-            series.Add(new DailyVisitorCount(day, perDay.TryGetValue(day, out var visitors) ? visitors.Count : 0));
-
-        DailyVisitors = series;
         UniqueVisitors = known.Count;
     }
+
+    private static HashSet<string>[] NewVisitorSets(int count)
+    {
+        var sets = new HashSet<string>[count];
+        for (int i = 0; i < count; i++)
+            sets[i] = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        return sets;
+    }
+
+    private static DateTimeOffset HourStart(DateTimeOffset value) =>
+        new(value.UtcDateTime.Ticks - value.UtcDateTime.Ticks % TimeSpan.TicksPerHour, TimeSpan.Zero);
+
+    private static DateTimeOffset RomeMidnight(DateOnly day)
+    {
+        DateTime local = day.ToDateTime(TimeOnly.MinValue);
+        return new DateTimeOffset(local, Rome.GetUtcOffset(local));
+    }
+
+    private static DateTimeOffset RomeTime(DateTimeOffset value) =>
+        TimeZoneInfo.ConvertTime(value, Rome);
 
     // Geometria del grafico: coordinate già formattate con il punto decimale,
     // perché una cultura diversa da en scriverebbe la virgola nell'SVG.
     public IReadOnlyList<VisitorChartBar> ChartBars()
     {
-        if (DailyVisitors.Count == 0)
+        if (VisitorBuckets.Count == 0)
             return [];
 
         const double width = 720;
         const double plotHeight = 150;
         const double baseline = 170;
 
-        int max = DailyVisitors.Max(day => day.Visitors);
-        double slot = width / DailyVisitors.Count;
+        int max = VisitorBuckets.Max(bucket => bucket.Visitors);
+        double slot = width / VisitorBuckets.Count;
         double barWidth = Math.Max(1.5, slot - Math.Min(5, slot * 0.28));
-        int tickStep = DailyVisitors.Count <= 14 ? 1 : DailyVisitors.Count <= 40 ? 5 : 15;
+        int tickStep = VisitorBuckets.Count <= 14
+            ? 1
+            : HourlyPeriod ? 3 : VisitorBuckets.Count <= 40 ? 5 : 15;
 
-        var bars = new List<VisitorChartBar>(DailyVisitors.Count);
-        for (int i = 0; i < DailyVisitors.Count; i++)
+        var bars = new List<VisitorChartBar>(VisitorBuckets.Count);
+        for (int i = 0; i < VisitorBuckets.Count; i++)
         {
-            DailyVisitorCount day = DailyVisitors[i];
-            double height = max > 0 && day.Visitors > 0
-                ? Math.Max(2, day.Visitors * plotHeight / max)
+            VisitorBucket bucket = VisitorBuckets[i];
+            double height = max > 0 && bucket.Visitors > 0
+                ? Math.Max(2, bucket.Visitors * plotHeight / max)
                 : 0;
+
+            string title = HourlyPeriod
+                ? $"{RomeTime(bucket.Start).ToString("HH:mm", English)}–{RomeTime(bucket.Start.AddHours(1)).ToString("HH:mm", English)} on {RomeTime(bucket.Start).ToString("dddd d MMMM yyyy", English)}: {FormatNumber(bucket.Visitors)} unique visitors"
+                : $"{RomeTime(bucket.Start).ToString("dddd d MMMM yyyy", English)}: {FormatNumber(bucket.Visitors)} unique visitors";
 
             bars.Add(new VisitorChartBar(
                 Num(i * slot + (slot - barWidth) / 2),
                 Num(barWidth),
                 Num(baseline - height),
                 Num(height),
-                $"{day.Day.ToString("dddd d MMMM yyyy", English)}: {FormatNumber(day.Visitors)} unique visitors",
-                i % tickStep == 0 ? day.Day.ToString("d MMM", English) : null,
+                title,
+                i % tickStep == 0
+                    ? RomeTime(bucket.Start).ToString(HourlyPeriod ? "HH:mm" : "d MMM", English)
+                    : null,
                 Num(i * slot + slot / 2)));
         }
 
         return bars;
     }
 
-    public string ChartMax() => DailyVisitors.Count == 0
+    public string ChartMax() => VisitorBuckets.Count == 0
         ? "0"
-        : FormatNumber(DailyVisitors.Max(day => day.Visitors));
+        : FormatNumber(VisitorBuckets.Max(bucket => bucket.Visitors));
 
     private static string Num(double value) => value.ToString("0.##", CultureInfo.InvariantCulture);
 
@@ -440,7 +508,7 @@ public sealed class RequestsModel(
         Countries = [];
         Recent = [];
         CountsJson = "{}";
-        DailyVisitors = [];
+        VisitorBuckets = [];
         UniqueVisitors = 0;
         PageNumber = 1;
         PageCount = 1;
@@ -455,9 +523,10 @@ public sealed class RequestsModel(
 
 public sealed record CountryCount(string Code, string Name, int Count);
 
-// Una barra del grafico: giorno e visitatori unici, con le coordinate SVG già
-// pronte (stringhe con il punto decimale).
-public sealed record DailyVisitorCount(DateOnly Day, int Visitors);
+// Un bucket del grafico dei visitatori — un'ora per le ultime 24 ore, un
+// giorno di Roma per i periodi più lunghi — con il suo inizio (in UTC) e il
+// numero di client distinti che ci sono comparsi.
+public sealed record VisitorBucket(DateTimeOffset Start, TimeSpan Duration, int Visitors);
 
 public sealed record VisitorChartBar(
     string X,

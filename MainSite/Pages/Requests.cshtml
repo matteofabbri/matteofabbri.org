@@ -26,6 +26,7 @@
         <label class="field map-period">
             <span class="field-label">Period</span>
             <select name="days" onchange="this.form.submit()">
+                <option value="1" selected="@(Model.Days == 1)">Last 24 hours</option>
                 <option value="7" selected="@(Model.Days == 7)">Last 7 days</option>
                 <option value="30" selected="@(Model.Days == 30)">Last 30 days</option>
                 <option value="90" selected="@(Model.Days == 90)">Last 90 days</option>
@@ -97,11 +98,11 @@ else if (Model.GeoIpUpdated is { } updated)
 {
     <div class="map-card">
         <div class="map-header">
-            <h2>Unique visitors per day</h2>
+            <h2>@Model.ChartTitle</h2>
             <span class="hint">@Model.FormatNumber(Model.UniqueVisitors) distinct visitors in the period</span>
         </div>
         <svg class="visitors-chart" viewBox="0 0 720 190" role="img"
-             aria-label="Bar chart of unique visitors per day, @Model.PeriodLabel">
+             aria-label="Bar chart: @Model.ChartTitle, @Model.PeriodLabel">
             <line class="chart-grid" x1="0" y1="20" x2="720" y2="20" />
             <text class="chart-max" x="4" y="14">@Model.ChartMax()</text>
             <line class="chart-axis" x1="0" y1="170" x2="720" y2="170" />
@@ -116,7 +117,7 @@ else if (Model.GeoIpUpdated is { } updated)
                 }
             }
         </svg>
-        <p class="hint">A visitor is a Client ID: same IP and same user-agent count once per day.</p>
+        <p class="hint">A visitor is a Client ID: same IP and same user-agent count once per @(Model.HourlyPeriod ? "hour" : "day").</p>
     </div>
 }
 

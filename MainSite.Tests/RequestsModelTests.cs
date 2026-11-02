@@ -109,21 +109,59 @@ public sealed class RequestsModelTests : IDisposable
         await model.OnGetAsync(30, 1, null, null, null, null, default);
 
         Assert.Equal(2, model.UniqueVisitors);
-        Assert.True(model.DailyVisitors.Count >= 30);
-        Assert.Equal(model.DailyVisitors, model.DailyVisitors.OrderBy(day => day.Day));
-        Assert.Equal(2, model.DailyVisitors[^1].Visitors);
+        Assert.True(model.VisitorBuckets.Count >= 30);
+        Assert.Equal(model.VisitorBuckets, model.VisitorBuckets.OrderBy(bucket => bucket.Start));
+        Assert.Equal(2, model.VisitorBuckets[^1].Visitors);
 
         var rome = TimeZoneInfo.FindSystemTimeZoneById("Europe/Rome");
         var twoDaysAgo = DateOnly.FromDateTime(
             TimeZoneInfo.ConvertTime(now.AddDays(-2), rome).DateTime);
-        Assert.Equal(1, model.DailyVisitors.Single(day => day.Day == twoDaysAgo).Visitors);
+        Assert.Equal(1, model.VisitorBuckets.Single(bucket =>
+            DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(bucket.Start, rome).DateTime) == twoDaysAgo).Visitors);
 
         var bars = model.ChartBars();
-        Assert.Equal(model.DailyVisitors.Count, bars.Count);
+        Assert.Equal(model.VisitorBuckets.Count, bars.Count);
 
         await model.OnGetAsync(30, 1, null, null, "0123456789abcdef", null, default);
         Assert.Equal(1, model.UniqueVisitors);
-        Assert.Equal(1, model.DailyVisitors[^1].Visitors);
+        Assert.Equal(1, model.VisitorBuckets[^1].Visitors);
+    }
+
+    [Fact]
+    public async Task The_default_period_is_the_last_24_hours_with_hourly_buckets()
+    {
+        var now = DateTimeOffset.UtcNow;
+        await _store.InsertManyAsync(
+        [
+            Entry("req-a", now.AddMinutes(-1), "IT", "203.0.113.7", "aaaaaaaaaaaaaaaa", "Mozilla/5.0"),
+            Entry("req-b", now.AddHours(-6), "US", "198.51.100.9", "bbbbbbbbbbbbbbbb", "curl/8"),
+            Entry("req-c", now.AddHours(-8), "IT", "203.0.113.8", "cccccccccccccccc", "curl/8"),
+            Entry("req-d", now.AddDays(-2), "IT", "203.0.113.8", "dddddddddddddddd", "curl/8"),
+        ], default);
+
+        var model = CreateModel();
+        await model.OnGetAsync(null, 1, null, null, null, null, default);
+
+        Assert.Equal(1, model.Days);
+        Assert.Equal("last 24 hours", model.PeriodLabel);
+        Assert.True(model.HourlyPeriod);
+        Assert.Equal("Unique visitors per hour", model.ChartTitle);
+
+        // Barre orarie che coprono tutta la finestra: 24, più l'ora parziale in corso.
+        Assert.InRange(model.VisitorBuckets.Count, 24, 25);
+        Assert.All(model.VisitorBuckets, bucket => Assert.Equal(TimeSpan.FromHours(1), bucket.Duration));
+        Assert.Equal(model.VisitorBuckets, model.VisitorBuckets.OrderBy(bucket => bucket.Start));
+
+        // La richiesta di due giorni fa resta fuori dalla finestra.
+        Assert.Equal(3, model.TotalRequests);
+        Assert.Equal(3, model.PublicTotal);
+        Assert.Equal(3, model.Recent.Count);
+        Assert.Equal(3, model.UniqueVisitors);
+        Assert.Equal(3, model.VisitorBuckets.Sum(bucket => bucket.Visitors));
+
+        var bars = model.ChartBars();
+        Assert.Equal(model.VisitorBuckets.Count, bars.Count);
+        Assert.Contains(bars, bar => bar.TickLabel is not null && bar.TickLabel.Length == 5);
     }
 
     public void Dispose()
