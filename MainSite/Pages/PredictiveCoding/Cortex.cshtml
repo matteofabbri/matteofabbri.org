@@ -1,0 +1,173 @@
+@page "/predictive-coding/cortex"
+@{
+    ViewData["Title"] = "Cortex & brain — Predictive Coding";
+    ViewData["Description"] = "A predictive-coding model of the visual cortex (V1→V2→V4→IT), 35 more brain regions — memory, control, neuromodulation, limbic, language — and the Thousand Brains sensorimotor system, all in managed .NET.";
+    ViewData["DocsKey"] = "cortex";
+    ViewData["DocsGitHub"] = "https://github.com/matteofabbri/PredicitiveCoding/blob/main/docs/05-cortex.md";
+}
+
+<partial name="_PredictiveCodingDocsNav" />
+
+<header class="page-head docs-head">
+    <div>
+        <h1>Cortex &amp; brain</h1>
+        <p class="lede">
+            A predictive-coding model of the visual cortex and 35 other brain
+            regions, plus a Thousand Brains sensorimotor system — every one of
+            them an assembly of already-tested primitives rather than a new
+            learning algorithm to debug.
+        </p>
+    </div>
+</header>
+
+<div class="docs-body prose">
+    <h2>The visual cortex</h2>
+    <p>
+        <code>VisualCortex</code> models the ventral stream — the path from
+        raw pixels to abstract object identity — using exactly one new
+        primitive, the <code>RetinotopicMap</code>, and reusing the rest:
+    </p>
+    <pre><code>image [C,H,W]
+  │  RetinotopicMap : tile into overlapping P×P receptive fields
+  ▼
+V1   : one weight-shared cortical-column PCN applied at every position  (= convolution)
+  │  concatenate over the grid → V1 feature map
+  ▼
+V2…IT: HierarchicalNetwork (deep modular hierarchy) → abstract object latent
+  ▼
+readout (optional): PCN classifier on the IT latent</code></pre>
+    <p>
+        The retinotopic map extracts an image into overlapping patches and
+        assembles them back overlap-averaged — that is the receptive-field
+        machinery. Everything else is the standard engine: the shared V1
+        column autoencodes every patch (learning Gabor-like features, exactly
+        as Rao &amp; Ballard described), each higher area greedily encodes the
+        one below, and the readout classifies by minimum free energy.
+    </p>
+
+    <h2>The cortical areas</h2>
+    <p>
+        The other regions are organised by system. Most are thin wrappers
+        around the architectures of the previous page; the pure controllers
+        (<code>Thalamus</code>, <code>BasalGanglia</code>, the
+        neuromodulators) hold no persistent state and only emit signals.
+    </p>
+
+    <h3>Sensory</h3>
+    <table>
+        <thead><tr><th>Area</th><th>What it is</th></tr></thead>
+        <tbody>
+            <tr><td><strong>AuditoryCortex</strong></td><td>Tonotopic A1→belt→parabelt: the visual hierarchy applied to a 1-channel spectrogram.</td></tr>
+            <tr><td><strong>SomatosensoryCortex</strong></td><td>Somatotopic S1: the same microcircuit on a skin map.</td></tr>
+            <tr><td><strong>DorsalStream</strong></td><td>The "where/how" path: a per-frame visual cortex plus a deep recurrent network for motion.</td></tr>
+            <tr><td><strong>RetinaLgn</strong></td><td>Center-surround (difference-of-Gaussians) whitening front-end.</td></tr>
+            <tr><td><strong>OlfactoryBulb</strong></td><td>Decorrelating gain control feeding the piriform cortex.</td></tr>
+            <tr><td><strong>GustatoryCortex</strong></td><td>Taste content-addressable memory (a Hopfield attractor).</td></tr>
+            <tr><td><strong>VestibularSystem</strong></td><td>Self-motion integration into a head-direction code; partner of the grid cells.</td></tr>
+            <tr><td><strong>FrontalEyeFields</strong></td><td>Saccade selection: saliency plus inhibition-of-return over the retinotopic map.</td></tr>
+        </tbody>
+    </table>
+
+    <h3>Memory — the medial temporal lobe</h3>
+    <table>
+        <thead><tr><th>Area</th><th>What it is</th></tr></thead>
+        <tbody>
+            <tr><td><strong>HippocampalFormation</strong></td><td>Fast episodic store (Hopfield) plus offline <em>replay</em> consolidating into a neocortex (McClelland 1995).</td></tr>
+            <tr><td><strong>EntorhinalCortex + GridCellEncoder</strong></td><td>A hexagonal grid-cell code for 2-D position, plus a predictive spatial association.</td></tr>
+            <tr><td><strong>PiriformCortex</strong></td><td>Olfactory content-addressable memory.</td></tr>
+            <tr><td><strong>PerirhinalCortex</strong></td><td>Item familiarity and novelty: recognition memory.</td></tr>
+            <tr><td><strong>ParahippocampalCortex</strong></td><td>Scene and context gist — the "place area".</td></tr>
+        </tbody>
+    </table>
+
+    <h3>Executive and motor</h3>
+    <table>
+        <thead><tr><th>Area</th><th>What it is</th></tr></thead>
+        <tbody>
+            <tr><td><strong>PrefrontalCortex</strong></td><td>Gated working memory plus a hierarchical mixture of experts for task selection.</td></tr>
+            <tr><td><strong>MotorCortex</strong></td><td>An active-inference control loop that reaches for goals.</td></tr>
+            <tr><td><strong>CerebellarCortex</strong></td><td>A fast supervised forward model: given state and command, predict the next state.</td></tr>
+            <tr><td><strong>PremotorCortex / SMA</strong></td><td>Action sequencing: a temporal mixture of experts predicts the next action and feeds the motor cortex.</td></tr>
+        </tbody>
+    </table>
+
+    <h3>Integration and control</h3>
+    <table>
+        <thead><tr><th>Area</th><th>What it is</th></tr></thead>
+        <tbody>
+            <tr><td><strong>AssociationCortex</strong></td><td>Multimodal binding across the senses.</td></tr>
+            <tr><td><strong>Thalamus</strong></td><td>Precision and gain controller: allocates gain across areas by inverse free energy.</td></tr>
+            <tr><td><strong>BasalGanglia</strong></td><td>Action selection by energy gating — go/no-go.</td></tr>
+            <tr><td><strong>DefaultModeNetwork</strong></td><td>Offline generative imagination via sampling from the generative prior.</td></tr>
+            <tr><td><strong>PosteriorParietalCortex</strong></td><td>Coordinate transforms and intentional maps — the dorsal-to-motor bridge.</td></tr>
+            <tr><td><strong>Claustrum</strong></td><td>Global binding: a consensus broadcast (mean latent) and workspace coherence.</td></tr>
+        </tbody>
+    </table>
+
+    <h3>Neuromodulation</h3>
+    <table>
+        <thead><tr><th>System</th><th>What it does</th></tr></thead>
+        <tbody>
+            <tr><td><strong>DopaminergicSystem</strong></td><td>VTA/SNc dopamine: reward-prediction error with an average-reward baseline; modulates plasticity.</td></tr>
+            <tr><td><strong>LocusCoeruleus</strong></td><td>Noradrenaline: a global-surprise monitor whose phasic burst applies a broad precision reset across areas.</td></tr>
+            <tr><td><strong>NucleusBasalis</strong></td><td>Acetylcholine: per-area expected uncertainty that modulates each area's learning rate.</td></tr>
+            <tr><td><strong>RapheNuclei</strong></td><td>Serotonin: time horizon and patience, translated into the temporal-discount factor.</td></tr>
+        </tbody>
+    </table>
+
+    <h3>Limbic and affective</h3>
+    <table>
+        <thead><tr><th>Area</th><th>What it is</th></tr></thead>
+        <tbody>
+            <tr><td><strong>Amygdala</strong></td><td>Affective salience and valence; emits a salience gain that steers the thalamus.</td></tr>
+            <tr><td><strong>OrbitofrontalCortex</strong></td><td>Expected-value model feeding the basal ganglia.</td></tr>
+            <tr><td><strong>CingulateCortex</strong></td><td>Conflict and surprise monitor over area free energies — calls for top-down control.</td></tr>
+            <tr><td><strong>InsularCortex</strong></td><td>Interoception: integrates the body-state stream into a feeling latent.</td></tr>
+            <tr><td><strong>Hypothalamus</strong></td><td>Homeostatic set-points → drives, and the goal observation for the motor cortex.</td></tr>
+        </tbody>
+    </table>
+
+    <h3>Language</h3>
+    <table>
+        <thead><tr><th>Area</th><th>What it is</th></tr></thead>
+        <tbody>
+            <tr><td><strong>WernickeArea</strong></td><td>Comprehension: maps a token sequence to a semantic latent.</td></tr>
+            <tr><td><strong>BrocaArea</strong></td><td>Production: decodes a semantic latent into an utterance, paired with the motor cortex.</td></tr>
+            <tr><td><strong>AngularGyrus</strong></td><td>A relational semantic hub: completes a concept from its related concepts on a graph.</td></tr>
+        </tbody>
+    </table>
+
+    <h2>A Thousand Brains system</h2>
+    <p>
+        <code>PredictiveCoding.Brain</code> implements the Hawkins/Numenta
+        papers (P1–P9, from <em>A Thousand Brains</em> to the 2025
+        sensorimotor-intelligence work) as a hard rule: a task stays on the
+        roadmap only if it traces back to one of them. The end state —
+        shipped, with the roadmap closed — is many cortical columns that each
+        learn a model of an object in their own reference frames and
+        <strong>vote</strong> to reach consensus:
+    </p>
+    <ul>
+        <li><strong>Reference frames</strong> — grid-cell-style pose encoding in 2-D and full 3-D (SE(3), quaternion algebra), with motor-driven path integration closing the loop.</li>
+        <li><strong>Voting</strong> — columns exchange evidence and converge on the object and pose consistent with all of them, so recognition works from partial, moving observation.</li>
+        <li><strong>Pose invariance</strong> — recognition from pairwise displacement signatures survives arbitrary rigid motion and occlusion, in 2-D and 3-D.</li>
+        <li><strong>Real sensors</strong> — a movable patch sensor scans real images; the same sensorimotor loop runs unchanged on camera frames.</li>
+        <li><strong>Cross-modal voting</strong> — columns over different modalities agree on the same object.</li>
+    </ul>
+    <p>
+        A benchmark and demo ship with it (demo option 9), rendering an
+        animated, self-contained web page with the episode player, the
+        benchmark and a real-sensor scan; 109 unit tests cover the stack.
+    </p>
+
+    <h2>The desktop demo</h2>
+    <p>
+        A WinUI 3 app trains and visualises several of these models, one page
+        per example running on a background thread: the visual cortex
+        classifying and reconstructing noisy shapes, Hopfield pattern
+        completion, entorhinal grid-cell firing maps, a spiking network, and
+        an active-inference agent learning a world model and reaching a goal.
+    </p>
+</div>
+
+<partial name="_PredictiveCodingDocsFooter" />

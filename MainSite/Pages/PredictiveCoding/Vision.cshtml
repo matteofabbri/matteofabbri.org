@@ -1,0 +1,107 @@
+@page "/predictive-coding/vision"
+@{
+    ViewData["Title"] = "Vision & GPU — Predictive Coding";
+    ViewData["Description"] = "Live people counting in managed .NET — YOLOX detection, SORT tracking, line and zone counting, re-identification — plus the CPU/CUDA device layer: cuBLAS via direct P/Invoke, no custom native code, automatic CPU fallback.";
+    ViewData["DocsKey"] = "vision";
+    ViewData["DocsGitHub"] = "https://github.com/matteofabbri/PredicitiveCoding/blob/main/docs/10-people-counting-roadmap.md";
+}
+
+<partial name="_PredictiveCodingDocsNav" />
+
+<header class="page-head docs-head">
+    <div>
+        <h1>Vision &amp; GPU</h1>
+        <p class="lede">
+            The theory meets a live camera feed: detect people, track them
+            across frames, count them — instantaneous and unique — entirely
+            in managed .NET, with an optional CUDA path that degrades to the
+            CPU without changing a line of model code.
+        </p>
+    </div>
+</header>
+
+<div class="docs-body prose">
+    <h2>The pipeline</h2>
+    <pre><code>capture → detect → track → count</code></pre>
+    <p>
+        A <code>FrameStream</code> opens a USB webcam or an IP/RTSP camera and
+        hands frames to the rest of the pipeline; a single-slot,
+        latest-wins buffer decouples the capture thread from inference, so
+        the loop always works on the freshest frame and latency stays
+        bounded. The detector runs only every N-th frame; the tracker
+        advances every frame, carrying boxes between detections.
+    </p>
+
+    <h2>Detection</h2>
+    <p>
+        <code>YoloPersonDetector</code> wraps the OpenCV-Zoo YOLOX model
+        (COCO, Apache-2.0, downloaded on first use with a checksum guard) and
+        decodes its grid output into every person box, with NMS and IoU
+        extracted as shared utilities. A face detector is available as a
+        head-count cross-check, and an <strong>in-house path</strong> exists
+        for environments that cannot download weights: a HOG-plus-linear-SVM
+        detector behind the same interface.
+    </p>
+
+    <h2>Tracking and counting</h2>
+    <ul>
+        <li><strong>SortTracker</strong> — SORT-style: a lightweight constant-velocity filter per track, greedy IoU association, and a lifecycle (tentative → confirmed → lost) that suppresses one-frame false positives.</li>
+        <li><strong>Current occupancy</strong> — the number of confirmed tracks in this frame, smoothed by a sliding-window median so the number does not flicker.</li>
+        <li><strong>Cumulative unique count</strong> — every distinct track ID ever confirmed.</li>
+        <li><strong>LineCounter</strong> — directional in/out crossings of a virtual tripwire, from segment intersection with each track's path.</li>
+        <li><strong>ZoneCounter</strong> — per-zone occupancy and dwell time via point-in-polygon on the track's feet.</li>
+        <li><strong>Re-identification</strong> — each newly confirmed track is embedded and matched against a gallery, so the same person returning after an occlusion reuses their ID instead of inflating the unique count.</li>
+    </ul>
+    <p>
+        The whole loop is covered by unit tests and has been verified on
+        still images and a pedestrian clip: the classic two-image checks
+        return the expected counts, and a 100-frame segment of the standard
+        test video reports about seven people concurrent and 21 distinct.
+    </p>
+
+    <h2>The no-ONNX path</h2>
+    <p>
+        A companion tool, <code>DetectorDistiller</code>, uses the ONNX
+        teachers once, offline, to auto-label frames and train the in-house
+        students: YOLOX distils into the HOG person detector, RetinaFace into
+        a HOG face detector, and ArcFace into a distilled face embedder. After
+        distillation the detectors run with no ONNX runtime and no downloads
+        — lower accuracy than the teachers, in exchange for transparency and
+        zero external weights at inference.
+    </p>
+
+    <h2>The device layer</h2>
+    <p>
+        Under everything sits <code>PredictiveCoding.Device</code>: device
+        tensors that pair a host buffer with a device pointer, a bucketed
+        CUDA allocator with pinned host memory, per-thread streams, and a
+        GEMM provider. The design rule is that <strong>models never
+        reference a backend</strong> — they use provider interfaces, and a
+        backend registers itself:
+    </p>
+    <pre><code>DeviceRegistry.EnableCuda();                 // route matmuls to cuBLAS if a GPU is present
+var g = host.ToDevice(Device.Cuda());        // upload (CUDA→CPU fallback automatic)
+using var c = TensorOps.MatMul(g, b);        // cuBLAS GEMM
+var result = c.ToHostTensor();               // download</code></pre>
+    <p>
+        There is no custom native library to build: the CUDA path P/Invokes
+        the standard toolkit libraries (<code>cudart</code>,
+        <code>cublas</code>), with a resolver mapping logical names to their
+        version-suffixed files. With no GPU, everything falls back to the
+        CPU — SIMD and multithreaded — and the code is unchanged. New
+        accelerators (ROCm, or a real NCCL binding) are a matter of
+        implementing the provider interfaces.
+    </p>
+
+    <h2>Licensing, on purpose</h2>
+    <p>
+        The documentation is explicit about detector weights: Ultralytics
+        YOLO models are AGPL-3.0 and are avoided; <strong>YOLOX</strong>
+        (Apache-2.0) is the recommended permissive default, with RT-DETR and
+        torchvision detectors as permissive fallbacks. The same care runs
+        through the repo — dependency choices are argued in the docs, not
+        just made.
+    </p>
+</div>
+
+<partial name="_PredictiveCodingDocsFooter" />

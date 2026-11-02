@@ -1,0 +1,126 @@
+@page "/predictive-coding/llm"
+@{
+    ViewData["Title"] = "Language — Predictive Coding";
+    ViewData["Description"] = "A complete decoder-only Transformer stack in managed .NET: byte-level and BPE tokenizers, RoPE, GQA and MLA attention, SwiGLU, KV cache, beam search, continuous batching, and a gradient-checked reverse-mode autodiff trainer.";
+    ViewData["DocsKey"] = "llm";
+    ViewData["DocsGitHub"] = "https://github.com/matteofabbri/PredicitiveCoding/blob/main/docs/06-llm.md";
+}
+
+<partial name="_PredictiveCodingDocsNav" />
+
+<header class="page-head docs-head">
+    <div>
+        <h1>Language</h1>
+        <p class="lede">
+            A complete decoder-only Transformer stack, built on the same
+            tensor primitives as the rest of the solution — and deliberately
+            not on its free-energy rule, because Transformers need gradients.
+            Everything in managed .NET, no Python.
+        </p>
+    </div>
+</header>
+
+<div class="docs-body prose">
+    <h2>Why a second engine</h2>
+    <p>
+        The core of this codebase learns locally, without backpropagation.
+        That is its whole point — but Transformers are trained with
+        cross-entropy and reverse-mode gradients. Rather than bend the core,
+        the LLM project adds a separate, small <strong>autodiff
+        engine</strong>: a tensor carrying data, gradient and a backward
+        function, with ops for matrix multiply, causal softmax, layer norm,
+        dropout and cross-entropy, and a topological backward pass. The
+        trainable model on top of it is a single-block Transformer whose
+        gradients are <strong>checked against numerical differences</strong>
+        in the test suite.
+    </p>
+
+    <h2>Tokenization</h2>
+    <table>
+        <thead><tr><th>Tokenizer</th><th>What it is</th></tr></thead>
+        <tbody>
+            <tr><td><code>ByteTokenizer</code></td><td>Lossless byte-level with BOS/EOS/PAD/UNK — nothing unrepresentable.</td></tr>
+            <tr><td><code>BpeTokenizer</code></td><td>A <em>trainable</em> byte-level BPE: it learns its merges from a corpus and encodes greedily.</td></tr>
+            <tr><td><code>WordPieceTokenizer</code></td><td>Trainable greedy longest-match subword, the <code>##</code>-piece scheme.</td></tr>
+        </tbody>
+    </table>
+
+    <h2>The model</h2>
+    <p>
+        <code>GptModel</code> embeds, runs the blocks, applies the final norm
+        and emits logits, stepping one token at a time with a KV cache. The
+        pieces inside are the ones the current generation of open models use:
+    </p>
+    <ul>
+        <li><strong>Attention</strong> — multi-head, grouped-query (GQA) or multi-query; rotary (RoPE) or ALiBi positions; optional QK-Norm and attention soft-capping; a flash-style online softmax.</li>
+        <li><strong>Latent attention (MLA)</strong> — the DeepSeek-V2/V3 trick: the cache stores a compressed latent plus a decoupled-RoPE key instead of full K/V, shrinking memory per token.</li>
+        <li><strong>Feed-forward</strong> — classic GELU or gated SwiGLU.</li>
+        <li><strong>Norms</strong> — LayerNorm or RmsNorm; optional final-logit soft-capping (Gemma 2).</li>
+        <li><strong>Presets</strong> — <code>ModernPresets.Llama3Style</code> (RMSNorm + SwiGLU + RoPE + GQA) and <code>ModernPresets.DeepSeekStyle</code> (adds MLA, QK-Norm and soft-caps) so a modern decoder is one constructor call.</li>
+    </ul>
+
+    <h2>Generation</h2>
+    <ul>
+        <li><strong>Sampler</strong> — greedy, temperature, top-k, top-p, plus repetition, frequency and presence penalties.</li>
+        <li><strong>TextGenerator</strong> — the autoregressive loop with prefill.</li>
+        <li><strong>BeamSearch</strong> — length-normalised, forking KV caches per hypothesis.</li>
+        <li><strong>BatchedGenerator</strong> — N independent sequences in lockstep.</li>
+        <li><strong>ContinuousBatcher</strong> — an in-process serving scheduler: admits sequences on free slots, evicts on finish.</li>
+        <li><strong>ChatTemplate</strong> — role-tagged prompt formatting.</li>
+    </ul>
+
+    <h2>Training</h2>
+    <p>
+        The autodiff path is complete: Adam and AdamW, global-norm gradient
+        clipping, a warmup-plus-cosine learning-rate schedule, a
+        gradient-accumulating trainer, and binary checkpoints that save and
+        resume. Data comes as shifted next-token windows, either materialised
+        or streamed line-by-line for corpora that do not fit in memory. Loss
+        and perplexity are computed by the same cross-entropy op.
+    </p>
+
+    <h2>Infrastructure</h2>
+    <ul>
+        <li><strong>Mixed precision</strong> — fp16 via <code>System.Half</code> and bf16, stored in 16 bits, accumulated in 32.</li>
+        <li><strong>GEMM</strong> — SIMD and multithreaded on CPU, with a pluggable provider interface so CUDA slots in without touching model code.</li>
+        <li><strong>Tensor parallelism</strong> — column- and row-parallel sharded linear layers over a device mesh.</li>
+        <li><strong>Quantization</strong> — int8 matrices and packed int4.</li>
+    </ul>
+
+    <h2>The modern-techniques map</h2>
+    <table>
+        <thead><tr><th>Technique</th><th>Paper</th><th>Switch</th></tr></thead>
+        <tbody>
+            <tr><td>Multi-head Latent Attention</td><td>DeepSeek-V3 (arXiv:2412.19437)</td><td><code>AttentionKind.Latent</code></td></tr>
+            <tr><td>SwiGLU</td><td>Shazeer 2020</td><td><code>FeedForwardKind.SwiGlu</code></td></tr>
+            <tr><td>RMSNorm</td><td>Zhang &amp; Sennrich 2019</td><td><code>NormKind.RmsNorm</code></td></tr>
+            <tr><td>RoPE</td><td>Su et al. 2021</td><td><code>PositionalKind.Rotary</code></td></tr>
+            <tr><td>QK-Norm</td><td>OLMo 2 / Gemma 2</td><td><code>UseQkNorm</code></td></tr>
+            <tr><td>Logit soft-capping</td><td>Gemma 2</td><td><code>AttnLogitSoftcap</code>, <code>FinalLogitSoftcap</code></td></tr>
+            <tr><td>Grouped-query attention</td><td>Llama 3</td><td><code>NumKvHeads</code></td></tr>
+        </tbody>
+    </table>
+
+    <h2>Two examples</h2>
+    <pre><code>// A modern decoder, DeepSeek-V3 style.
+var model = new GptModel(ModernPresets.DeepSeekStyle(vocab: 260), new Random(0));
+var tok   = new ByteTokenizer();
+string text = new TextGenerator(model, tok)
+    .Generate("hello", new SamplingOptions { MaxNewTokens = 64, TopP = 0.9f });
+
+// Train the autodiff Transformer.
+var lm  = new TinyTransformerLM(vocab: 5, dim: 8, ff: 16, new Random(0), dropout: 0.1f);
+var opt = new Adam(weightDecay: 0.01f);
+float loss = Trainer.Step(lm, batch, opt, learningRate: 3e-4f, clipNorm: 1f);</code></pre>
+
+    <p>
+        <strong>An honest caveat</strong>, straight from the documentation:
+        freshly constructed <code>GptModel</code> weights are random —
+        meaningful text requires the autodiff training path. The tests assert
+        shapes, finiteness and gradient correctness, not prose quality. The
+        point of the project is the engineering: a complete, readable,
+        modern LLM stack where every technique is a switch you can turn off.
+    </p>
+</div>
+
+<partial name="_PredictiveCodingDocsFooter" />

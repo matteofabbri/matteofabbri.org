@@ -1,0 +1,163 @@
+@page "/predictive-coding"
+@{
+    ViewData["Title"] = "Predictive Coding";
+    ViewData["Description"] = "Predictive Coding — a backprop-free, brain-inspired machine-learning research codebase in pure .NET: free-energy minimisation, a model of the visual cortex, a Thousand Brains system, a complete Transformer stack and live people counting.";
+}
+
+<header class="page-head project-head">
+    <div>
+        <p class="eyebrow">Research</p>
+        <h1>Predictive Coding</h1>
+        <p class="lede">
+            A .NET 10 research codebase built on one idea: the brain is a
+            prediction machine, and perception and learning are free-energy
+            minimisation. No backpropagation in the core, no Python — one
+            hierarchical generative engine that grows into a model of the
+            visual cortex, a Thousand Brains sensorimotor system, a complete
+            Transformer stack and a live vision pipeline.
+        </p>
+    </div>
+</header>
+
+<p class="project-intro">
+    Every layer of the stack holds a latent state, generates a top-down
+    prediction of the layer below, and learns only from the gap between what
+    it predicted and what it received — a rule whose every term is available
+    locally, at the layer that computes it. That single locality property is
+    what lets the same engine become a classifier, a memory, an agent, a
+    cortex. The code and the full documentation are on
+    <a href="https://github.com/matteofabbri/PredicitiveCoding" target="_blank" rel="noopener">GitHub</a>.
+</p>
+
+<ol class="feature-list">
+    <li class="feature">
+        <span class="feature-number" aria-hidden="true">01</span>
+        <div class="feature-body">
+            <h2>Learning without backpropagation</h2>
+            <p class="feature-role">Local Hebbian rules</p>
+            <p>
+                The core network settles its hidden states by minimising free
+                energy, then updates every weight from quantities available at
+                that layer alone — its own prediction error and the activity
+                of the layer above. No global backward pass, no autodiff
+                graph, no GPU required.
+            </p>
+        </div>
+    </li>
+
+    <li class="feature">
+        <span class="feature-number" aria-hidden="true">02</span>
+        <div class="feature-body">
+            <h2>One engine, many architectures</h2>
+            <p class="feature-role">Composition, not special cases</p>
+            <p>
+                Modular hierarchies, active inference, temporal cascades,
+                modern Hopfield memories, graph predictive coding, a
+                mixture-of-experts gated by free energy, spiking networks —
+                all built by wrapping the same core <code>Network</code>,
+                without a single new learning algorithm.
+            </p>
+        </div>
+    </li>
+
+    <li class="feature">
+        <span class="feature-number" aria-hidden="true">03</span>
+        <div class="feature-body">
+            <h2>A cortex in code</h2>
+            <p class="feature-role">36 brain regions</p>
+            <p>
+                A predictive-coding visual cortex (V1→V2→V4→IT) plus models
+                of the hippocampus and grid cells, thalamus and basal
+                ganglia, dopamine and noradrenaline, the amygdala, Broca and
+                Wernicke — each one an assembly of already-tested
+                primitives, not a new model to debug.
+            </p>
+        </div>
+    </li>
+
+    <li class="feature">
+        <span class="feature-number" aria-hidden="true">04</span>
+        <div class="feature-body">
+            <h2>A Thousand Brains system</h2>
+            <p class="feature-role">Hawkins / Numenta, in C#</p>
+            <p>
+                Cortical columns that each learn a model of an object in
+                their own reference frames and vote to reach consensus — the
+                published Thousand Brains science implemented paper by paper,
+                with pose-invariant recognition in 2-D and 3-D and a
+                sensorimotor loop that runs on real images.
+            </p>
+        </div>
+    </li>
+
+    <li class="feature">
+        <span class="feature-number" aria-hidden="true">05</span>
+        <div class="feature-body">
+            <h2>A Transformer stack, and a camera feed</h2>
+            <p class="feature-role">Language and vision</p>
+            <p>
+                A complete decoder-only Transformer — BPE tokenizer, RoPE,
+                GQA, MLA, SwiGLU, KV cache, beam search, an autodiff
+                trainer — and a live people counter: YOLOX detection, SORT
+                tracking, re-identification, on CPU or CUDA.
+            </p>
+        </div>
+    </li>
+</ol>
+
+<section class="docs-landing-head" aria-labelledby="pc-docs">
+    <h2 id="pc-docs">Documentation</h2>
+    <p>
+        The project explained section by section: the mathematics it rests
+        on, the architectures it grows, the cortex it models, the language
+        stack it trains and the vision pipeline it runs.
+    </p>
+</section>
+
+<ul class="docs-cards">
+    <li>
+        <a class="docs-card" href="/predictive-coding/theory">
+            <h3>The theory</h3>
+            <p>Free energy, top-down predictions, the two nested updates and why the learning rule is local.</p>
+            <span class="docs-card-more">Read <span aria-hidden="true">→</span></span>
+        </a>
+    </li>
+    <li>
+        <a class="docs-card" href="/predictive-coding/architectures">
+            <h3>Architectures</h3>
+            <p>The core engine — and the brain-inspired networks composed on top of it.</p>
+            <span class="docs-card-more">Read <span aria-hidden="true">→</span></span>
+        </a>
+    </li>
+    <li>
+        <a class="docs-card" href="/predictive-coding/cortex">
+            <h3>Cortex &amp; brain</h3>
+            <p>A predictive-coding visual cortex, 35 more regions and the Thousand Brains system.</p>
+            <span class="docs-card-more">Read <span aria-hidden="true">→</span></span>
+        </a>
+    </li>
+    <li>
+        <a class="docs-card" href="/predictive-coding/llm">
+            <h3>Language</h3>
+            <p>A complete decoder-only Transformer stack, from tokenizer to beam search.</p>
+            <span class="docs-card-more">Read <span aria-hidden="true">→</span></span>
+        </a>
+    </li>
+    <li>
+        <a class="docs-card" href="/predictive-coding/vision">
+            <h3>Vision &amp; GPU</h3>
+            <p>Live people counting — detect, track, count — and the CPU/CUDA device layer.</p>
+            <span class="docs-card-more">Read <span aria-hidden="true">→</span></span>
+        </a>
+    </li>
+</ul>
+
+<p class="project-note">
+    The whole codebase — core engine, cortex, brain, LLM, vision and the test
+    suite behind them — lives with the source, together with the documentation
+    these pages are based on. Pure managed .NET 10: it builds and runs without
+    Python and falls back to the CPU when no GPU is present.
+    <a class="feature-link" href="https://github.com/matteofabbri/PredicitiveCoding" target="_blank" rel="noopener">
+        matteofabbri/PredicitiveCoding on GitHub <span aria-hidden="true">↗</span>
+    </a>
+</p>

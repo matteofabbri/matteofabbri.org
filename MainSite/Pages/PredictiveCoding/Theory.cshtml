@@ -1,0 +1,143 @@
+@page "/predictive-coding/theory"
+@{
+    ViewData["Title"] = "The theory — Predictive Coding";
+    ViewData["Description"] = "The mathematics of predictive coding: free-energy minimisation, top-down predictions with precision weighting, the two nested updates — inference and local Hebbian learning — and classification as energy minimisation.";
+    ViewData["DocsKey"] = "theory";
+    ViewData["DocsGitHub"] = "https://github.com/matteofabbri/PredicitiveCoding/blob/main/docs/02-predictive-coding.md";
+}
+
+<partial name="_PredictiveCodingDocsNav" />
+
+<header class="page-head docs-head">
+    <div>
+        <h1>The theory</h1>
+        <p class="lede">
+            Predictive coding (Rao &amp; Ballard 1999; Friston 2005; Bogacz
+            2017) frames perception and learning as free-energy minimisation.
+            This is the mathematics every other project in the codebase rests
+            on — and the reason its learning rules never need a backward pass.
+        </p>
+    </div>
+</header>
+
+<div class="docs-body prose">
+    <h2>The model</h2>
+    <p>
+        A hierarchical network has <code>L</code> layers. Each layer
+        <code>l</code> holds a latent state vector <code>μ_l</code> and
+        generates a <strong>top-down prediction</strong> of the layer below:
+    </p>
+    <pre><code>pred_{l-1} = f(W_l · μ_l + b_l)</code></pre>
+    <p>
+        where <code>f</code> is a non-linearity (Tanh by default) and
+        <code>W_l</code>, <code>b_l</code> are the generative weights and
+        biases. The <strong>prediction error</strong> at layer
+        <code>l−1</code> is precision-weighted:
+    </p>
+    <pre><code>ε_{l-1} = Π_{l-1} · (μ_{l-1} − pred_{l-1})</code></pre>
+    <p>
+        <code>Π</code> is a scalar or diagonal <strong>precision</strong> —
+        the inverse variance, that is, how much the network trusts that
+        error. The whole network then minimises the <strong>free
+        energy</strong>, the sum of squared prediction errors:
+    </p>
+    <pre><code>F = ½ Σ_l ‖ε_l‖²</code></pre>
+    <p>
+        In this framing the sensory input is not something to classify; it is
+        something to <em>explain</em>. Perception is the process of finding
+        the latent states that make the top-down predictions match it, and
+        learning is the process of making the predictions better.
+    </p>
+
+    <h2>Two nested updates</h2>
+    <p>
+        <strong>Inference</strong> is fast and runs per example: settle the
+        hidden states by gradient descent on <code>F</code>, holding the
+        weights fixed:
+    </p>
+    <pre><code>μ_l ← μ_l − η_s · ( ε_l − W_lᵀ · δ_{l-1} + λ_act · sign(μ_l) )
+δ_{l-1} = f'(pre_{l-1}) ⊙ ε_{l-1}</code></pre>
+    <p>
+        The input layer <code>μ_0</code> is <strong>clamped</strong> to the
+        datum; during supervised learning the top layer is clamped to the
+        label. Everything in between is free to move until the network
+        settles.
+    </p>
+    <p>
+        <strong>Learning</strong> is slow and happens after inference has
+        settled: the weights update with a <strong>local Hebbian</strong>
+        rule — no backpropagation:
+    </p>
+    <pre><code>ΔW_l = η_w · δ_{l-1} ⊗ μ_lᵀ
+Δb_l = η_w · δ_{l-1}</code></pre>
+    <p>
+        Every term in that update is available locally at a layer: the
+        product of its own prediction error and the activity of the layer
+        above. This is the property the whole codebase exploits — the same
+        rule trains a classifier, a memory, an agent and a cortex, because
+        none of them needs to see beyond their own synapse.
+    </p>
+
+    <h2>Classification without a softmax head</h2>
+    <p>
+        There is no output layer with a softmax. To classify, the network
+        clamps the input, tries each candidate label at the top, and keeps
+        the one that settles to the lowest free energy:
+    </p>
+    <pre><code>c* = argmin_c  F( x, one-hot(c) )</code></pre>
+    <p>
+        The class that needs the least correction to explain the input wins.
+        This <code>argmin F</code> principle reappears everywhere in the
+        solution: the mixture-of-experts gates on free energy, the cortex
+        readout uses it, and the LLM's conventional cross-entropy training is
+        a deliberate departure from it.
+    </p>
+
+    <h2>Variants implemented in the core</h2>
+    <table>
+        <thead>
+            <tr><th>Idea</th><th>Reference</th><th>Where</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>Hierarchical predictive coding</td><td>Rao &amp; Ballard 1999</td><td><code>Network</code></td></tr>
+            <tr><td>Free-energy principle</td><td>Friston 2005</td><td><code>Layer.LocalEnergy</code></td></tr>
+            <tr><td>Diagonal precision, L2 decay</td><td>Huang &amp; Rao 2011</td><td><code>UseDiagonalPrecision</code>, <code>WeightDecay</code></td></tr>
+            <tr><td>Feedforward Gist warm-start</td><td>Haider et al. 2024</td><td><code>UseFeedforwardGistInit</code></td></tr>
+            <tr><td>L1 activity sparsity</td><td>Keller &amp; Mrsic-Flogel 2018</td><td><code>ActivityRegularization</code></td></tr>
+            <tr><td>Temporal continuity</td><td>Friston 2008</td><td><code>TemporalNetwork</code></td></tr>
+        </tbody>
+    </table>
+    <p>
+        Each of these is a configuration switch on the same engine, not a
+        fork: a diagonal precision changes how errors are weighted, the gist
+        warm-start seeds the hidden states with a single top-down pass before
+        the iterative loop, and the temporal variants inject the previous
+        timestep's latent as a prior.
+    </p>
+
+    <h2>Why locality matters</h2>
+    <p>
+        Because learning is local and energy-based, the same engine
+        generalises cleanly to modular hierarchies, temporal cascades,
+        attractor memories, active inference and mixtures of experts — all of
+        which appear in the
+        <a href="/predictive-coding/architectures">Expanded</a> and
+        <a href="/predictive-coding/cortex">Cortex</a> projects without ever
+        introducing global backpropagation. It is also the property that makes
+        the system biologically plausible: no neuron anywhere needs to know
+        about the loss function of the whole network.
+    </p>
+
+    <h2>References</h2>
+    <ul>
+        <li>Rao, R. &amp; Ballard, D. (1999). <em>Predictive coding in the visual cortex.</em> Nature Neuroscience.</li>
+        <li>Friston, K. (2005). <em>A theory of cortical responses.</em> Philosophical Transactions of the Royal Society B.</li>
+        <li>Bogacz, R. (2017). <em>A tutorial on the free-energy framework for modelling perception and learning.</em> Journal of Mathematical Psychology.</li>
+        <li>Whittington, J. &amp; Bogacz, R. (2017). <em>An approximation of the error backpropagation algorithm in a predictive coding network with local Hebbian synaptic plasticity.</em> Neural Computation.</li>
+        <li>Huang, Y. &amp; Rao, R. (2011). <em>Predictive coding under the free-energy principle.</em> Phil. Trans. R. Soc. B.</li>
+        <li>Haider, P. et al. (2024). <em>Feedforward Gist initialisation for predictive coding.</em></li>
+        <li>Keller, G. &amp; Mrsic-Flogel, T. (2018). <em>Predictive coding: a computational and biological perspective.</em> Neuron.</li>
+    </ul>
+</div>
+
+<partial name="_PredictiveCodingDocsFooter" />

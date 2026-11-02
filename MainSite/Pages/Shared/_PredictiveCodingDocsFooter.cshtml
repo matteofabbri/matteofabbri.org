@@ -1,0 +1,41 @@
+@{
+    // Pie' di pagina dell'area /predictive-coding: precedente/successivo rispetto a
+    // ViewData["DocsKey"] e il collegamento al documento completo su GitHub,
+    // che ogni pagina passa tramite ViewData["DocsGitHub"].
+    string docsKey = ViewData["DocsKey"] as string ?? "";
+    int docsIndex = PredictiveCodingDocsArea.IndexOf(docsKey);
+    var docsPages = PredictiveCodingDocsArea.Pages;
+    var docsPrev = docsIndex > 0 ? docsPages[docsIndex - 1] : null;
+    var docsNext = docsIndex >= 0 && docsIndex < docsPages.Count - 1 ? docsPages[docsIndex + 1] : null;
+    string? docsGitHub = ViewData["DocsGitHub"] as string;
+}
+<nav class="docs-footer" aria-label="Documentation pages">
+    <div class="docs-prevnext">
+        @if (docsPrev is not null)
+        {
+            <a class="docs-prevnext-link" href="@docsPrev.Href">
+                <span class="docs-prevnext-label">Previous</span>
+                <span class="docs-prevnext-title">@docsPrev.Label</span>
+            </a>
+        }
+        else
+        {
+            <span aria-hidden="true"></span>
+        }
+        @if (docsNext is not null)
+        {
+            <a class="docs-prevnext-link next" href="@docsNext.Href">
+                <span class="docs-prevnext-label">Next</span>
+                <span class="docs-prevnext-title">@docsNext.Label</span>
+            </a>
+        }
+    </div>
+    @if (docsGitHub is not null)
+    {
+        <p class="docs-gh">
+            The full reference for this page — the mathematics, the papers and every
+            configuration switch — lives with the source:
+            <a href="@docsGitHub" target="_blank" rel="noopener">Predictive Coding documentation on GitHub <span aria-hidden="true">↗</span></a>.
+        </p>
+    }
+</nav>

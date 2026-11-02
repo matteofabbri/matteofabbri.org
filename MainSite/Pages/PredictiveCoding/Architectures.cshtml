@@ -1,0 +1,181 @@
+@page "/predictive-coding/architectures"
+@{
+    ViewData["Title"] = "Architectures — Predictive Coding";
+    ViewData["Description"] = "The core predictive-coding engine — Layer, Network, Trainer, FASTER-KV persistence — and the brain-inspired architectures composed on top of it: hierarchies, active inference, Hopfield memories, graph coding, mixture of experts, spiking networks.";
+    ViewData["DocsKey"] = "architectures";
+    ViewData["DocsGitHub"] = "https://github.com/matteofabbri/PredicitiveCoding/blob/main/docs/04-expanded.md";
+}
+
+<partial name="_PredictiveCodingDocsNav" />
+
+<header class="page-head docs-head">
+    <div>
+        <h1>The engine and its architectures</h1>
+        <p class="lede">
+            One dependency-free core, and everything above it is composition:
+            the brain-inspired networks are small wrappers that reuse the same
+            tested primitives, each adding an idea — memory, action, time,
+            attention, experts — without adding a learning algorithm.
+        </p>
+    </div>
+</header>
+
+<div class="docs-body prose">
+    <h2>The core engine</h2>
+    <p>
+        The foundation lives in four folders: <code>Core/</code> holds the
+        tensor primitives (<code>DenseTensor&lt;T&gt;</code> and SIMD helpers
+        built on <code>System.Numerics.Tensors</code>), <code>Model/</code>
+        the <code>Layer</code> and its FASTER-KV store, <code>Networks/</code>
+        the <code>Network</code> engine, <code>Training/</code> the epoch
+        loop. Each layer's state is a handful of tensors — the latent
+        <code>Mu</code>, the generative weights and bias, the prediction and
+        its error — persisted in a
+        <strong>FASTER-KV</strong> store keyed by layer index, with lazy
+        writes flushed once per epoch for CIFAR-scale runs.
+    </p>
+    <p>
+        The layer layout is fixed by convention: layer 0 is the
+        <strong>sensory</strong> layer, clamped to the input; the top layer is
+        the <strong>label</strong>, clamped only during training and
+        prediction; everything between is free hidden state. The engine is
+        thread-safe via a reader–writer lock: inference takes a read lock,
+        learning and energy-based prediction take a write lock.
+    </p>
+    <pre><code>var cfg = new NetworkConfig { LayerSizes = [784, 256, 10], Path = "./data" };
+using var net = new Network(cfg, new Random(42));
+net.Learn(image, oneHotLabel, inferenceSteps: 20);   // per sample
+int cls = net.Predict(image, 20);                    // argmin-energy class</code></pre>
+    <p>
+        That is the whole API surface for a classifier. Everything else in
+        this page is built from it.
+    </p>
+
+    <h2>The advanced architectures</h2>
+    <p>
+        Each module below is a small <code>IDisposable</code> wrapper with a
+        paired immutable config record, composed around the core
+        <code>Network</code>:
+    </p>
+    <table>
+        <thead>
+            <tr><th>Module</th><th>Idea</th></tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><strong>HierarchicalNetwork</strong></td>
+                <td>A deep modular hierarchy: a stack of autonomous generative PCNs where each module encodes the <em>latent</em> of the one below — greedy layer-wise learning, like a hierarchical VAE without backprop.</td>
+            </tr>
+            <tr>
+                <td><strong>ActiveNetwork</strong></td>
+                <td>Active inference: a world-model PCN predicts the next observation from <code>[obs ⊕ action]</code>; a policy picks the action that minimises expected free energy toward a goal (Rao 2024; Friston 2017).</td>
+            </tr>
+            <tr>
+                <td><strong>DeepRecurrentNetwork</strong></td>
+                <td>A cascade of temporal PC stages; each stage carries its own <code>μ^{t-1}</code> and feeds its latent up the stack.</td>
+            </tr>
+            <tr>
+                <td><strong>GatedStateNetwork</strong></td>
+                <td>LSTM-style per-unit write gates over a working-memory cell, injected as the top-layer prior — surprise-modulated retention.</td>
+            </tr>
+            <tr>
+                <td><strong>HopfieldNetwork</strong></td>
+                <td>A generative PCN plus a modern (continuous) Hopfield attractor over the latent (Ramsauer 2021): pattern completion from partial cues.</td>
+            </tr>
+            <tr>
+                <td><strong>GraphPredictiveNetwork</strong></td>
+                <td>Predictive coding over arbitrary graphs: a shared edge-predictor learns <code>node → neighbour</code>; inference is message passing by error minimisation.</td>
+            </tr>
+            <tr>
+                <td><strong>HierarchicalMixtureOfExperts</strong></td>
+                <td>A two-level energy-gated MoE (Jordan &amp; Jacobs 1994): within-group and across-group softmax over free energies, with emergent specialisation and no supervision.</td>
+            </tr>
+            <tr>
+                <td><strong>SpikingNetwork</strong></td>
+                <td>A self-contained LIF spiking PCN: rate-coded states, errors as firing-rate differences, local Hebbian learning — the neuromorphic reading of the same rule.</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>Memory, modality and routing</h2>
+    <table>
+        <thead>
+            <tr><th>Module</th><th>Idea</th></tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><strong>GenerativeNetwork</strong></td>
+                <td>A VAE-like PCN used in both directions: <code>Encode</code> (recognition), <code>Decode</code> (generation), <code>Sample</code>; a Gaussian top-layer prior plays the KL role.</td>
+            </tr>
+            <tr>
+                <td><strong>MemoryNetwork + MemoryBank</strong></td>
+                <td>A hippocampal episodic prior: a cosine-similarity key-value store that biases the top-layer prior before inference.</td>
+            </tr>
+            <tr>
+                <td><strong>MultiModalNetwork</strong></td>
+                <td>N modality encoders into a shared associative PCN; cross-modal completion (hear the bell, see the bell).</td>
+            </tr>
+            <tr>
+                <td><strong>RoutedNetwork</strong></td>
+                <td>A learned router PCN blended with per-sample free-energy gating — amortised mixture of experts.</td>
+            </tr>
+        </tbody>
+    </table>
+    <p>
+        A few networks that started in the core were deliberately moved out to
+        keep the core minimal: <code>TemporalNetwork</code> (Friston 2008
+        temporal continuity), <code>MixtureOfExperts</code>,
+        <code>TemporalMixtureOfExperts</code>, <code>EnsembleNetwork</code>
+        (Bayesian model averaging over PCN members),
+        <code>AttentiveNetwork</code> (per-unit learnable attention gates on
+        the errors) and <code>ResidualNetwork</code> (two-hop skip connections
+        in the PC hierarchy). They now live in
+        <code>PredictiveCoding.Expanded</code> and the core stays
+        dependency-free.
+    </p>
+
+    <h2>Energy as the universal currency</h2>
+    <p>
+        What makes the composition work is that every module speaks the same
+        language: settled free energy. The mixture-of-experts gate is a
+        softmax over negative energies, so the expert that explains the input
+        best takes the update:
+    </p>
+    <pre><code>g_i = softmax(−β · F_i)          i* = argmin_i  min_c  F_i(x, one-hot(c))</code></pre>
+    <p>
+        Experts specialise purely through differential free-energy
+        minimisation — no learned router, no supervision. The same gating
+        helper is reused by the cortex's <code>Thalamus</code> (precision
+        allocation across areas) and <code>BasalGanglia</code> (go/no-go
+        action selection), which is the kind of reuse that only works because
+        the primitive — a number that means "how surprised is this model" —
+        is shared everywhere.
+    </p>
+
+    <h2>Two worked examples</h2>
+    <p>Modern Hopfield pattern completion — store prototypes, recall from a noisy cue:</p>
+    <pre><code>using var net = new HopfieldNetwork(new HopfieldNetworkConfig {
+    NetworkConfig = new NetworkConfig { LayerSizes = [144, 96, 48] },
+    RetrievalBeta = 8f, RetrievalIterations = 5, BasePath = "./hopfield",
+}, new Random(0));
+
+foreach (var p in prototypes) { net.Learn(p, 20); net.Store(p, 20); }
+var clean = net.Recall(noisyCue, 20);   // snap to nearest attractor, then decode</code></pre>
+    <p>Active inference — learn a world model, then act to reach a goal:</p>
+    <pre><code>var cfg = new ActiveNetworkConfig {
+    ObservationDim = 2, ActionCount = 4,
+    WorldModelConfig = new NetworkConfig { LayerSizes = [6, 16, 2] },
+};
+using var agent = new ActiveNetwork(cfg, new Random(0));
+agent.Observe(state, action, nextState, 12);          // learn a transition
+int a = agent.Act(state, goal, 12);                   // minimise expected free energy</code></pre>
+
+    <h2>What holds it together</h2>
+    <ul>
+        <li><strong>Locality</strong> — core learning is Hebbian; nothing propagates gradients through the PC graph.</li>
+        <li><strong>Composition</strong> — higher modules wrap lower ones; the cortical areas in the next page are mostly these networks wired together.</li>
+        <li><strong>Dependency-free core</strong> — the engine needs no framework and falls back to plain CPU SIMD everywhere.</li>
+    </ul>
+</div>
+
+<partial name="_PredictiveCodingDocsFooter" />
