@@ -1,5 +1,7 @@
+using System.Text;
 using MainSite.Pages;
 using MainSite.RequestLogging;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -112,6 +114,7 @@ public sealed class RequestsModelTests : IDisposable
         Assert.True(model.VisitorBuckets.Count >= 30);
         Assert.Equal(model.VisitorBuckets, model.VisitorBuckets.OrderBy(bucket => bucket.Start));
         Assert.Equal(2, model.VisitorBuckets[^1].Visitors);
+        Assert.Equal(3, model.VisitorBuckets[^1].Requests);
 
         var rome = TimeZoneInfo.FindSystemTimeZoneById("Europe/Rome");
         var twoDaysAgo = DateOnly.FromDateTime(
@@ -119,8 +122,10 @@ public sealed class RequestsModelTests : IDisposable
         Assert.Equal(1, model.VisitorBuckets.Single(bucket =>
             DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(bucket.Start, rome).DateTime) == twoDaysAgo).Visitors);
 
-        var bars = model.ChartBars();
-        Assert.Equal(model.VisitorBuckets.Count, bars.Count);
+        var points = model.ChartPoints();
+        Assert.Equal(model.VisitorBuckets.Count, points.Count);
+        Assert.Contains(points, point => point.Visitors == 2 && point.Requests == 3);
+        Assert.Contains("\"visitors\":", model.ChartJson());
 
         await model.OnGetAsync(30, 1, null, null, "0123456789abcdef", null, default);
         Assert.Equal(1, model.UniqueVisitors);
@@ -145,7 +150,7 @@ public sealed class RequestsModelTests : IDisposable
         Assert.Equal(1, model.Days);
         Assert.Equal("last 24 hours", model.PeriodLabel);
         Assert.True(model.HourlyPeriod);
-        Assert.Equal("Unique visitors per hour", model.ChartTitle);
+        Assert.Equal("Requests and visitors per hour", model.ChartTitle);
 
         // Barre orarie che coprono tutta la finestra: 24, più l'ora parziale in corso.
         Assert.InRange(model.VisitorBuckets.Count, 24, 25);
@@ -159,9 +164,55 @@ public sealed class RequestsModelTests : IDisposable
         Assert.Equal(3, model.UniqueVisitors);
         Assert.Equal(3, model.VisitorBuckets.Sum(bucket => bucket.Visitors));
 
-        var bars = model.ChartBars();
-        Assert.Equal(model.VisitorBuckets.Count, bars.Count);
-        Assert.Contains(bars, bar => bar.TickLabel is not null && bar.TickLabel.Length == 5);
+        var points = model.ChartPoints();
+        Assert.Equal(model.VisitorBuckets.Count, points.Count);
+        Assert.All(points, point => Assert.Equal(5, point.Label.Length));
+    }
+
+    [Fact]
+    public async Task The_csv_export_contains_the_filtered_rows()
+    {
+        var now = DateTimeOffset.UtcNow;
+        await _store.InsertManyAsync(
+        [
+            Entry("req-a", now.AddMinutes(-1), "IT", "203.0.113.7", "0123456789abcdef", "Mozilla/5.0, \"quoted\""),
+            Entry("req-b", now.AddMinutes(-2), "US", "198.51.100.9", "fedcba9876543210", "curl/8"),
+        ], default);
+
+        var model = CreateModel();
+        var result = Assert.IsType<FileContentResult>(
+            await model.OnGetCsvAsync(30, "IT", null, null, null, default));
+
+        Assert.Equal("text/csv", result.ContentType?.Split(';')[0]);
+        Assert.EndsWith(".csv", result.FileDownloadName);
+
+        string csv = Encoding.UTF8.GetString(result.FileContents);
+        Assert.StartsWith("\uFEFF", csv);
+        Assert.Contains(
+            "When,Method,Path,Status,Country,Country code,IP,Client ID,User-Agent,Duration (ms)",
+            csv);
+        Assert.Contains("/req-a", csv);
+        Assert.Contains("Italy,IT,203.0.113.7,0123456789abcdef", csv);
+        Assert.DoesNotContain("/req-b", csv);
+        // virgole e virgolette dello User-Agent restano un solo campo CSV
+        Assert.Contains("\"Mozilla/5.0, \"\"quoted\"\"\"", csv);
+    }
+
+    [Fact]
+    public async Task The_csv_export_neutralises_formula_cells()
+    {
+        var now = DateTimeOffset.UtcNow;
+        await _store.InsertManyAsync(
+        [
+            Entry("req-a", now.AddMinutes(-1), "IT", "203.0.113.7", "0123456789abcdef", "=HYPERLINK(\"https://example.com\")"),
+        ], default);
+
+        var model = CreateModel();
+        var result = Assert.IsType<FileContentResult>(
+            await model.OnGetCsvAsync(30, null, null, null, null, default));
+
+        string csv = Encoding.UTF8.GetString(result.FileContents);
+        Assert.Contains("'=HYPERLINK", csv);
     }
 
     public void Dispose()

@@ -1,7 +1,9 @@
 using System.Globalization;
 using System.Net;
+using System.Text;
 using System.Text.Json;
 using MainSite.RequestLogging;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
@@ -11,8 +13,9 @@ namespace MainSite.Pages;
 // Mappa e lista delle richieste del sito. È pubblica e aggregata per paese;
 // la lista mostra le richieste pubbliche a pagine da 200, con user-agent e IP
 // così come sono stati registrati (nessun parsing) e un id cliente stabile
-// calcolato da IP + user-agent. Un grafico a barre conta i visitatori unici
-// (client distinti) di ogni giorno.
+// calcolato da IP + user-agent. Un grafico Chart.js mostra le richieste e i
+// visitatori unici (client distinti) di ogni ora o giorno; lo stesso filtro
+// della pagina si può scaricare in CSV.
 public sealed class RequestsModel(
     IServiceProvider services,
     IOptions<RequestLogOptions> options,
@@ -66,7 +69,10 @@ public sealed class RequestsModel(
         _ => "last 30 days",
     };
 
-    public string ChartTitle => HourlyPeriod ? "Unique visitors per hour" : "Unique visitors per day";
+    public string ChartTitle => HourlyPeriod ? "Requests and visitors per hour" : "Requests and visitors per day";
+
+    public string ChartAriaLabel =>
+        $"{ChartTitle}, {PeriodLabel}: {FormatNumber(TotalRequests)} requests and {FormatNumber(UniqueVisitors)} unique visitors";
 
     public async Task OnGetAsync(
         int? days,
@@ -77,14 +83,8 @@ public sealed class RequestsModel(
         string? userAgent,
         CancellationToken ct)
     {
-        Days = AllowedDays.Contains(days ?? 0) ? days!.Value : 1;
         int requestedPage = pageNumber is > 0 ? pageNumber.Value : 1;
-
-        CountryFilter = NormalizeCountryFilter(country);
-        IpFilter = NormalizeIpFilter(ip);
-        ClientIdFilter = NormalizeClientIdFilter(clientId);
-        UserAgentFilter = NormalizeUserAgentFilter(userAgent);
-        ActiveFilters = BuildActiveFilters();
+        ApplyQuery(days, country, ip, clientId, userAgent);
 
         var resolver = services.GetService<RequestCountryResolver>();
         GeoIpAvailable = resolver?.Available ?? false;
@@ -162,6 +162,106 @@ public sealed class RequestsModel(
             LoadFailed = true;
             Empty();
         }
+    }
+
+    // Scarica in CSV le stesse righe della tabella: le richieste pubbliche del
+    // periodo che soddisfano i filtri, dalla più recente. Il file contiene
+    // tutte le righe della query, non solo la pagina corrente; la cache è la
+    // stessa usata dalla pagina, così il download non rilegge Sperone.
+    public async Task<IActionResult> OnGetCsvAsync(
+        int? days,
+        string? country,
+        string? ip,
+        string? clientId,
+        string? userAgent,
+        CancellationToken ct)
+    {
+        ApplyQuery(days, country, ip, clientId, userAgent);
+
+        DateTimeOffset to = DateTimeOffset.UtcNow;
+        DateTimeOffset from = to.AddDays(-Days);
+        string fileName = $"requests-{TimeZoneInfo.ConvertTime(to, Rome).ToString("yyyy-MM-dd", English)}.csv";
+
+        var store = services.GetService<RequestLogStore>();
+        if (store is null)
+            return CsvFile(new StringBuilder(), fileName);
+
+        try
+        {
+            string entriesKey = $"requests:public:{Days}";
+            if (!cache.TryGetValue(entriesKey, out IReadOnlyList<RequestLogEntry>? entries) || entries is null)
+            {
+                entries = await store.GetPublicEntriesAsync(from, ct);
+                cache.Set(entriesKey, entries, TimeSpan.FromSeconds(20));
+            }
+
+            var builder = new StringBuilder();
+            builder.Append("When,Method,Path,Status,Country,Country code,IP,Client ID,User-Agent,Duration (ms)\r\n");
+
+            foreach (var entry in entries.Where(Matches))
+            {
+                DateTimeOffset local = TimeZoneInfo.ConvertTime(entry.Timestamp, Rome);
+                builder
+                    .Append(Csv(local.ToString("yyyy-MM-dd HH:mm:ss zzz", English))).Append(',')
+                    .Append(Csv(entry.Method)).Append(',')
+                    .Append(Csv(entry.Path + entry.QueryString)).Append(',')
+                    .Append(entry.StatusCode.ToString(CultureInfo.InvariantCulture)).Append(',')
+                    .Append(Csv(WorldCountries.NameOf(entry.CountryCode))).Append(',')
+                    .Append(Csv(CountryCodeOf(entry.CountryCode))).Append(',')
+                    .Append(Csv(entry.RemoteIp)).Append(',')
+                    .Append(Csv(ClientIdOf(entry))).Append(',')
+                    .Append(Csv(entry.UserAgent)).Append(',')
+                    .Append(entry.DurationMs.ToString("0.0", English))
+                    .Append("\r\n");
+            }
+
+            return CsvFile(builder, fileName);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Richieste: impossibile esportare il CSV da Sperone");
+            return CsvFile(new StringBuilder(), fileName);
+        }
+    }
+
+    private void ApplyQuery(int? days, string? country, string? ip, string? clientId, string? userAgent)
+    {
+        Days = AllowedDays.Contains(days ?? 0) ? days!.Value : 1;
+        CountryFilter = NormalizeCountryFilter(country);
+        IpFilter = NormalizeIpFilter(ip);
+        ClientIdFilter = NormalizeClientIdFilter(clientId);
+        UserAgentFilter = NormalizeUserAgentFilter(userAgent);
+        ActiveFilters = BuildActiveFilters();
+    }
+
+    private static FileContentResult CsvFile(StringBuilder builder, string fileName)
+    {
+        byte[] body = Encoding.UTF8.GetBytes(builder.ToString());
+        byte[] preamble = Encoding.UTF8.GetPreamble();
+        byte[] content = new byte[preamble.Length + body.Length];
+        preamble.CopyTo(content, 0);
+        body.CopyTo(content, preamble.Length);
+
+        return new FileContentResult(content, "text/csv; charset=utf-8")
+        {
+            FileDownloadName = fileName,
+        };
+    }
+
+    // RFC 4180: virgolette quando il valore contiene virgola, virgolette o a
+    // capo. Le celle che iniziano con un carattere da formula vengono
+    // neutralizzate con un apostrofo: il contenuto arriva dai client
+    // (User-Agent compreso) e non deve essere eseguito da Excel o LibreOffice.
+    private static string Csv(string? value)
+    {
+        value ??= "";
+        if (value.Length > 0 && value[0] is '=' or '+' or '-' or '@' or '\t' or '\r')
+            value = "'" + value;
+
+        if (value.AsSpan().IndexOfAny(",\"\r\n") >= 0)
+            value = "\"" + value.Replace("\"", "\"\"", StringComparison.Ordinal) + "\"";
+
+        return value;
     }
 
     private IReadOnlyList<RequestLogEntry> ApplyFiltered(IReadOnlyList<RequestLogEntry> entries, int requestedPage)
@@ -247,6 +347,14 @@ public sealed class RequestsModel(
     {
         var route = CurrentRoute();
         route["pageNumber"] = Math.Max(1, page).ToString(CultureInfo.InvariantCulture);
+        return route;
+    }
+
+    // Il CSV ignora la paginazione: porta periodo e filtri correnti.
+    public Dictionary<string, string> CsvRoute()
+    {
+        var route = CurrentRoute();
+        route.Remove("pageNumber");
         return route;
     }
 
@@ -351,7 +459,8 @@ public sealed class RequestsModel(
     // bucket è un'ora (barre allineate all'ora UTC, etichette in ora di Roma);
     // nei periodi più lunghi è un giorno di Roma, compresi quelli senza
     // traffico. Le righe senza id cliente (nessun IP e nessun user-agent)
-    // restano fuori perché non identificano nessuno.
+    // restano fuori dai visitatori perché non identificano nessuno, ma contano
+    // comunque nelle richieste del bucket.
     private void SetVisitors(IReadOnlyList<RequestLogEntry> entries, DateTimeOffset from, DateTimeOffset to)
     {
         var known = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -361,15 +470,18 @@ public sealed class RequestsModel(
             DateTimeOffset first = HourStart(from);
             int count = Math.Max(1, (int)(HourStart(to).AddHours(1) - first).TotalHours);
             var sets = NewVisitorSets(count);
+            var requests = new int[count];
 
             foreach (var entry in entries)
             {
-                string clientId = ClientIdOf(entry);
-                if (string.IsNullOrEmpty(clientId))
-                    continue;
-
                 int index = (int)(entry.Timestamp - first).TotalHours;
                 if (index < 0 || index >= count)
+                    continue;
+
+                requests[index]++;
+
+                string clientId = ClientIdOf(entry);
+                if (string.IsNullOrEmpty(clientId))
                     continue;
 
                 sets[index].Add(clientId);
@@ -377,7 +489,7 @@ public sealed class RequestsModel(
             }
 
             VisitorBuckets = Enumerable.Range(0, count)
-                .Select(i => new VisitorBucket(first.AddHours(i), TimeSpan.FromHours(1), sets[i].Count))
+                .Select(i => new VisitorBucket(first.AddHours(i), TimeSpan.FromHours(1), sets[i].Count, requests[i]))
                 .ToList();
         }
         else
@@ -386,15 +498,18 @@ public sealed class RequestsModel(
             DateOnly lastDay = RomeDay(to);
             int count = lastDay.DayNumber - firstDay.DayNumber + 1;
             var sets = NewVisitorSets(count);
+            var requests = new int[count];
 
             foreach (var entry in entries)
             {
-                string clientId = ClientIdOf(entry);
-                if (string.IsNullOrEmpty(clientId))
-                    continue;
-
                 int index = RomeDay(entry.Timestamp).DayNumber - firstDay.DayNumber;
                 if (index < 0 || index >= count)
+                    continue;
+
+                requests[index]++;
+
+                string clientId = ClientIdOf(entry);
+                if (string.IsNullOrEmpty(clientId))
                     continue;
 
                 sets[index].Add(clientId);
@@ -403,7 +518,7 @@ public sealed class RequestsModel(
 
             var buckets = new List<VisitorBucket>(count);
             for (int i = 0; i < count; i++)
-                buckets.Add(new VisitorBucket(RomeMidnight(firstDay.AddDays(i)), TimeSpan.FromDays(1), sets[i].Count));
+                buckets.Add(new VisitorBucket(RomeMidnight(firstDay.AddDays(i)), TimeSpan.FromDays(1), sets[i].Count, requests[i]));
 
             VisitorBuckets = buckets;
         }
@@ -431,56 +546,42 @@ public sealed class RequestsModel(
     private static DateTimeOffset RomeTime(DateTimeOffset value) =>
         TimeZoneInfo.ConvertTime(value, Rome);
 
-    // Geometria del grafico: coordinate già formattate con il punto decimale,
-    // perché una cultura diversa da en scriverebbe la virgola nell'SVG.
-    public IReadOnlyList<VisitorChartBar> ChartBars()
+    // Punti del grafico: un'etichetta breve per l'asse e un titolo completo per
+    // il tooltip, con entrambe le serie (visitatori e richieste) dello stesso
+    // bucket. Chart.js disegna barre per i visitatori e una linea per le
+    // richieste, così il rapporto tra traffico e client distinti resta visibile.
+    public IReadOnlyList<ChartPoint> ChartPoints()
     {
         if (VisitorBuckets.Count == 0)
             return [];
 
-        const double width = 720;
-        const double plotHeight = 150;
-        const double baseline = 170;
-
-        int max = VisitorBuckets.Max(bucket => bucket.Visitors);
-        double slot = width / VisitorBuckets.Count;
-        double barWidth = Math.Max(1.5, slot - Math.Min(5, slot * 0.28));
-        int tickStep = VisitorBuckets.Count <= 14
-            ? 1
-            : HourlyPeriod ? 3 : VisitorBuckets.Count <= 40 ? 5 : 15;
-
-        var bars = new List<VisitorChartBar>(VisitorBuckets.Count);
-        for (int i = 0; i < VisitorBuckets.Count; i++)
+        var points = new List<ChartPoint>(VisitorBuckets.Count);
+        foreach (var bucket in VisitorBuckets)
         {
-            VisitorBucket bucket = VisitorBuckets[i];
-            double height = max > 0 && bucket.Visitors > 0
-                ? Math.Max(2, bucket.Visitors * plotHeight / max)
-                : 0;
-
+            DateTimeOffset local = RomeTime(bucket.Start);
+            string label = local.ToString(HourlyPeriod ? "HH:mm" : "d MMM", English);
             string title = HourlyPeriod
-                ? $"{RomeTime(bucket.Start).ToString("HH:mm", English)}–{RomeTime(bucket.Start.AddHours(1)).ToString("HH:mm", English)} on {RomeTime(bucket.Start).ToString("dddd d MMMM yyyy", English)}: {FormatNumber(bucket.Visitors)} unique visitors"
-                : $"{RomeTime(bucket.Start).ToString("dddd d MMMM yyyy", English)}: {FormatNumber(bucket.Visitors)} unique visitors";
+                ? $"{local.ToString("HH:mm", English)}–{local.AddHours(1).ToString("HH:mm", English)} on {local.ToString("dddd d MMMM yyyy", English)}: {FormatNumber(bucket.Visitors)} unique visitors, {FormatNumber(bucket.Requests)} requests"
+                : $"{local.ToString("dddd d MMMM yyyy", English)}: {FormatNumber(bucket.Visitors)} unique visitors, {FormatNumber(bucket.Requests)} requests";
 
-            bars.Add(new VisitorChartBar(
-                Num(i * slot + (slot - barWidth) / 2),
-                Num(barWidth),
-                Num(baseline - height),
-                Num(height),
-                title,
-                i % tickStep == 0
-                    ? RomeTime(bucket.Start).ToString(HourlyPeriod ? "HH:mm" : "d MMM", English)
-                    : null,
-                Num(i * slot + slot / 2)));
+            points.Add(new ChartPoint(label, title, bucket.Visitors, bucket.Requests));
         }
 
-        return bars;
+        return points;
     }
 
-    public string ChartMax() => VisitorBuckets.Count == 0
-        ? "0"
-        : FormatNumber(VisitorBuckets.Max(bucket => bucket.Visitors));
-
-    private static string Num(double value) => value.ToString("0.##", CultureInfo.InvariantCulture);
+    public string ChartJson()
+    {
+        var points = ChartPoints();
+        return JsonSerializer.Serialize(new
+        {
+            hourly = HourlyPeriod,
+            labels = points.Select(point => point.Label),
+            titles = points.Select(point => point.Title),
+            visitors = points.Select(point => point.Visitors),
+            requests = points.Select(point => point.Requests),
+        });
+    }
 
     private static DateOnly RomeDay(DateTimeOffset value) =>
         DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(value, Rome).DateTime);
@@ -523,19 +624,14 @@ public sealed class RequestsModel(
 
 public sealed record CountryCount(string Code, string Name, int Count);
 
-// Un bucket del grafico dei visitatori — un'ora per le ultime 24 ore, un
-// giorno di Roma per i periodi più lunghi — con il suo inizio (in UTC) e il
-// numero di client distinti che ci sono comparsi.
-public sealed record VisitorBucket(DateTimeOffset Start, TimeSpan Duration, int Visitors);
+// Un bucket del grafico — un'ora per le ultime 24 ore, un giorno di Roma per i
+// periodi più lunghi — con il suo inizio (in UTC), il numero di client
+// distinti e il numero di richieste che ci sono arrivate.
+public sealed record VisitorBucket(DateTimeOffset Start, TimeSpan Duration, int Visitors, int Requests);
 
-public sealed record VisitorChartBar(
-    string X,
-    string Width,
-    string Y,
-    string Height,
-    string Title,
-    string? TickLabel,
-    string TickX);
+// Un punto del grafico come lo consuma Chart.js: etichetta dell'asse, titolo
+// completo del tooltip e le due serie.
+public sealed record ChartPoint(string Label, string Title, int Visitors, int Requests);
 
 public sealed record RequestRow(
     DateTimeOffset When,
