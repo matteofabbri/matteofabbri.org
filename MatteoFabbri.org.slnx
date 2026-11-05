@@ -2,6 +2,7 @@
   <Folder Name="/LIBRARIES/" />
   <Project Path="MainSite.Tests/MainSite.Tests.csproj" />
   <Project Path="MainSite/MainSite.csproj" />
+  <Project Path="TheQult.Tests/TheQult.Tests.csproj" />
   <Project Path="TheQult/TheQult.csproj" />
   <Project Path="Maddalena/Maddalena.csproj" />
   <Project Path="MatteoFabbri.org.AppHost/MatteoFabbri.org.AppHost.csproj" />

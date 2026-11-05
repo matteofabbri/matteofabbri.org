@@ -1,0 +1,90 @@
+@page
+@model TheQult.Pages.IndexModel
+@{
+    ViewData["Title"] = "";
+}
+
+<section class="hero">
+    <h1>Hospitality is a gift.</h1>
+    <p class="lede">
+        TheQult is a free hospitality community: people hosting people, no money involved.
+        It exists because the internet used to work this way — and we think it still can.
+    </p>
+    <p>
+        <a class="button" asp-page="/Join">Join the community</a>
+        <a class="button secondary" asp-page="/Members">Find hosts</a>
+    </p>
+
+    <form class="search-form" method="get" asp-page="/Members">
+        <div>
+            <label for="city">Where are you going?</label>
+            <input type="text" id="city" name="city" placeholder="Rome, Lisbon, Buenos Aires…" />
+        </div>
+        <div>
+            <label for="hosting">Who should I meet?</label>
+            <select id="hosting" name="hosting">
+                <option value="">Anyone</option>
+                <option value="host">People who can host</option>
+                <option value="maybe">People who might</option>
+            </select>
+        </div>
+        <div>
+            <button type="submit" class="button">Search hosts</button>
+        </div>
+    </form>
+</section>
+
+<div class="stats">
+    <div class="stat"><b>@Model.Members</b><span>members</span></div>
+    <div class="stat"><b>@Model.Hosts</b><span>can host tonight</span></div>
+    <div class="stat"><b>@Model.References</b><span>references written</span></div>
+    <div class="stat"><b>€0</b><span>membership fee, forever</span></div>
+</div>
+
+<section class="prose section">
+    <h2>What happened to Couchsurfing</h2>
+    <p>
+        Once, Couchsurfing was a free community: people who hosted people,
+        gratuitously. You wrote to a stranger on the other side of the world,
+        they lent you their couch, and for one night the world was a place
+        where people trusted each other.
+    </p>
+    <p>
+        Then, after Covid, came the trick. A couple of clicks into the sign-up
+        flow and you found yourself paying <strong>€65</strong> for a
+        “lifetime” subscription. It wasn't for life: today they ask
+        <strong>€10 a month</strong> — to host people for free. A community
+        built by its members, for free, was sold back to them one payment
+        at a time.
+    </p>
+    <p>
+        TheQult exists to bring back that spirit of generosity the internet
+        once had. Hosting is not a product here, and it never will be.
+    </p>
+</section>
+
+<section class="section">
+    <h2>The rules, few and clear</h2>
+    <ul class="principles">
+        <li>
+            <b>Free, forever.</b>
+            <p>No subscriptions, no premium tier, no paid “verification badge”.
+            The only cost is the server, and it costs less than a coffee a month.</p>
+        </li>
+        <li>
+            <b>Hospitality is a gift.</b>
+            <p>Not a service: no rooms, no commercial reviews. Whoever hosts
+            owes nothing to anyone.</p>
+        </li>
+        <li>
+            <b>Trust is earned, not bought.</b>
+            <p>After an accepted stay, host and guest write each other a
+            reference. It is the only score there is here.</p>
+        </li>
+        <li>
+            <b>No ads, no data for sale.</b>
+            <p>A profile shows what hospitality needs: a name, a city, a hosting
+            status, and the references you earned. Nothing more, never sold.</p>
+        </li>
+    </ul>
+</section>

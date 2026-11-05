@@ -6,6 +6,10 @@
 #     In produzione stanno nel volume Docker "blog-data", mai nell'immagine. ---
 MainSite/App_Data/
 
+# --- TheQult: database Sperone e chiavi DataProtection di sviluppo.
+#     In produzione stanno nel volume Docker "theqult-data", mai nell'immagine. ---
+TheQult/App_Data/
+
 # --- Output di pubblicazione (publish.ps1 genera ./out con .env e immagini) ---
 # Contiene segreti (ACME_EMAIL, ecc.) e l'immagine docker: NON va su git.
 [Oo]ut/

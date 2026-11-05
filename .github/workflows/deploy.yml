@@ -116,11 +116,11 @@ jobs:
               "sudo mkdir -p /opt/matteofabbri/$ctx && sudo cp -r ~/$ctx-new/. /opt/matteofabbri/$ctx/ && rm -rf ~/$ctx-new"
           done
 
-      # Blog e log richieste: i volumi devono esistere ed essere scrivibili
-      # dall'utente `app` (UID 1654) PRIMA che il sito parta. L'override
-      # aggiunge mount e variabili del blog e il volume Sperone dei log; se sul
-      # server ci sono già, li conserviamo.
-      - name: "Blog e log richieste: volumi e override"
+      # Blog, log richieste e TheQult: i volumi devono esistere ed essere
+      # scrivibili dall'utente `app` (UID 1654) PRIMA che i siti partino.
+      # L'override aggiunge mount e variabili del blog, il volume Sperone dei
+      # log e il volume TheQult; se sul server ci sono già, li conserviamo.
+      - name: "Blog, log richieste e TheQult: volumi e override"
         run: |
           scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \
             deploy/docker-compose.override.yml "$SERVER:~/site-compose.override.yml"
@@ -132,7 +132,7 @@ jobs:
             fi
             sudo mv ~/site-compose.override.yml /opt/matteofabbri/docker-compose.override.yml
             sudo chown root:root /opt/matteofabbri/docker-compose.override.yml
-            for vol in blog-data request-log-data; do
+            for vol in blog-data request-log-data theqult-data; do
               sudo docker volume create "matteofabbri_$vol" >/dev/null
               sudo docker run --rm -v "matteofabbri_$vol:/data" alpine chown -R 1654:1654 /data
             done

@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@(ViewData["Title"] is string title && title.Length > 0 ? $"{title} — TheQult" : "TheQult — hospitality is a gift")</title>
+    <meta name="description" content="A free hospitality community. People hosting people, for free, like the internet used to be. No subscriptions, no premium, ever." />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+</head>
+<body>
+<header class="site-header">
+    <div class="wrap header-row">
+        <a class="brand" asp-page="/Index">The<span>Qult</span></a>
+        <nav class="site-nav" aria-label="Main">
+            <a asp-page="/Members">Find hosts</a>
+            <a asp-page="/Index">About</a>
+        </nav>
+        <nav class="site-auth" aria-label="Account">
+            @if (User.Identity?.IsAuthenticated == true)
+            {
+                <a asp-page="/Requests">My stays</a>
+                <a asp-page="/Profile">@User.Identity.Name</a>
+                <form method="post" asp-page="/Logout" class="inline">
+                    <button type="submit" class="linklike">Log out</button>
+                </form>
+            }
+            else
+            {
+                <a asp-page="/Login">Log in</a>
+                <a class="button small" asp-page="/Join">Join</a>
+            }
+        </nav>
+    </div>
+</header>
+
+<main class="wrap">
+    @if (TempData["Flash"] is string flash)
+    {
+        <div class="alert success">@flash</div>
+    }
+    @RenderBody()
+</main>
+
+<footer class="site-footer">
+    <div class="wrap">
+        <p class="footer-claim">Hospitality is a gift. TheQult is free forever: no subscriptions, no premium tier, no ads.</p>
+        <p class="footer-links">
+            <a href="https://github.com/matteofabbri/MATTEOFABBRI.ORG/tree/main/TheQult">Source</a>
+            <span aria-hidden="true">·</span>
+            <a href="https://matteofabbri.org">matteofabbri.org</a>
+        </p>
+    </div>
+</footer>
+</body>
+</html>

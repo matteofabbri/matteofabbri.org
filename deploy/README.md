@@ -5,7 +5,7 @@ Due stack docker separati sulla stessa macchina, collegati da una rete condivisa
 per nome:
 
 - `matteofabbri.org` (`SITE_DOMAIN`) → sito personale (progetto `site`)
-- `theqult.org` (`THEQULT_DOMAIN`)   → API `TheQult`
+- `theqult.org` (`THEQULT_DOMAIN`)   → sito `TheQult` (community di ospitalità)
 - `maddalena.me` (`MADDALENA_DOMAIN`) → sito `Maddalena` (per ora un hello world)
 - `<dominio>/mail` (tutti e tre)     → redirect a `https://<WEBMAIL_HOST>`
 - **qualunque altro nome**           → mailcow (TLS **passato sigillato**: il
@@ -678,6 +678,40 @@ sottoinsieme.
 `timestamp`) senza leggere i payload; i totali includono anche IP privati e
 righe senza paese. L'elenco delle richieste usa `timestamp` + `public`, mostra
 200 righe per pagina e legge solo i payload delle righe mostrate.
+
+---
+
+## 2-septies. TheQult (theqult.org)
+
+La community di ospitalità senza abbonamenti (la "versione rifatta meglio di
+Couchsurfing"): profili, richieste di soggiorno e referenze. Razor Pages +
+**Sperone embedded**, come i log: la libreria gira nel processo del sito e
+scrive in una cartella su disco. Nessun server database, nessun segreto da
+configurare. Il codice e la storia del progetto stanno nel README di
+`TheQult/`.
+
+**Dove stanno i dati.** In produzione nel volume Docker `matteofabbri_theqult-data`,
+montato in `/data/theqult` (la cartella è `TheQult__DataPath`, impostata
+dall'override del compose). In sviluppo in `TheQult/App_Data/theqult` (ignorata
+da git). Il workflow di deploy crea e chowna il volume a UID 1654 prima di
+avviare il container, come per blog e log. Le chiavi DataProtection delle
+sessioni stanno nello stesso volume (`/data/theqult/keys`): un riavvio del
+container non disconnette nessuno.
+
+Tre collezioni Sperone: `members` (profili), `stays` (richieste di soggiorno),
+`references` (referenze post-soggiorno). Per un backup consistente:
+
+```bash
+cd /opt/matteofabbri
+sudo docker compose stop theqult
+sudo docker run --rm -v matteofabbri_theqult-data:/dati -v "$(pwd)":/backup alpine \
+  tar czf /backup/theqult-$(date +%F).tar.gz -C /dati .
+sudo docker compose start theqult
+```
+
+> Il compose generato dall'AppHost dichiara già volume e variabile
+> (`TheQult__DataPath`); l'override li aggiunge anche sul server attuale, così
+> il mount vale fin da subito senza rigenerare il compose a mano.
 
 ---
 

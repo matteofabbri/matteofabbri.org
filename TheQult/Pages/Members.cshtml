@@ -1,0 +1,81 @@
+@page "/members"
+@model TheQult.Pages.MembersModel
+@{
+    ViewData["Title"] = "Find hosts";
+}
+
+<h1>Find hosts</h1>
+<p class="muted">People who open their door — all of them, for free. A profile here has no price and no badge to buy.</p>
+
+<form class="search-form" method="get">
+    <div>
+        <label for="city">City</label>
+        <input type="text" id="city" name="city" value="@Model.City" placeholder="Rome, Lisbon…" />
+    </div>
+    <div>
+        <label for="hosting">Hosting status</label>
+        <select id="hosting" name="hosting">
+            <option value="">Anyone</option>
+            <option value="host" selected="@(Model.Hosting == TheQult.Data.Member.HostingHost)">Can host</option>
+            <option value="maybe" selected="@(Model.Hosting == TheQult.Data.Member.HostingMaybe)">Maybe</option>
+            <option value="no" selected="@(Model.Hosting == TheQult.Data.Member.HostingNo)">Not hosting</option>
+        </select>
+    </div>
+    <div>
+        <button type="submit" class="button">Search</button>
+    </div>
+</form>
+
+@if (Model.Results.Total == 0)
+{
+    <div class="alert warning">
+        @if (Model.HasFilters)
+        {
+            <p>No one matches those filters yet. Try a wider search — or be the first in your city.</p>
+        }
+        else
+        {
+            <p>No one has joined yet. Be the first: <a asp-page="/Join">join the community</a>.</p>
+        }
+    </div>
+}
+else
+{
+    @foreach (var member in Model.Results.Items)
+    {
+        <article class="member-card">
+            <h3><a asp-page="/Member" asp-route-id="@member.Id">@member.DisplayName</a></h3>
+            <p class="member-meta">
+                <span class="badge @member.Hosting">@Display.Hosting(member.Hosting)</span>
+                @if (!string.IsNullOrEmpty(member.City) || !string.IsNullOrEmpty(member.Country))
+                {
+                    <span> · @member.City@if (!string.IsNullOrEmpty(member.Country)) { <text>, @member.Country</text> }</span>
+                }
+                @if (member.MaxGuests > 0)
+                {
+                    <span> · up to @member.MaxGuests guest@(member.MaxGuests == 1 ? "" : "s")</span>
+                }
+            </p>
+            @if (!string.IsNullOrEmpty(member.Languages))
+            {
+                <p class="member-meta">Speaks: @member.Languages</p>
+            }
+            @if (!string.IsNullOrEmpty(member.About))
+            {
+                <p class="member-about">@member.About</p>
+            }
+        </article>
+    }
+
+    <nav class="pager" aria-label="Pages">
+        @if (Model.Results.Page > 1)
+        {
+            <a href="@Model.Href(Model.Results.Page - 1)">← Newer</a>
+        }
+        <span class="muted small">Page @Model.Results.Page of @Model.Results.PageCount — @Model.Results.Total member@(Model.Results.Total == 1 ? "" : "s")</span>
+        @if (Model.Results.Page < Model.Results.PageCount)
+        {
+            <a href="@Model.Href(Model.Results.Page + 1)">Older →</a>
+        }
+    </nav>
+}

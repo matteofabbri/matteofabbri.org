@@ -1,0 +1,50 @@
+@page "/requests/new"
+@model TheQult.Pages.RequestNewModel
+@{
+    ViewData["Title"] = "Request a stay";
+}
+
+<h1>Request a stay</h1>
+
+@if (Model.Error is not null)
+{
+    <div class="alert error">@Model.Error</div>
+}
+
+@if (Model.Host is not null)
+{
+    <p>
+        You are asking <a asp-page="/Member" asp-route-id="@Model.Host.Id">@Model.Host.DisplayName</a>
+        @if (!string.IsNullOrEmpty(Model.Host.City))
+        {
+            <text>(@Model.Host.City)</text>
+        }
+        for a place to sleep. Write like you would knock on a door: who you are,
+        when, and why them.
+    </p>
+
+    <form class="stack" method="post" style="max-width: 560px;">
+        <input type="hidden" name="host" value="@Model.HostId" />
+        <div class="row">
+            <div>
+                <label asp-for="Input.Arrival"></label>
+                <input asp-for="Input.Arrival" type="date" />
+            </div>
+            <div>
+                <label asp-for="Input.Departure"></label>
+                <input asp-for="Input.Departure" type="date" />
+            </div>
+        </div>
+        <span asp-validation-for="Input.Arrival" class="field-hint"></span>
+        <span asp-validation-for="Input.Departure" class="field-hint"></span>
+        <p class="field-hint">Up to 30 nights, planned up to a year ahead.</p>
+
+        <label asp-for="Input.Message"></label>
+        <textarea asp-for="Input.Message" placeholder="Hi! I am arriving on … and I would love to …"></textarea>
+        <span asp-validation-for="Input.Message" class="field-hint"></span>
+
+        <p style="margin-top: 1.5rem;">
+            <button type="submit" class="button">Send request</button>
+        </p>
+    </form>
+}

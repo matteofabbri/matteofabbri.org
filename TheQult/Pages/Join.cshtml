@@ -1,0 +1,69 @@
+@page "/join"
+@model TheQult.Pages.JoinModel
+@{
+    ViewData["Title"] = "Join";
+}
+
+<h1>Join TheQult</h1>
+<p class="muted">
+    No fee now, no fee later, no card asked. The only thing this community wants
+    from you is you.
+</p>
+
+@if (Model.Error is not null)
+{
+    <div class="alert error">@Model.Error</div>
+}
+
+<form class="stack" method="post" style="max-width: 640px;">
+    <label asp-for="Input.DisplayName"></label>
+    <input asp-for="Input.DisplayName" />
+    <span asp-validation-for="Input.DisplayName" class="field-hint"></span>
+
+    <label asp-for="Input.Email"></label>
+    <input asp-for="Input.Email" type="email" />
+    <span asp-validation-for="Input.Email" class="field-hint"></span>
+
+    <label asp-for="Input.Password"></label>
+    <input asp-for="Input.Password" type="password" />
+    <span asp-validation-for="Input.Password" class="field-hint"></span>
+    <p class="field-hint">Eight characters at least. There is no password reset yet — remember it well.</p>
+
+    <div class="row">
+        <div>
+            <label asp-for="Input.City"></label>
+            <input asp-for="Input.City" />
+        </div>
+        <div>
+            <label asp-for="Input.Country"></label>
+            <input asp-for="Input.Country" maxlength="2" placeholder="IT" />
+        </div>
+    </div>
+
+    <div class="row">
+        <div>
+            <label asp-for="Input.Hosting"></label>
+            <select asp-for="Input.Hosting">
+                <option value="@TheQult.Data.Member.HostingHost">Yes, I can host</option>
+                <option value="@TheQult.Data.Member.HostingMaybe">Maybe — ask me</option>
+                <option value="@TheQult.Data.Member.HostingNo">Not right now</option>
+            </select>
+        </div>
+        <div>
+            <label asp-for="Input.MaxGuests"></label>
+            <input asp-for="Input.MaxGuests" type="number" min="0" max="16" />
+        </div>
+    </div>
+
+    <label asp-for="Input.Languages"></label>
+    <input asp-for="Input.Languages" placeholder="Italiano, English, …" />
+
+    <label asp-for="Input.About"></label>
+    <textarea asp-for="Input.About" placeholder="Who are you, what do you do, how do you host (or travel)?"></textarea>
+    <span asp-validation-for="Input.About" class="field-hint"></span>
+
+    <p style="margin-top: 1.5rem;">
+        <button type="submit" class="button">Join — free</button>
+    </p>
+    <p class="muted small">Already a member? <a asp-page="/Login">Log in</a>.</p>
+</form>

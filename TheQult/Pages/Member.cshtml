@@ -1,0 +1,78 @@
+@page "/members/{id}"
+@model TheQult.Pages.MemberModel
+@{
+    ViewData["Title"] = Model.Profile?.DisplayName ?? "Member";
+    var profile = Model.Profile!;
+}
+
+<article class="section">
+    <h1>@profile.DisplayName</h1>
+    <p class="member-meta">
+        <span class="badge @profile.Hosting">@Display.Hosting(profile.Hosting)</span>
+        @if (!string.IsNullOrEmpty(profile.City) || !string.IsNullOrEmpty(profile.Country))
+        {
+            <span> · @profile.City@if (!string.IsNullOrEmpty(profile.Country)) { <text>, @profile.Country</text> }</span>
+        }
+        @if (profile.MaxGuests > 0)
+        {
+            <span> · up to @profile.MaxGuests guest@(profile.MaxGuests == 1 ? "" : "s") per night</span>
+        }
+    </p>
+
+    @if (!string.IsNullOrEmpty(profile.Languages))
+    {
+        <p>Speaks: @profile.Languages</p>
+    }
+
+    @if (!string.IsNullOrEmpty(profile.About))
+    {
+        <div class="prose">
+            <h2>About</h2>
+            <p style="white-space: pre-line;">@profile.About</p>
+        </div>
+    }
+
+    @if (Model.IsSelf)
+    {
+        <p>This is you. <a asp-page="/Profile">Edit your profile</a>.</p>
+    }
+    else if (User.Identity?.IsAuthenticated == true)
+    {
+        if (profile.Hosting == TheQult.Data.Member.HostingNo)
+        {
+            <p class="muted">Not hosting right now — but you can still say hello on a future visit.</p>
+        }
+        else
+        {
+            <p>
+                <a class="button" asp-page="/RequestNew" asp-route-host="@profile.Id">Request a stay</a>
+            </p>
+        }
+    }
+    else
+    {
+        <p>
+            <a asp-page="/Login">Log in</a> or <a asp-page="/Join">join</a> to request a stay from @profile.DisplayName.
+            It is free, and it stays free.
+        </p>
+    }
+</article>
+
+<section class="section">
+    <h2>References <span class="muted small">(@Model.References.Count)</span></h2>
+    @if (Model.References.Count == 0)
+    {
+        <p class="muted">No references yet. They come after real stays, one at a time — that is the point.</p>
+    }
+    else
+    {
+        @foreach (var (reference, authorName) in Model.References)
+        {
+            <article class="reference-card">
+                <span class="verdict @reference.Verdict">@Display.Verdict(reference.Verdict)</span>
+                <blockquote>@reference.Text</blockquote>
+                <p class="who">— @authorName, @Display.Day(reference.CreatedAt)</p>
+            </article>
+        }
+    }
+</section>

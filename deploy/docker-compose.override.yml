@@ -14,7 +14,10 @@
 #  - le variabili Blog__Auth__* arrivano dal .env del server: finché ClientId
 #    e secret sono vuoti l'area di scrittura resta spenta, il blog è leggibile;
 #  - la password DAV del calendario arriva da CALDAV_PASSWORD; l'account
-#    (matteo@matteofabbri.org) è hardcodato nel sito.
+#    (matteo@matteofabbri.org) è hardcodato nel sito;
+#  - TheQult (theqult.org) tiene profili, soggiorni e referenze nel volume
+#    theqult-data, montato in /data/theqult: un deploy non cancella la
+#    community. Nessun segreto da configurare.
 services:
   site:
     environment:
@@ -31,6 +34,13 @@ services:
       - request-log-data:/data/sperone
       - /opt/matteofabbri/geoip:/data/geoip:ro
 
+  theqult:
+    environment:
+      TheQult__DataPath: /data/theqult
+    volumes:
+      - theqult-data:/data/theqult
+
 volumes:
   blog-data:
   request-log-data:
+  theqult-data:

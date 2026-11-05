@@ -1,0 +1,80 @@
+@page "/profile"
+@model TheQult.Pages.ProfileModel
+@{
+    ViewData["Title"] = "Your profile";
+}
+
+<h1>Your profile</h1>
+
+@if (Model.Error is not null)
+{
+    <div class="alert error">@Model.Error</div>
+}
+
+@if (Model.Profile is not null)
+{
+    <p class="muted">
+        Public page: <a asp-page="/Member" asp-route-id="@Model.Profile.Id">see how others see you</a>.
+        Your email stays private, as always.
+    </p>
+
+    <form class="stack" method="post" style="max-width: 640px;">
+        <label asp-for="Input.DisplayName"></label>
+        <input asp-for="Input.DisplayName" />
+
+        <div class="row">
+            <div>
+                <label asp-for="Input.City"></label>
+                <input asp-for="Input.City" />
+            </div>
+            <div>
+                <label asp-for="Input.Country"></label>
+                <input asp-for="Input.Country" maxlength="2" />
+            </div>
+        </div>
+
+        <div class="row">
+            <div>
+                <label asp-for="Input.Hosting"></label>
+                <select asp-for="Input.Hosting">
+                    <option value="@TheQult.Data.Member.HostingHost">Yes, I can host</option>
+                    <option value="@TheQult.Data.Member.HostingMaybe">Maybe — ask me</option>
+                    <option value="@TheQult.Data.Member.HostingNo">Not right now</option>
+                </select>
+            </div>
+            <div>
+                <label asp-for="Input.MaxGuests"></label>
+                <input asp-for="Input.MaxGuests" type="number" min="0" max="16" />
+            </div>
+        </div>
+
+        <label asp-for="Input.Languages"></label>
+        <input asp-for="Input.Languages" />
+
+        <label asp-for="Input.About"></label>
+        <textarea asp-for="Input.About"></textarea>
+
+        <p style="margin-top: 1.5rem;">
+            <button type="submit" class="button">Save profile</button>
+        </p>
+    </form>
+
+    <section class="section">
+        <h2>References about you <span class="muted small">(@Model.References.Count)</span></h2>
+        @if (Model.References.Count == 0)
+        {
+            <p class="muted">None yet. They arrive after accepted stays — host someone or knock on a door.</p>
+        }
+        else
+        {
+            @foreach (var reference in Model.References)
+            {
+                <article class="reference-card">
+                    <span class="verdict @reference.Verdict">@Display.Verdict(reference.Verdict)</span>
+                    <blockquote>@reference.Text</blockquote>
+                    <p class="who">@Display.Day(reference.CreatedAt)</p>
+                </article>
+            }
+        }
+    </section>
+}

@@ -1,0 +1,88 @@
+@page "/requests"
+@model TheQult.Pages.RequestsModel
+@{
+    ViewData["Title"] = "My stays";
+}
+
+<h1>My stays</h1>
+
+<section class="section">
+    <h2>Requests to host <span class="muted small">(@Model.Incoming.Count)</span></h2>
+    @if (Model.Incoming.Count == 0)
+    {
+        <p class="muted">No one has knocked yet. It happens — the door stays open anyway.</p>
+    }
+    else
+    {
+        @foreach (var row in Model.Incoming)
+        {
+            <article class="stay-row">
+                <p class="dates">@Display.Day(row.Stay.Arrival) → @Display.Day(row.Stay.Departure)</p>
+                <p>
+                    @row.OtherName wants to stay with you
+                    <span class="badge">@Display.StayStatus(row.Stay.Status)</span>
+                </p>
+                @if (!string.IsNullOrEmpty(row.Stay.Message))
+                {
+                    <blockquote class="muted">@row.Stay.Message</blockquote>
+                }
+                @if (row.Stay.Status == TheQult.Data.StayRequest.StatusPending)
+                {
+                    <div class="actions">
+                        <form method="post" asp-page-handler="Change" asp-route-id="@row.Stay.Id" asp-route-action="accept" class="inline">
+                            <button type="submit" class="button small">Accept</button>
+                        </form>
+                        <form method="post" asp-page-handler="Change" asp-route-id="@row.Stay.Id" asp-route-action="decline" class="inline">
+                            <button type="submit" class="button danger small">Decline</button>
+                        </form>
+                    </div>
+                }
+                @if (row.ReferencePending)
+                {
+                    <div class="actions">
+                        <a class="button small" asp-page="/ReferenceNew" asp-route-stay="@row.Stay.Id">Write a reference for @row.OtherName</a>
+                    </div>
+                }
+            </article>
+        }
+    }
+</section>
+
+<section class="section">
+    <h2>Requests you sent <span class="muted small">(@Model.Outgoing.Count)</span></h2>
+    @if (Model.Outgoing.Count == 0)
+    {
+        <p class="muted">Nothing yet. <a asp-page="/Members">Find a host</a> and say hello.</p>
+    }
+    else
+    {
+        @foreach (var row in Model.Outgoing)
+        {
+            <article class="stay-row">
+                <p class="dates">@Display.Day(row.Stay.Arrival) → @Display.Day(row.Stay.Departure)</p>
+                <p>
+                    You asked @row.OtherName
+                    <span class="badge">@Display.StayStatus(row.Stay.Status)</span>
+                </p>
+                @if (!string.IsNullOrEmpty(row.Stay.Message))
+                {
+                    <blockquote class="muted">@row.Stay.Message</blockquote>
+                }
+                @if (row.Stay.Status == TheQult.Data.StayRequest.StatusPending)
+                {
+                    <div class="actions">
+                        <form method="post" asp-page-handler="Change" asp-route-id="@row.Stay.Id" asp-route-action="cancel" class="inline">
+                            <button type="submit" class="button danger small">Cancel</button>
+                        </form>
+                    </div>
+                }
+                @if (row.ReferencePending)
+                {
+                    <div class="actions">
+                        <a class="button small" asp-page="/ReferenceNew" asp-route-stay="@row.Stay.Id">Write a reference for @row.OtherName</a>
+                    </div>
+                }
+            </article>
+        }
+    }
+</section>

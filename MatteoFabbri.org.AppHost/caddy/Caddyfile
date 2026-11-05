@@ -7,7 +7,7 @@
 # I SITI oggi sono TRE (ognuno col suo blocco in fondo + il suo nome nel matcher
 # @site qui sotto). Tutti e tre hanno il redirect /mail verso la webmail:
 #   - matteofabbri.org  (SITE_DOMAIN)      -> sito personale
-#   - theqult.org       (THEQULT_DOMAIN)   -> API TheQult
+#   - theqult.org       (THEQULT_DOMAIN)   -> sito TheQult (community)
 #   - maddalena.me      (MADDALENA_DOMAIN) -> sito MVC Maddalena
 #
 # Conseguenza pratica: aggiungere un nome alla POSTA (il nome generico OVH per
@@ -26,7 +26,7 @@
 #                            (es. mail.matteofabbri.org; durante la transizione
 #                             puo' essere il nome generico OVH)
 #   SITE_UPSTREAM         -> backend del sito personale   (es. site:8080)
-#   THEQULT_UPSTREAM      -> backend dell'API TheQult      (es. theqult:8080)
+#   THEQULT_UPSTREAM      -> backend del sito TheQult      (es. theqult:8080)
 #   MADDALENA_UPSTREAM    -> backend del sito Maddalena    (es. maddalena:8080)
 #   MAILCOW_TLS_UPSTREAM  -> nginx di mailcow, HTTPS       (es. nginx-mailcow:8443)
 #   MAILCOW_HTTP_UPSTREAM -> nginx di mailcow, HTTP        (es. nginx-mailcow:8080)
@@ -160,7 +160,7 @@
 	}
 }
 
-# --- theqult.org (API) -------------------------------------------------------
+# --- theqult.org (community di ospitalità) -----------------------------------
 {$THEQULT_DOMAIN}, www.{$THEQULT_DOMAIN} {
 	import secure_headers
 
@@ -173,7 +173,7 @@
 		redir https://{$WEBMAIL_HOST}/ permanent
 	}
 
-	# Tutto il resto -> l'API TheQult.
+	# Tutto il resto -> il sito TheQult.
 	handle {
 		reverse_proxy {$THEQULT_UPSTREAM}
 	}

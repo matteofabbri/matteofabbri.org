@@ -123,12 +123,23 @@ main.wrap {
 }
 
 .brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
     font-family: var(--serif);
     font-size: 1.25rem;
     font-weight: 600;
     letter-spacing: -0.01em;
     color: var(--text);
     text-decoration: none;
+}
+
+.brand-avatar {
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
 }
 
 .site-nav {
@@ -942,6 +953,11 @@ main.wrap {
 
     .header-inner {
         min-height: 3.5rem;
+    }
+
+    .brand-avatar {
+        width: 2rem;
+        height: 2rem;
     }
 
     .site-nav {

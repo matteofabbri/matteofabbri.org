@@ -41,6 +41,14 @@ builder.AddDockerComposeEnvironment("matteofabbri")
             Driver = "local",
         };
 
+        // Volume del database Sperone della community TheQult (profili,
+        // soggiorni, referenze): fuori dall'immagine, come tutti gli altri.
+        file.Volumes["theqult-data"] = new Volume
+        {
+            Name = "theqult-data",
+            Driver = "local",
+        };
+
         // RIAVVIO AUTOMATICO per tutti i servizi. Di suo Aspire non ne mette
         // nessuno (`restart-policy=no`), e le conseguenze sono due, entrambe
         // viste dal vivo: un container che esce per un errore passeggero — una
@@ -154,8 +162,27 @@ var site = builder.AddProject<Projects.MainSite>("site")
         });
     });
 
-// --- theqult.org: progetto API ----------------------------------------------
-var theqult = builder.AddProject<Projects.TheQult>("theqult");
+// --- theqult.org: la community di ospitalità ---------------------------------
+// La versione rifatta meglio di Couchsurfing: profili, richieste di
+// ospitalità e referenze, gratis per sempre. Il database è Sperone embedded
+// come per i log: nel volume theqult-data (/data/theqult) in produzione, una
+// cartella accanto al progetto in locale. Nessun segreto da configurare.
+string thequltDataPath = builder.ExecutionContext.IsPublishMode ? "/data/theqult" : "App_Data/theqult";
+
+var theqult = builder.AddProject<Projects.TheQult>("theqult")
+    .WithEnvironment("TheQult__DataPath", thequltDataPath)
+    .PublishAsDockerComposeService((_, service) =>
+    {
+        // I profili e le referenze NON stanno nell'immagine: un deploy non
+        // deve portarseli via, mai.
+        service.AddVolume(new Volume
+        {
+            Name = "theqult-data",
+            Type = "volume",
+            Source = "theqult-data",
+            Target = "/data/theqult",
+        });
+    });
 
 // --- maddalena.me: sito segnaposto -------------------------------------------
 // Per ora risponde "hello world": il vecchio frontend React e il submodule

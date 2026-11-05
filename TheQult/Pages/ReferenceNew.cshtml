@@ -1,0 +1,41 @@
+@page "/references/new"
+@model TheQult.Pages.ReferenceNewModel
+@{
+    ViewData["Title"] = "Write a reference";
+}
+
+<h1>Write a reference</h1>
+
+@if (Model.Error is not null)
+{
+    <div class="alert error">@Model.Error</div>
+}
+
+@if (Model.Stay is not null && Model.Subject is not null)
+{
+    <p>
+        About your stay with
+        <a asp-page="/Member" asp-route-id="@Model.Subject.Id">@Model.Subject.DisplayName</a>
+        (@Display.Day(Model.Stay.Arrival) → @Display.Day(Model.Stay.Departure)).
+        Say what happened: the next person will read this before knocking.
+    </p>
+
+    <form class="stack" method="post" style="max-width: 560px;">
+        <input type="hidden" name="stay" value="@Model.StayId" />
+        <label asp-for="Input.Verdict"></label>
+        <select asp-for="Input.Verdict">
+            <option value="@TheQult.Data.Reference.VerdictPositive">Positive</option>
+            <option value="@TheQult.Data.Reference.VerdictNeutral">Neutral</option>
+            <option value="@TheQult.Data.Reference.VerdictNegative">Negative</option>
+        </select>
+
+        <label asp-for="Input.Text"></label>
+        <textarea asp-for="Input.Text" placeholder="We cooked together, they know every shortcut in the city…"></textarea>
+        <span asp-validation-for="Input.Text" class="field-hint"></span>
+
+        <p style="margin-top: 1.5rem;">
+            <button type="submit" class="button">Publish reference</button>
+        </p>
+        <p class="muted small">One reference per stay, per direction. It cannot be edited after — like a word given.</p>
+    </form>
+}

@@ -1,0 +1,28 @@
+@page "/login"
+@model TheQult.Pages.LoginModel
+@{
+    ViewData["Title"] = "Log in";
+}
+
+<h1>Log in</h1>
+
+@if (Model.Error is not null)
+{
+    <div class="alert error">@Model.Error</div>
+}
+
+<form class="stack" method="post" style="max-width: 460px;">
+    <input type="hidden" name="ReturnUrl" value="@Model.ReturnUrl" />
+    <label asp-for="Input.Email"></label>
+    <input asp-for="Input.Email" type="email" autocomplete="username" />
+    <span asp-validation-for="Input.Email" class="field-hint"></span>
+
+    <label asp-for="Input.Password"></label>
+    <input asp-for="Input.Password" type="password" autocomplete="current-password" />
+    <span asp-validation-for="Input.Password" class="field-hint"></span>
+
+    <p style="margin-top: 1.5rem;">
+        <button type="submit" class="button">Log in</button>
+    </p>
+    <p class="muted small">New here? <a asp-page="/Join">Joining is free</a> and takes two minutes.</p>
+</form>

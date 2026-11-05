@@ -1,0 +1,17 @@
+@page "/404"
+@model TheQult.Pages.NotFoundModel
+@{
+    ViewData["Title"] = "Nothing here";
+    Layout = "_Layout";
+}
+
+<div class="hero">
+    <h1>Nothing here.</h1>
+    <p class="lede">
+        There is no couch on this page — but there are plenty of real ones.
+    </p>
+    <p>
+        <a class="button" asp-page="/Index">Back home</a>
+        <a class="button secondary" asp-page="/Members">Find hosts</a>
+    </p>
+</div>
