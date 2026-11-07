@@ -52,9 +52,16 @@ else
     }
 
     <div class="post-list">
+        @{
+            // I primi cinque articoli si leggono per intero nella home: lo spazio
+            // c'è, e chi arriva qui non deve cliccare per leggere. Dal sesto in
+            // poi torna il riepilogo.
+            int position = 0;
+        }
         @foreach (var post in Model.Posts)
         {
             bool visible = post.IsVisibleAt(now);
+            bool full = position++ < 5;
             <article class="post-card">
                 <div class="post-meta">
                     <time datetime="@post.Published.UtcDateTime.ToString("yyyy-MM-dd")">@Model.Clock.Format(post.Published)</time>
@@ -75,7 +82,13 @@ else
                     <a asp-page="/Blog/Post" asp-route-slug="@post.Slug">@post.Title</a>
                 </h2>
 
-                @if (!string.IsNullOrWhiteSpace(post.Summary))
+                @if (full)
+                {
+                    <div class="prose">
+                        @Html.Raw(BlogMarkdown.ToHtml(post.Markdown))
+                    </div>
+                }
+                else if (!string.IsNullOrWhiteSpace(post.Summary))
                 {
                     <p class="post-summary">@post.Summary</p>
                 }

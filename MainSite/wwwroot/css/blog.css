@@ -425,7 +425,6 @@ main.wrap {
 }
 
 .post-summary {
-    max-width: 65ch;
     margin: 0.25rem 0 0.75rem;
     color: var(--muted);
 }

@@ -58,12 +58,15 @@ jobs:
       # Maddalena non ne hanno bisogno e restano sull'immagine SDK.
       # docker save porta con sé tutti i layer, quindi sul server non serve
       # nient'altro.
+      # -r linux-x64: senza RID il publish copia i nativi di ogni piattaforma
+      # (ONNX da Sperone: iOS, Android, macOS, Windows, ~175 MB inutili in un
+      # container Linux).
       - name: Build immagini
         run: |
-          dotnet publish MainSite/MainSite.csproj  /t:PublishContainer /p:ContainerRepository=matteofabbri-site     /p:ContainerImageTag=sdk
+          dotnet publish MainSite/MainSite.csproj  /t:PublishContainer /p:ContainerRepository=matteofabbri-site     /p:ContainerImageTag=sdk    -r linux-x64
           docker build -f deploy/site-ffmpeg.Dockerfile -t matteofabbri-site:latest .
-          dotnet publish TheQult/TheQult.csproj    /t:PublishContainer /p:ContainerRepository=matteofabbri-theqult  /p:ContainerImageTag=latest
-          dotnet publish Maddalena/Maddalena.csproj /t:PublishContainer /p:ContainerRepository=matteofabbri-maddalena /p:ContainerImageTag=latest
+          dotnet publish TheQult/TheQult.csproj    /t:PublishContainer /p:ContainerRepository=matteofabbri-theqult  /p:ContainerImageTag=latest -r linux-x64
+          dotnet publish Maddalena/Maddalena.csproj /t:PublishContainer /p:ContainerRepository=matteofabbri-maddalena /p:ContainerImageTag=latest -r linux-x64
 
       - name: Chiave SSH del server
         run: |

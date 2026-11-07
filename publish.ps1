@@ -37,11 +37,16 @@ $images = @(
 foreach ($image in $images) {
     $tag = if ($image.LayerDockerfile) { "sdk" } else { "latest" }
 
+    # -r linux-x64: un contenitore e' Linux, e senza RID il publish copia i
+    # nativi di ogni piattaforma (ONNX da Sperone: iOS, Android, macOS, Windows,
+    # ~175 MB inutili). Con il RID resta solo il .so linux-x64.
     $publishArgs = @(
         $image.Project
         "/t:PublishContainer"
         "/p:ContainerRepository=$($image.Repository)"
         "/p:ContainerImageTag=$tag"
+        "-r"
+        "linux-x64"
         "-v"
         "q"
     )
