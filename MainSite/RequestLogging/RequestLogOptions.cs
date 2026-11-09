@@ -56,6 +56,14 @@ public sealed class RequestLogOptions
     // grezzo: "/health" non esclude "/healthcheck"). Default: health check.
     public string[] ExcludePaths { get; set; } = ["/health", "/alive"];
 
+    // Backfill una tantum dei flag bot sulle righe già in Sperone. Si attiva
+    // mettendo BackfillBotFlags=true e riavviando il sito; a fine corsa si
+    // rimette false. Le righe che hanno già i flag vengono saltate, quindi
+    // rilanciarlo è innocuo (e riprende da dove era rimasto).
+    public bool BackfillBotFlags { get; set; }
+    public int BackfillDays { get; set; } = 90;
+    public bool BackfillForce { get; set; }
+
     public string EffectivePath => string.IsNullOrWhiteSpace(Path) ? "App_Data/sperone" : Path.Trim();
     public string EffectiveGeoIpDatabasePath => string.IsNullOrWhiteSpace(GeoIpDatabasePath)
         ? "App_Data/geoip/dbip-city-lite.mmdb"

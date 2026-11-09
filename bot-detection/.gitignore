@@ -1,0 +1,15 @@
+# .NET
+**/bin/
+**/obj/
+*.user
+
+# Python
+**/__pycache__/
+*.py[cod]
+.venv/
+ai/proto_gen/
+
+# Local state
+data/
+artifacts/
+*.tmp

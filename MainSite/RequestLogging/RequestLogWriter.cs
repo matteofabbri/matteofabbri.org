@@ -14,6 +14,7 @@ public sealed class RequestLogWriter : BackgroundService
     private readonly RequestLogOptions _options;
     private readonly RequestLogQueue _queue;
     private readonly RequestLogStore _store;
+    private readonly BotEnricher? _enricher;
     private readonly ILogger<RequestLogWriter> _logger;
 
     // Righe già lette dalla coda ma non ancora scritte: se l'InsertMany
@@ -28,12 +29,14 @@ public sealed class RequestLogWriter : BackgroundService
         IOptions<RequestLogOptions> options,
         RequestLogQueue queue,
         RequestLogStore store,
-        ILogger<RequestLogWriter> logger)
+        ILogger<RequestLogWriter> logger,
+        BotEnricher? enricher = null)
     {
         _options = options.Value;
         _queue = queue;
         _store = store;
         _logger = logger;
+        _enricher = enricher;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -115,13 +118,12 @@ public sealed class RequestLogWriter : BackgroundService
         if (DateTimeOffset.UtcNow < _nextAttempt)
             return;
 
-        FillPending();
+        await FillPendingAsync(ct);
         if (_pending.Count == 0)
             return;
 
         if (!await EnsureReadyAsync(ct))
             return;
-
         try
         {
             var result = await _store.InsertManyAsync(_pending, ct);
@@ -185,10 +187,29 @@ public sealed class RequestLogWriter : BackgroundService
         }
     }
 
-    private void FillPending()
+    // Legge il batch dalla coda e lo classifica una sola volta. Se la scrittura
+    // su Sperone fallisce le righe restano in _pending già arricchite: il retry
+    // non richiama il modello.
+    private async Task FillPendingAsync(CancellationToken ct)
     {
-        while (_pending.Count < _options.EffectiveBatchSize && _queue.Reader.TryRead(out var entry))
-            _pending.Add(entry);
+        int room = _options.EffectiveBatchSize - _pending.Count;
+        if (room <= 0)
+            return;
+
+        var batch = new List<RequestLogEntry>(room);
+        while (batch.Count < room && _queue.Reader.TryRead(out var entry))
+            batch.Add(entry);
+
+        if (batch.Count == 0)
+            return;
+
+        if (_enricher is not null)
+        {
+            var enriched = await _enricher.EnrichAsync(batch, ct);
+            batch = enriched as List<RequestLogEntry> ?? enriched.ToList();
+        }
+
+        _pending.AddRange(batch);
     }
 
     // Apre il database embedded la prima volta. Da lì in poi è un return true

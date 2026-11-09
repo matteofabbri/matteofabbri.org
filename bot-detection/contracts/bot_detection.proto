@@ -1,0 +1,100 @@
+syntax = "proto3";
+
+package botdetection.v1;
+
+option csharp_namespace = "BotDetection.Contracts.V1";
+option java_multiple_files = true;
+option java_package = "org.matteofabbri.botdetection.v1";
+
+// Contract between the site's request-log writer and the Python model.
+//
+// There is no enforcement here: the model does not decide whether a request is
+// allowed. It only labels an already-logged request, and the two booleans are
+// persisted next to the request in Sperone.
+service BotDetectionService {
+  // One observation. Kept for ad-hoc use; the site uses ClassifyBatch.
+  rpc Classify(BotClassificationRequest) returns (BotClassificationResponse);
+
+  // The request-log writer sends its batch here, off the HTTP request path.
+  rpc ClassifyBatch(BotClassificationBatchRequest) returns (BotClassificationBatchResponse);
+
+  // Operational endpoint: which model is loaded, since when, with which checksum.
+  rpc GetModelInfo(ModelInfoRequest) returns (ModelInfoResponse);
+}
+
+message BotClassificationRequest {
+  string request_id = 1;
+
+  // Stable 16-hex client identifier, already computed by the site
+  // (truncated SHA-256 of IP + User-Agent).
+  string client_id = 2;
+
+  string remote_ip = 3;
+  string country_code = 4;
+  string method = 5;
+  string path = 6;
+  string user_agent = 7;
+
+  int32 user_agent_length = 8;
+  int32 path_length = 9;
+  bool user_agent_missing = 10;
+  bool path_is_sensitive = 11;
+  bool path_is_executable = 12;
+  bool path_has_query = 13;
+  bool has_referer = 14;
+  bool has_cookies = 15;
+  bool is_https = 16;
+  bool is_http2 = 17;
+
+  int32 requests_last_minute = 18;
+  int32 distinct_paths_last_minute = 19;
+  int32 errors_last_minute = 20;
+  int32 auth_failures_last_minute = 21;
+
+  double seconds_since_last_request = 22;
+  int32 utc_hour = 23;
+
+  // Stored with the observation for analysis; not part of the feature vector.
+  int32 http_status = 24;
+  double duration_ms = 25;
+  int64 observed_at_unix_ms = 26;
+}
+
+message BotClassificationResponse {
+  // The two flags the site persists on the request log entry.
+  bool is_bot = 1;
+  bool is_malicious = 2;
+
+  // Probability that the request is malicious/automated, in [0, 1].
+  float probability = 3;
+
+  string model_version = 4;
+
+  // Rule-based explanations, e.g. ["sensitive-path", "missing-user-agent"].
+  repeated string signals = 5;
+
+  int64 inference_micros = 6;
+
+  // Monotonic schema version of ai/botdetection/features.py.
+  uint32 feature_schema_version = 7;
+}
+
+message BotClassificationBatchRequest {
+  repeated BotClassificationRequest requests = 1;
+}
+
+message BotClassificationBatchResponse {
+  repeated BotClassificationResponse responses = 1;
+}
+
+message ModelInfoRequest {}
+
+message ModelInfoResponse {
+  string model_version = 1;
+  string trained_at = 2;
+  uint32 feature_schema_version = 3;
+  int64 training_samples = 4;
+  string checksum = 5;
+  double loaded_at_unix = 6;
+  int64 reload_count = 7;
+}

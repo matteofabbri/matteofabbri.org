@@ -1,4 +1,5 @@
 using System.Threading.RateLimiting;
+using BotDetection.Client;
 using MainSite.Blog;
 using MainSite.Booking;
 using MainSite.InfoBots;
@@ -42,11 +43,18 @@ public class Program
         builder.Services.AddSingleton<RequestCountryResolver>();
         builder.Services.AddSingleton<ICountryResolver>(services => services.GetRequiredService<RequestCountryResolver>());
 
+        // Classificazione bot: il writer arricchisce i batch prima di scrivere
+        // su Sperone. Se il modello non risponde i flag restano null e il log
+        // viene scritto comunque.
+        builder.Services.AddBotDetectionClient(builder.Configuration);
+        builder.Services.AddSingleton<BotEnricher>();
+
         if (requestLogEnabled)
         {
             builder.Services.AddSingleton<RequestLogQueue>();
             builder.Services.AddSingleton<IRequestLogSink>(services => services.GetRequiredService<RequestLogQueue>());
             builder.Services.AddHostedService<RequestLogWriter>();
+            builder.Services.AddHostedService<RequestLogBackfill>();
         }
 
         // --- Blog: articoli su file, accesso delegato a mailcow ---------------

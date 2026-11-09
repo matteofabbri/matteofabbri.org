@@ -21,13 +21,16 @@
     <div class="alert error">@error</div>
 }
 
-<form method="post" enctype="multipart/form-data" class="upload-form">
+<form method="post" enctype="multipart/form-data" class="upload-form"
+      data-upload-form data-max-bytes="@MediaUploadBatch.MaxRequestBytes">
     <label class="field">
-        <span class="field-label">Upload an image</span>
-        <input type="file" name="Upload" accept="image/jpeg,image/png,image/gif,image/webp,image/avif" />
-        <span class="hint">JPG, PNG, GIF, WebP or AVIF. Max 8 MB.</span>
+        <span class="field-label">Upload images</span>
+        <input type="file" name="Upload" multiple accept="image/jpeg,image/png,image/gif,image/webp,image/avif" />
+        <span class="hint">Drag files here or click to choose. JPG, PNG, GIF, WebP or AVIF, up to 8 MB each.</span>
     </label>
     <button type="submit" class="button">Upload</button>
+    <p class="drop-note" aria-hidden="true">Drop to upload</p>
+    <p class="upload-status" data-upload-status role="status" hidden></p>
 </form>
 
 @if (Model.Files.Count == 0)
@@ -49,4 +52,8 @@ else
             </figure>
         }
     </div>
+}
+
+@section Scripts {
+    <script src="~/js/upload.js" asp-append-version="true"></script>
 }

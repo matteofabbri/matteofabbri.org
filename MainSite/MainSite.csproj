@@ -9,6 +9,7 @@
   <ItemGroup>
     <ProjectReference Include="..\external\SPERONE\Sperone\Sperone.csproj" />
     <ProjectReference Include="..\MatteoFabbri.org.ServiceDefaults\MatteoFabbri.org.ServiceDefaults.csproj" />
+    <ProjectReference Include="..\bot-detection\src\BotDetection.Client\BotDetection.Client.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -4,36 +4,34 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 
 namespace MainSite.Pages.Admin;
 
-// Upload e gestione delle foto/video del jumbotron. Stanno nello stesso volume
-// del blog, in jumbotron/, e vengono scelti a caso in home.
+// Upload and management of the jumbotron photos/videos. They live in the blog
+// volume, under jumbotron/, and the home page picks one at random.
+[RequestSizeLimit(MediaUploadBatch.MaxRequestBytes)]
+[RequestFormLimits(MultipartBodyLengthLimit = MediaUploadBatch.MaxRequestBytes)]
 public sealed class JumbotronModel(JumbotronMediaStore media) : PageModel
 {
     public IReadOnlyList<MediaFile> Files { get; private set; } = [];
 
     [BindProperty]
-    public IFormFile? Upload { get; set; }
+    public List<IFormFile> Upload { get; set; } = [];
 
     public void OnGet() => Files = media.List();
 
     public async Task<IActionResult> OnPostAsync(CancellationToken ct)
     {
-        if (Upload is null || Upload.Length == 0)
+        if (Upload is null || Upload.Count == 0)
         {
-            TempData["Errore"] = "Choose a photo or video to upload.";
+            TempData["Errore"] = "Choose one or more photos or videos to upload.";
             return RedirectToPage();
         }
 
-        try
-        {
-            await using var stream = Upload.OpenReadStream();
-            var saved = await media.SaveAsync(Upload.FileName, stream, Upload.Length, ct);
-            TempData["Messaggio"] = $"Uploaded: {saved.FileName}";
-        }
-        catch (BlogValidationException ex)
-        {
-            TempData["Errore"] = ex.Message;
-        }
+        var result = await MediaUploadBatch.SaveAsync(
+            Upload,
+            async (fileName, stream, length, token) =>
+                (await media.SaveAsync(fileName, stream, length, token)).FileName,
+            ct);
 
+        MediaUploadBatch.Report(TempData, result);
         return RedirectToPage();
     }
 

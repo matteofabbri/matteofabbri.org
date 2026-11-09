@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>BotDetection.Contracts</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The single .proto file is shared with the Python service (same file is
+         compiled by grpcio-tools in ai/Dockerfile). Client-only: the gateway
+         is a consumer, not a gRPC server. -->
+    <Protobuf Include="..\..\contracts\bot_detection.proto" GrpcServices="Client" Link="Protos\bot_detection.proto" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Google.Protobuf" Version="3.31.1" />
+    <PackageReference Include="Grpc.Core.Api" Version="2.85.0" />
+    <PackageReference Include="Grpc.Net.Client" Version="2.85.0" />
+    <PackageReference Include="Grpc.Tools" Version="2.85.0" PrivateAssets="all" />
+  </ItemGroup>
+
+</Project>

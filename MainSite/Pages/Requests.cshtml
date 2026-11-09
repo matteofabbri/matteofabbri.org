@@ -191,6 +191,7 @@ else
                     <th>When</th>
                     <th>Request</th>
                     <th>Status</th>
+                    <th>Bot</th>
                     <th>Country</th>
                     <th>IP</th>
                     <th>Client ID</th>
@@ -205,6 +206,24 @@ else
                         <td class="cell-date">@Model.FormatWhen(row.When)</td>
                         <td><code class="request-path">@row.Method @row.Path</code></td>
                         <td><span class="status status-@(row.StatusCode / 100)xx">@row.StatusCode</span></td>
+                        <td>
+                            @if (row.IsBot is null)
+                            {
+                                <span class="bot-flag bot-unknown">—</span>
+                            }
+                            else if (row.IsMaliciousURL == true)
+                            {
+                                <span class="bot-flag bot-malicious">malicious</span>
+                            }
+                            else if (row.IsBot == true)
+                            {
+                                <span class="bot-flag bot-automated">bot</span>
+                            }
+                            else
+                            {
+                                <span class="bot-flag bot-human">human</span>
+                            }
+                        </td>
                         <td>
                             <a class="request-filter" asp-page="/Requests" asp-all-route-data="@Model.FilterRoute("country", row.CountryCode)">@row.Country</a>
                         </td>

@@ -1,5 +1,9 @@
 <Solution>
   <Folder Name="/LIBRARIES/" />
+  <Folder Name="/BOT DETECTION/">
+    <Project Path="bot-detection/src/BotDetection.Client/BotDetection.Client.csproj" />
+    <Project Path="bot-detection/src/BotDetection.Contracts/BotDetection.Contracts.csproj" />
+  </Folder>
   <Project Path="MainSite.Tests/MainSite.Tests.csproj" />
   <Project Path="MainSite/MainSite.csproj" />
   <Project Path="TheQult.Tests/TheQult.Tests.csproj" />

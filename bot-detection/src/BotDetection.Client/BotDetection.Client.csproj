@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>BotDetection.Client</RootNamespace>
+    <!-- The only log calls are the batch failure/timeout diagnostics; they run
+         once per flush, not per request. Source-generated LoggerMessage would
+         add boilerplate for no measurable gain. -->
+    <NoWarn>$(NoWarn);CA1848;CA1873</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\BotDetection.Contracts\BotDetection.Contracts.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,11 @@
+# Build output and local state never reach the image.
+**/bin/
+**/obj/
+**/__pycache__/
+**/*.pyc
+.git/
+.vs/
+.idea/
+ai/proto_gen/
+data/
+artifacts/

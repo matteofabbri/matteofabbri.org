@@ -196,7 +196,7 @@ public sealed class RequestsModel(
             }
 
             var builder = new StringBuilder();
-            builder.Append("When,Method,Path,Status,Country,Country code,IP,Client ID,User-Agent,Duration (ms)\r\n");
+            builder.Append("When,Method,Path,Status,Country,Country code,IP,Client ID,User-Agent,Duration (ms),IsBot,IsMaliciousURL\r\n");
 
             foreach (var entry in entries.Where(Matches))
             {
@@ -211,7 +211,9 @@ public sealed class RequestsModel(
                     .Append(Csv(entry.RemoteIp)).Append(',')
                     .Append(Csv(ClientIdOf(entry))).Append(',')
                     .Append(Csv(entry.UserAgent)).Append(',')
-                    .Append(entry.DurationMs.ToString("0.0", English))
+                    .Append(entry.DurationMs.ToString("0.0", English)).Append(',')
+                    .Append(Csv(Flag(entry.IsBot))).Append(',')
+                    .Append(Csv(Flag(entry.IsMaliciousURL)))
                     .Append("\r\n");
             }
 
@@ -377,6 +379,8 @@ public sealed class RequestsModel(
 
         return route;
     }
+
+    private static string? Flag(bool? value) => value is null ? null : value.Value ? "true" : "false";
 
     private static string CountryCodeOf(string? code) =>
         string.IsNullOrWhiteSpace(code) ? "ZZ" : code.Trim().ToUpperInvariant();
@@ -599,7 +603,9 @@ public sealed class RequestsModel(
             entry.RemoteIp ?? "—",
             string.IsNullOrEmpty(clientId) ? "—" : clientId,
             entry.UserAgent ?? "—",
-            entry.DurationMs);
+            entry.DurationMs,
+            entry.IsBot,
+            entry.IsMaliciousURL);
     }
 
     private void Empty()
@@ -643,6 +649,8 @@ public sealed record RequestRow(
     string RemoteIp,
     string ClientId,
     string UserAgent,
-    double DurationMs);
+    double DurationMs,
+    bool? IsBot,
+    bool? IsMaliciousURL);
 
 public sealed record RequestFilter(string Key, string Label, string Value);

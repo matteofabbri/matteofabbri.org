@@ -47,6 +47,14 @@ public sealed record RequestLogEntry
     public string? Referer { get; init; }
     public string? AcceptLanguage { get; init; }
 
+    // --- bot detection ---------------------------------------------------
+    // Compilati dal writer prima della scrittura. Null = modello non
+    // disponibile: la riga resta valida e i flag mancano.
+    public bool? IsBot { get; init; }
+    public bool? IsMaliciousURL { get; init; }
+    public double? BotProbability { get; init; }
+    public string? BotModel { get; init; }
+
     // --- contenuto -------------------------------------------------------
     public string? ContentType { get; init; }
     public long? ContentLength { get; init; }

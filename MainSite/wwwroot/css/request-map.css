@@ -314,3 +314,38 @@
         display: none;
     }
 }
+
+.bot-flag {
+    display: inline-block;
+    padding: 0.1rem 0.45rem;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    font-size: 0.72rem;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.bot-human {
+    color: var(--muted);
+}
+
+.bot-automated {
+    color: var(--text);
+}
+
+.bot-malicious {
+    color: #b3261e;
+    border-color: currentColor;
+}
+
+.bot-unknown {
+    color: var(--muted);
+    border-style: dashed;
+}
+
+@media (prefers-color-scheme: dark) {
+    .bot-malicious {
+        color: #f2a8a0;
+    }
+}

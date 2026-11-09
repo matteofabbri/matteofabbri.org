@@ -338,6 +338,82 @@ public sealed class RequestLogStore : IDisposable
         return entries;
     }
 
+    // Legge tutte le righe (anche /admin) in un intervallo di tempo. Serve al
+    // backfill dei flag: le pagine pubbliche non bastano, e il filtro per
+    // timestamp evita di caricare 90 giorni in una volta.
+    public async Task<IReadOnlyList<RequestLogEntry>> GetEntriesAsync(
+        DateTimeOffset from,
+        DateTimeOffset to,
+        CancellationToken ct = default)
+    {
+        if (!await EnsureInitializedAsync(ct) || _db is null)
+            return [];
+
+        var query = new QueryElementsCommand(_options.EffectiveCollection,
+        [
+            new QueryStep([new QueryClause { Scalar = new ScalarQuery("timestamp", From: Ticks(from), To: Ticks(to)) }]),
+        ]);
+
+        var (result, items) = await _db.Query(query);
+        if (result != OperationResult.Success || items.Count == 0)
+            return [];
+
+        var entries = new List<RequestLogEntry>(items.Count);
+        foreach (string id in items)
+        {
+            var (found, payload) = await _db.Get(new GetElementCommand(_options.EffectiveCollection, id));
+            if (!found)
+                continue;
+
+            var entry = JsonSerializer.Deserialize(payload.Span, RequestLogJsonContext.Default.RequestLogEntry);
+            if (entry is not null)
+                entries.Add(entry);
+        }
+
+        return entries;
+    }
+
+    // Riscrive il payload di righe esistenti (flag bot). L'ItemId non cambia,
+    // quindi ordine, paginazione e indici restano quelli di prima; il TTL viene
+    // riprogrammato al tempo che resta, così il backfill non allunga la
+    // conservazione dei log.
+    public async Task<int> UpdateManyAsync(
+        IReadOnlyList<RequestLogEntry> entries,
+        CancellationToken ct = default)
+    {
+        if (entries.Count == 0)
+            return 0;
+
+        if (!await EnsureInitializedAsync(ct) || _db is null)
+            return 0;
+
+        DateTimeOffset now = _timeProvider.GetUtcNow();
+        var commands = new List<UpdateElementCommand>(entries.Count);
+
+        foreach (var entry in entries)
+        {
+            long? ttl = _options.RetentionSeconds is { } retention
+                ? retention - (long)(now - entry.Timestamp).TotalSeconds
+                : null;
+
+            if (ttl is <= 0)
+                continue;
+
+            commands.Add(new UpdateElementCommand(
+                _options.EffectiveCollection,
+                entry.Id,
+                IndexingOf(entry),
+                ttl,
+                JsonSerializer.SerializeToUtf8Bytes(entry, RequestLogJsonContext.Default.RequestLogEntry)));
+        }
+
+        if (commands.Count == 0)
+            return 0;
+
+        var results = await _db.UpdateMany(commands);
+        return results.Count(result => result == OperationResult.Success);
+    }
+
     // Salva il body grezzo ricevuto su POST /info-send. Restituisce la riga
     // scritta (con il Guid generato) oppure null se Sperone non è disponibile.
     public async Task<InfoEntry?> InsertInfoAsync(

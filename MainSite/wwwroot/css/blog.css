@@ -897,6 +897,34 @@ main.wrap {
     flex: 1 1 260px;
 }
 
+/* Admin uploads: the form doubles as a drop target for multiple files. The
+   note only appears while files are dragged over the page. */
+.upload-form.is-dragover {
+    border-style: solid;
+    border-color: var(--accent);
+    background: var(--code-bg);
+}
+
+.drop-note {
+    display: none;
+    flex: 1 1 100%;
+    margin: 0;
+    color: var(--accent);
+    font-size: 0.82rem;
+    font-weight: 600;
+}
+
+.upload-form.is-dragover .drop-note {
+    display: block;
+}
+
+.upload-status {
+    flex: 1 1 100%;
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.82rem;
+}
+
 .media-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));

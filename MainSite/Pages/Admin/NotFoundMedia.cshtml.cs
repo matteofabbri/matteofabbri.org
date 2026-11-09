@@ -4,13 +4,16 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 
 namespace MainSite.Pages.Admin;
 
-// Upload e gestione delle foto/video della pagina 404. Stanno nel volume del
-// blog, in 404/, e vengono scelti a caso quando la pagina 404 si apre.
+// Upload and management of the 404 page photos/videos. They live in the blog
+// volume, under 404/, and the 404 page picks one at random when it opens.
+[RequestSizeLimit(MediaUploadBatch.MaxRequestBytes)]
+[RequestFormLimits(MultipartBodyLengthLimit = MediaUploadBatch.MaxRequestBytes)]
 public sealed class NotFoundMediaModel(NotFoundMediaStore media, BlogContentStore content) : PageModel
 {
     public IReadOnlyList<MediaFile> Files { get; private set; } = [];
 
-    // Il deposito dei download: da qui si copia dentro la rotazione della 404.
+    // Where the downloads wait: from here they are copied into the 404
+    // rotation.
     public IReadOnlyList<ContentFile> ContentFiles { get; private set; } = [];
 
     public long ContentBytes => ContentFiles.Sum(file => file.Size);
@@ -18,7 +21,7 @@ public sealed class NotFoundMediaModel(NotFoundMediaStore media, BlogContentStor
     public string ContentSizeLabel => MediaFile.FormatSize(ContentBytes);
 
     [BindProperty]
-    public IFormFile? Upload { get; set; }
+    public List<IFormFile> Upload { get; set; } = [];
 
     public void OnGet()
     {
@@ -28,28 +31,24 @@ public sealed class NotFoundMediaModel(NotFoundMediaStore media, BlogContentStor
 
     public async Task<IActionResult> OnPostAsync(CancellationToken ct)
     {
-        if (Upload is null || Upload.Length == 0)
+        if (Upload is null || Upload.Count == 0)
         {
-            TempData["Errore"] = "Choose a photo or video to upload.";
+            TempData["Errore"] = "Choose one or more photos or videos to upload.";
             return RedirectToPage();
         }
 
-        try
-        {
-            await using var stream = Upload.OpenReadStream();
-            var saved = await media.SaveAsync(Upload.FileName, stream, Upload.Length, ct);
-            TempData["Messaggio"] = $"Uploaded: {saved.FileName}";
-        }
-        catch (BlogValidationException ex)
-        {
-            TempData["Errore"] = ex.Message;
-        }
+        var result = await MediaUploadBatch.SaveAsync(
+            Upload,
+            async (fileName, stream, length, token) =>
+                (await media.SaveAsync(fileName, stream, length, token)).FileName,
+            ct);
 
+        MediaUploadBatch.Report(TempData, result);
         return RedirectToPage();
     }
 
-    // Copia tutti i file della cartella content dentro 404. Quelli già presenti
-    // e i formati non mostrabili vengono saltati e riportati.
+    // Copies every file of the content folder into 404. Files already there
+    // and formats the browser cannot show are skipped and reported.
     public async Task<IActionResult> OnPostCopyFromContentAsync(CancellationToken ct)
     {
         var result = await content.CopyToAsync(media, ct);

@@ -65,6 +65,9 @@ jobs:
         run: |
           dotnet publish MainSite/MainSite.csproj  /t:PublishContainer /p:ContainerRepository=matteofabbri-site     /p:ContainerImageTag=sdk    -r linux-x64
           docker build -f deploy/site-ffmpeg.Dockerfile -t matteofabbri-site:latest .
+          # Python model: context bot-detection/ (ai/ + contracts/); the image
+          # compiles the shared .proto at build time.
+          docker build -f bot-detection/ai/Dockerfile -t matteofabbri-bot-ai:latest bot-detection
           dotnet publish TheQult/TheQult.csproj    /t:PublishContainer /p:ContainerRepository=matteofabbri-theqult  /p:ContainerImageTag=latest -r linux-x64
           dotnet publish Maddalena/Maddalena.csproj /t:PublishContainer /p:ContainerRepository=matteofabbri-maddalena /p:ContainerImageTag=latest -r linux-x64
 
@@ -78,7 +81,7 @@ jobs:
 
       - name: Trasferimento immagini
         run: |
-          for img in matteofabbri-site matteofabbri-theqult matteofabbri-maddalena; do
+          for img in matteofabbri-site matteofabbri-theqult matteofabbri-maddalena matteofabbri-bot-ai; do
             docker save "$img:latest" | gzip | \
               ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$SERVER" 'gunzip | sudo docker load'
           done
@@ -138,6 +141,11 @@ jobs:
             for vol in blog-data request-log-data theqult-data; do
               sudo docker volume create "matteofabbri_$vol" >/dev/null
               sudo docker run --rm -v "matteofabbri_$vol:/data" alpine chown -R 1654:1654 /data
+            done
+            # Il servizio Python gira come UID 10001: modello e dataset.
+            for vol in botdetection-models botdetection-data; do
+              sudo docker volume create "matteofabbri_$vol" >/dev/null
+              sudo docker run --rm -v "matteofabbri_$vol:/data" alpine chown -R 10001:10001 /data
             done
           '
 
@@ -210,6 +218,7 @@ jobs:
             curl -sS -o /dev/null -w "blog=%{http_code}\n" https://matteofabbri.org/blog || true
             sleep 3
             sudo docker compose logs --tail=120 site
+            sudo docker compose logs --tail=40 bot-ai || true
           '
 
       # Solo maddalena.me: gli altri due domini non hanno ancora il DNS puntato qui.

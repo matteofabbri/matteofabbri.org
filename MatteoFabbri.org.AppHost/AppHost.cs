@@ -49,6 +49,21 @@ builder.AddDockerComposeEnvironment("matteofabbri")
             Driver = "local",
         };
 
+        // Bot detection: the model file is written by the retraining job and
+        // read by the inference container (atomic os.replace, hot reload). The
+        // SQLite dataset lives outside the image too.
+        file.Volumes["botdetection-models"] = new Volume
+        {
+            Name = "botdetection-models",
+            Driver = "local",
+        };
+
+        file.Volumes["botdetection-data"] = new Volume
+        {
+            Name = "botdetection-data",
+            Driver = "local",
+        };
+
         // RIAVVIO AUTOMATICO per tutti i servizi. Di suo Aspire non ne mette
         // nessuno (`restart-policy=no`), e le conseguenze sono due, entrambe
         // viste dal vivo: un container che esce per un errore passeggero — una
@@ -238,5 +253,28 @@ var caddy = builder.AddDockerfile("caddy", "caddy")
             Dockerfile = "Dockerfile",
         };
     });
+
+// --- Bot detection: the model labels the request log -------------------------
+// No gateway and no blocking: the site's request-log writer sends batches to
+// this container and stores isBot/isMaliciousURL on the entry. If the model is
+// down the flags stay null and the log is written anyway.
+// The build context is bot-detection/ because the image compiles
+// contracts/bot_detection.proto with grpcio-tools and copies ai/.
+var botAi = builder.AddDockerfile("bot-ai", "../bot-detection", "ai/Dockerfile")
+    // h2c must reach the Python process directly: the DCP HTTP/1.1 proxy is
+    // not in the gRPC path. In compose the endpoint resolves to bot-ai:50051.
+    .WithHttpEndpoint(targetPort: 50051, name: "grpc", isProxied: false)
+    .WithHttpEndpoint(targetPort: 8081, name: "http")
+    .WithHttpHealthCheck("/healthz", endpointName: "http")
+    .AsHttp2Service()
+    .WithVolume("botdetection-models", "/models")
+    .WithVolume("botdetection-data", "/data")
+    .WithEnvironment("BOT_GRPC_PORT", "50051")
+    .WithEnvironment("BOT_HTTP_PORT", "8081")
+    .WithEnvironment("MODEL_PATH", "/models/bot_model.joblib")
+    .WithEnvironment("DATASET_PATH", "/data/observations.sqlite3");
+
+// The site starts even when the model is unavailable: the flags are optional.
+site.WithEnvironment("BotDetection__GrpcUrl", botAi.GetEndpoint("grpc"));
 
 builder.Build().Run();
