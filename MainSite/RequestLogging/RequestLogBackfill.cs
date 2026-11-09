@@ -44,12 +44,22 @@ public sealed class RequestLogBackfill : BackgroundService
         try
         {
             await Task.Delay(InitialDelay, stoppingToken);
+            await RunAsync(stoppingToken);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
-            return;
+            // Normal shutdown.
         }
+        catch (Exception ex)
+        {
+            // A maintenance job must never take the site down. Without the
+            // marker the next start retries the rows that are still unlabelled.
+            _logger.LogError(ex, "Bot flags backfill failed; the site keeps running");
+        }
+    }
 
+    private async Task RunAsync(CancellationToken stoppingToken)
+    {
         // A private rate tracker: the live writer has its own, and feeding it
         // historical rows would corrupt the current window.
         var enricher = new BotEnricher(_classifier, new ClientRateTracker());

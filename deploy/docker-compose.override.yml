@@ -32,9 +32,10 @@ services:
       # Il modello che etichetta le richieste. Se il container AI non è su, il
       # sito scrive il log lo stesso e i flag restano null.
       BotDetection__GrpcUrl: http://bot-ai:50051
-      # Backfill una tantum delle righe già in Sperone: il marker in
-      # /data/sperone/bot-backfill.json evita di rifarlo a ogni riavvio.
-      RequestLog__BackfillBotFlags: "true"
+      # Backfill delle righe già in Sperone. Spento finché non è chiaro perché
+      # il primo run ha fatto riavviare il sito; il marker in
+      # /data/sperone/bot-backfill.json farà ripartire solo le righe mancanti.
+      RequestLog__BackfillBotFlags: "false"
     volumes:
       - blog-data:/data/blog
       - request-log-data:/data/sperone
