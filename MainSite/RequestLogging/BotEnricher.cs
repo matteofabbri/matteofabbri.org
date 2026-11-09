@@ -82,20 +82,25 @@ public sealed class BotEnricher
 
     private BotClassificationRequest BuildRequest(RequestLogEntry entry)
     {
+        // Old payloads can carry null for fields that are non-nullable in the
+        // record; protobuf strings reject null, so normalise here.
         var userAgent = entry.UserAgent ?? "";
-        var rates = _rates.Observe(entry.ClientId ?? "", entry.Path, entry.Timestamp, entry.StatusCode);
+        var path = entry.Path ?? "/";
+        var countryCode = entry.CountryCode ?? "";
+        var method = entry.Method ?? "GET";
+        var rates = _rates.Observe(entry.ClientId ?? "", path, entry.Timestamp, entry.StatusCode);
 
         return new BotClassificationRequest
         {
             RequestId = entry.RequestId ?? entry.Id,
             ClientId = entry.ClientId ?? "",
             RemoteIp = entry.RemoteIp ?? "",
-            CountryCode = entry.CountryCode,
-            Method = entry.Method,
-            Path = entry.Path,
+            CountryCode = countryCode,
+            Method = method,
+            Path = path,
             UserAgent = userAgent,
             UserAgentLength = userAgent.Length,
-            PathLength = entry.Path.Length,
+            PathLength = path.Length,
             UserAgentMissing = userAgent.Length == 0,
             // Python recomputes both flags from the raw path: one source of
             // truth for the label, no duplicated token list here.
