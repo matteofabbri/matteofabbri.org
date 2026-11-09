@@ -6,12 +6,16 @@ using Microsoft.Extensions.Options;
 
 namespace MainSite.Pages.Admin;
 
-// Elenco delle richieste con i due flag della detection, modificabili a mano.
-// La pagina sta sotto /Admin, quindi è protetta dalla policy del blog.
+// The requests with the two detection flags, which can be corrected by hand.
+// The page sits under /Admin, so it is covered by the blog policy.
 //
-// Salvare una riga imposta BotModel="manual": il backfill salta le righe che
-// hanno entrambi i flag valorizzati, quindi una scelta manuale non viene
-// sovrascritta. Lasciando "—" su entrambi i campi la riga torna al modello.
+// Each flag is one button: a click moves it to its next state ("—" → yes → no
+// → "—") and saves the row with BotModel="manual", so the backfill, which
+// skips rows that have both flags set, never overwrites a manual choice. With
+// both flags back on "—" the row is the model's again.
+//
+// Country, IP, Client ID and User-Agent link to the public requests page with
+// the matching filter applied, exactly like the cells of that page.
 public sealed class RequestsModel(
     RequestLogStore store,
     IOptions<RequestLogOptions> options,
@@ -44,6 +48,7 @@ public sealed class RequestsModel(
         string id,
         bool? isBot,
         bool? isMalicious,
+        string? toggle,
         int days,
         int pageNumber,
         CancellationToken ct)
@@ -57,6 +62,15 @@ public sealed class RequestsModel(
             return RedirectToPage(new { days = Days, pageNumber = PageNumber });
         }
 
+        // One button per flag: the click moves that flag forward and keeps the
+        // other one as the form posted it.
+        bool? bot = isBot;
+        bool? malicious = isMalicious;
+        if (string.Equals(toggle, "bot", StringComparison.Ordinal))
+            bot = RequestFlagState.Next(isBot);
+        else if (string.Equals(toggle, "malicious", StringComparison.Ordinal))
+            malicious = RequestFlagState.Next(isMalicious);
+
         try
         {
             var entry = await store.GetAsync(id, ct);
@@ -68,10 +82,10 @@ public sealed class RequestsModel(
 
             var updated = entry with
             {
-                IsBot = isBot,
-                IsMaliciousURL = isMalicious,
+                IsBot = bot,
+                IsMaliciousURL = malicious,
                 BotProbability = null,
-                BotModel = isBot is null && isMalicious is null ? null : "manual",
+                BotModel = bot is null && malicious is null ? null : "manual",
             };
 
             bool saved = await store.UpdateAsync(updated, ct);
@@ -80,7 +94,7 @@ public sealed class RequestsModel(
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            logger.LogWarning(ex, "Requests admin: modifica fallita");
+            logger.LogWarning(ex, "Requests admin: update failed");
             TempData["Errore"] = "Could not update the request.";
         }
 
@@ -98,6 +112,15 @@ public sealed class RequestsModel(
     {
         ["days"] = Days.ToString(CultureInfo.InvariantCulture),
         ["pageNumber"] = Math.Max(1, page).ToString(CultureInfo.InvariantCulture),
+    };
+
+    // Links to the public requests page, whose cells filter on the same
+    // parameters (country, ip, clientId, userAgent).
+    public Dictionary<string, string> FilterRoute(string key, string value) => new()
+    {
+        ["days"] = Days.ToString(CultureInfo.InvariantCulture),
+        ["pageNumber"] = "1",
+        [key] = value,
     };
 
     private void Normalize()
@@ -121,7 +144,7 @@ public sealed class RequestsModel(
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            logger.LogWarning(ex, "Requests admin: impossibile leggere da Sperone");
+            logger.LogWarning(ex, "Requests admin: could not read from Sperone");
             LoadFailed = true;
         }
     }

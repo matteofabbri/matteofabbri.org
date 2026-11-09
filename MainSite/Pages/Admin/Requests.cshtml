@@ -1,5 +1,6 @@
 @page "/admin/requests"
 @model MainSite.Pages.Admin.RequestsModel
+@using MainSite.RequestLogging
 @{
     ViewData["Title"] = "Requests";
 }
@@ -13,8 +14,9 @@
         <p class="eyebrow"><a asp-page="/Admin/Index">Administration</a> / Requests</p>
         <h1>Requests</h1>
         <p class="lede">
-            Every public request with the two model flags. Saving a row overrides the model;
-            leaving both on “—” returns the row to the model.
+            Every public request with the two model flags. A flag is a button: each click moves it
+            from “—” to yes to no and back to “—”, and with both back on “—” the row belongs to the
+            model again. Country, IP, Client ID and User-Agent open the public list filtered by that value.
         </p>
     </div>
     <form method="get" class="map-controls">
@@ -102,27 +104,57 @@ else
                                 <input type="hidden" name="id" value="@row.Id" />
                                 <input type="hidden" name="days" value="@Model.Days" />
                                 <input type="hidden" name="pageNumber" value="@Model.PageNumber" />
-                                <select name="isBot" class="input" aria-label="Bot flag">
-                                    <option value="" selected="@(row.IsBot is null)">Bot —</option>
-                                    <option value="true" selected="@(row.IsBot == true)">Bot yes</option>
-                                    <option value="false" selected="@(row.IsBot == false)">Bot no</option>
-                                </select>
-                                <select name="isMalicious" class="input" aria-label="Malicious flag">
-                                    <option value="" selected="@(row.IsMaliciousURL is null)">Malicious —</option>
-                                    <option value="true" selected="@(row.IsMaliciousURL == true)">Malicious yes</option>
-                                    <option value="false" selected="@(row.IsMaliciousURL == false)">Malicious no</option>
-                                </select>
-                                <button type="submit" class="button button-secondary">Save</button>
+                                <input type="hidden" name="isBot" value="@RequestFlagState.Value(row.IsBot)" />
+                                <input type="hidden" name="isMalicious" value="@RequestFlagState.Value(row.IsMaliciousURL)" />
+                                <button type="submit" name="toggle" value="bot"
+                                        class="bot-flag bot-toggle @RequestFlagState.BotBadgeClass(row.IsBot)"
+                                        title="Bot flag — @RequestFlagState.ClickHint(row.IsBot)">
+                                    Bot @RequestFlagState.Label(row.IsBot)
+                                </button>
+                                <button type="submit" name="toggle" value="malicious"
+                                        class="bot-flag bot-toggle @RequestFlagState.MaliciousBadgeClass(row.IsMaliciousURL)"
+                                        title="Malicious URL flag — @RequestFlagState.ClickHint(row.IsMaliciousURL)">
+                                    Malicious @RequestFlagState.Label(row.IsMaliciousURL)
+                                </button>
                                 @if (row.BotModel == "manual")
                                 {
                                     <span class="bot-flag bot-automated">manual</span>
                                 }
                             </form>
                         </td>
-                        <td>@row.Country</td>
-                        <td><code class="remote-ip">@row.RemoteIp</code></td>
-                        <td><code class="client-id">@row.ClientId</code></td>
-                        <td><span class="user-agent">@row.UserAgent</span></td>
+                        <td>
+                            <a class="request-filter" asp-page="/Requests" asp-all-route-data="@Model.FilterRoute("country", row.CountryCode)">@row.Country</a>
+                        </td>
+                        <td>
+                            @if (row.RemoteIp != "—")
+                            {
+                                <code class="remote-ip"><a class="request-filter" asp-page="/Requests" asp-all-route-data="@Model.FilterRoute("ip", row.RemoteIp)">@row.RemoteIp</a></code>
+                            }
+                            else
+                            {
+                                <code class="remote-ip">@row.RemoteIp</code>
+                            }
+                        </td>
+                        <td>
+                            @if (row.ClientId != "—")
+                            {
+                                <code class="client-id"><a class="request-filter" asp-page="/Requests" asp-all-route-data="@Model.FilterRoute("clientId", row.ClientId)">@row.ClientId</a></code>
+                            }
+                            else
+                            {
+                                <code class="client-id">@row.ClientId</code>
+                            }
+                        </td>
+                        <td>
+                            @if (row.UserAgent != "—")
+                            {
+                                <code class="user-agent"><a class="request-filter" asp-page="/Requests" asp-all-route-data="@Model.FilterRoute("userAgent", row.UserAgent)">@row.UserAgent</a></code>
+                            }
+                            else
+                            {
+                                <code class="user-agent">@row.UserAgent</code>
+                            }
+                        </td>
                         <td class="cell-number">@Model.FormatDuration(row.DurationMs)</td>
                     </tr>
                 }

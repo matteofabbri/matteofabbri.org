@@ -224,12 +224,6 @@
     gap: 0.4rem;
 }
 
-.bot-flags-form .input {
-    width: auto;
-    padding: 0.35rem 0.5rem;
-    font-size: 0.85rem;
-}
-
 .remote-ip,
 .client-id {
     font-family: var(--mono);
@@ -351,6 +345,25 @@
     letter-spacing: 0.02em;
     text-transform: uppercase;
     white-space: nowrap;
+}
+
+/* The two admin flags are buttons: they show the state and a click moves it on. */
+.bot-toggle {
+    font: inherit;
+    font-size: 0.72rem;
+    background: transparent;
+    cursor: pointer;
+}
+
+.bot-toggle:hover {
+    background: var(--code-bg);
+    border-color: currentColor;
+    border-style: solid;
+}
+
+.bot-toggle:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
 }
 
 .bot-human {
