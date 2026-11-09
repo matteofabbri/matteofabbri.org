@@ -204,16 +204,28 @@ else
                 {
                     <tr>
                         <td class="cell-date">@Model.FormatWhen(row.When)</td>
-                        <td><code class="request-path">@row.Method @row.Path</code></td>
+                        <td>
+                            <code class="request-path">
+                                @row.Method
+                                @if (row.Href is string href)
+                                {
+                                    <a href="@href" target="_blank" rel="noopener noreferrer" title="Open @row.Path">@row.Path</a>
+                                }
+                                else
+                                {
+                                    @row.Path
+                                }
+                            </code>
+                        </td>
                         <td><span class="status status-@(row.StatusCode / 100)xx">@row.StatusCode</span></td>
                         <td>
-                            @if (row.IsBot is null)
-                            {
-                                <span class="bot-flag bot-unknown">—</span>
-                            }
-                            else if (row.IsMaliciousURL == true)
+                            @if (row.IsMaliciousURL == true)
                             {
                                 <span class="bot-flag bot-malicious">malicious</span>
+                            }
+                            else if (row.IsBot is null)
+                            {
+                                <span class="bot-flag bot-unknown">—</span>
                             }
                             else if (row.IsBot == true)
                             {

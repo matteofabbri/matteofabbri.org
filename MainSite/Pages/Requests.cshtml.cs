@@ -633,7 +633,8 @@ public sealed class RequestsModel(
             entry.UserAgent ?? "—",
             entry.DurationMs,
             entry.IsBot,
-            entry.IsMaliciousURL);
+            entry.IsMaliciousURL,
+            RequestLinks.SafeHref(entry.Path + entry.QueryString));
     }
 
     private void Empty()
@@ -691,6 +692,7 @@ public sealed record RequestRow(
     string UserAgent,
     double DurationMs,
     bool? IsBot,
-    bool? IsMaliciousURL);
+    bool? IsMaliciousURL,
+    string? Href);
 
 public sealed record RequestFilter(string Key, string Label, string Value);

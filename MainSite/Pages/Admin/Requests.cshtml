@@ -1,0 +1,158 @@
+@page "/admin/requests"
+@model MainSite.Pages.Admin.RequestsModel
+@{
+    ViewData["Title"] = "Requests";
+}
+
+@section Head {
+    <link rel="stylesheet" href="~/css/request-map.css" asp-append-version="true" />
+}
+
+<div class="page-head">
+    <div>
+        <p class="eyebrow"><a asp-page="/Admin/Index">Administration</a> / Requests</p>
+        <h1>Requests</h1>
+        <p class="lede">
+            Every public request with the two model flags. Saving a row overrides the model;
+            leaving both on “—” returns the row to the model.
+        </p>
+    </div>
+    <form method="get" class="map-controls">
+        <input type="hidden" name="pageNumber" value="1" />
+        <label class="field map-period">
+            <span class="field-label">Period</span>
+            <select name="days" onchange="this.form.submit()">
+                <option value="1" selected="@(Model.Days == 1)">Last 24 hours</option>
+                <option value="7" selected="@(Model.Days == 7)">Last 7 days</option>
+                <option value="30" selected="@(Model.Days == 30)">Last 30 days</option>
+                <option value="90" selected="@(Model.Days == 90)">Last 90 days</option>
+            </select>
+        </label>
+        <noscript><button type="submit" class="button">Refresh</button></noscript>
+    </form>
+</div>
+
+@if (TempData["Messaggio"] is string message)
+{
+    <div class="alert success">@message</div>
+}
+@if (TempData["Errore"] is string error)
+{
+    <div class="alert error">@error</div>
+}
+@if (Model.LoadFailed)
+{
+    <div class="alert error">
+        <strong>Could not read the requests from Sperone.</strong>
+        Check the site logs: the database may be unreachable.
+    </div>
+}
+else if (!Model.LogEnabled)
+{
+    <div class="alert error">
+        <strong>Request logging is disabled.</strong>
+        Enable <code>RequestLog:Enabled</code> to collect the data for this page.
+    </div>
+}
+
+@if (Model.Rows.Count == 0)
+{
+    <div class="empty">
+        <p>No public requests in the period.</p>
+    </div>
+}
+else
+{
+    <div class="table-wrap">
+        <table class="admin-table requests-table">
+            <thead>
+                <tr>
+                    <th>When</th>
+                    <th>Request</th>
+                    <th>Status</th>
+                    <th>Flags</th>
+                    <th>Country</th>
+                    <th>IP</th>
+                    <th>Client ID</th>
+                    <th>User-Agent</th>
+                    <th class="cell-number">Duration</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var row in Model.Rows)
+                {
+                    <tr>
+                        <td class="cell-date">@Model.FormatWhen(row.When)</td>
+                        <td>
+                            <code class="request-path">
+                                @row.Method
+                                @if (row.Href is string href)
+                                {
+                                    <a href="@href" target="_blank" rel="noopener noreferrer" title="Open @row.Path">@row.Path</a>
+                                }
+                                else
+                                {
+                                    @row.Path
+                                }
+                            </code>
+                        </td>
+                        <td><span class="status status-@(row.StatusCode / 100)xx">@row.StatusCode</span></td>
+                        <td>
+                            <form method="post" asp-page-handler="Update" class="bot-flags-form">
+                                <input type="hidden" name="id" value="@row.Id" />
+                                <input type="hidden" name="days" value="@Model.Days" />
+                                <input type="hidden" name="pageNumber" value="@Model.PageNumber" />
+                                <select name="isBot" class="input" aria-label="Bot flag">
+                                    <option value="" selected="@(row.IsBot is null)">Bot —</option>
+                                    <option value="true" selected="@(row.IsBot == true)">Bot yes</option>
+                                    <option value="false" selected="@(row.IsBot == false)">Bot no</option>
+                                </select>
+                                <select name="isMalicious" class="input" aria-label="Malicious flag">
+                                    <option value="" selected="@(row.IsMaliciousURL is null)">Malicious —</option>
+                                    <option value="true" selected="@(row.IsMaliciousURL == true)">Malicious yes</option>
+                                    <option value="false" selected="@(row.IsMaliciousURL == false)">Malicious no</option>
+                                </select>
+                                <button type="submit" class="button button-secondary">Save</button>
+                                @if (row.BotModel == "manual")
+                                {
+                                    <span class="bot-flag bot-automated">manual</span>
+                                }
+                            </form>
+                        </td>
+                        <td>@row.Country</td>
+                        <td><code class="remote-ip">@row.RemoteIp</code></td>
+                        <td><code class="client-id">@row.ClientId</code></td>
+                        <td><span class="user-agent">@row.UserAgent</span></td>
+                        <td class="cell-number">@Model.FormatDuration(row.DurationMs)</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    <nav class="pagination" aria-label="Request pagination">
+        @if (Model.PageNumber > 1)
+        {
+            <a class="button button-secondary" asp-page="/Admin/Requests" asp-all-route-data="@Model.PageRoute(Model.PageNumber - 1)" rel="prev">← Previous</a>
+        }
+        else
+        {
+            <span class="button button-secondary pagination-disabled">← Previous</span>
+        }
+
+        <span class="pagination-info">
+            @(Model.Total == 0
+                ? "No public requests"
+                : $"{Model.FormatNumber(Model.Total)} requests · page {Model.PageNumber} of {Model.PageCount}")
+        </span>
+
+        @if (Model.PageNumber < Model.PageCount)
+        {
+            <a class="button button-secondary" asp-page="/Admin/Requests" asp-all-route-data="@Model.PageRoute(Model.PageNumber + 1)" rel="next">Next →</a>
+        }
+        else
+        {
+            <span class="button button-secondary pagination-disabled">Next →</span>
+        }
+    </nav>
+}

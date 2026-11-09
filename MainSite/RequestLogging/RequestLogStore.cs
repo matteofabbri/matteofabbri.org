@@ -392,19 +392,8 @@ public sealed class RequestLogStore : IDisposable
 
         foreach (var entry in entries)
         {
-            long? ttl = _options.RetentionSeconds is { } retention
-                ? retention - (long)(now - entry.Timestamp).TotalSeconds
-                : null;
-
-            if (ttl is <= 0)
-                continue;
-
-            commands.Add(new UpdateElementCommand(
-                _options.EffectiveCollection,
-                entry.Id,
-                IndexingOf(entry),
-                ttl,
-                JsonSerializer.SerializeToUtf8Bytes(entry, RequestLogJsonContext.Default.RequestLogEntry)));
+            if (BuildUpdateCommand(entry, now) is { } command)
+                commands.Add(command);
         }
 
         if (commands.Count == 0)
@@ -412,6 +401,38 @@ public sealed class RequestLogStore : IDisposable
 
         var results = await _db.UpdateMany(commands);
         return results.Count(result => result == OperationResult.Success);
+    }
+
+    // Riscrive una singola riga: è la modifica manuale dei flag dalla pagina
+    // admin. Stesse garanzie del batch (ItemId, indici e scadenza invariati).
+    public async Task<bool> UpdateAsync(RequestLogEntry entry, CancellationToken ct = default)
+    {
+        if (!await EnsureInitializedAsync(ct) || _db is null)
+            return false;
+
+        var command = BuildUpdateCommand(entry, _timeProvider.GetUtcNow());
+        if (command is null)
+            return false;
+
+        var result = await _db.Update(command);
+        return result == OperationResult.Success;
+    }
+
+    private UpdateElementCommand? BuildUpdateCommand(RequestLogEntry entry, DateTimeOffset now)
+    {
+        long? ttl = _options.RetentionSeconds is { } retention
+            ? retention - (long)(now - entry.Timestamp).TotalSeconds
+            : null;
+
+        if (ttl is <= 0)
+            return null;
+
+        return new UpdateElementCommand(
+            _options.EffectiveCollection,
+            entry.Id,
+            IndexingOf(entry),
+            ttl,
+            JsonSerializer.SerializeToUtf8Bytes(entry, RequestLogJsonContext.Default.RequestLogEntry));
     }
 
     // Salva il body grezzo ricevuto su POST /info-send. Restituisce la riga

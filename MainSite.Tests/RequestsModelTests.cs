@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json;
 using MainSite.Pages;
 using MainSite.RequestLogging;
 using Microsoft.AspNetCore.Mvc;
@@ -150,7 +151,7 @@ public sealed class RequestsModelTests : IDisposable
         Assert.Equal(1, model.Days);
         Assert.Equal("last 24 hours", model.PeriodLabel);
         Assert.True(model.HourlyPeriod);
-        Assert.Equal("Requests and visitors per hour", model.ChartTitle);
+        Assert.Equal("Requests, bots and visitors per hour", model.ChartTitle);
 
         // Barre orarie che coprono tutta la finestra: 24, più l'ora parziale in corso.
         Assert.InRange(model.VisitorBuckets.Count, 24, 25);
@@ -232,6 +233,33 @@ public sealed class RequestsModelTests : IDisposable
         }
     }
 
+    [Fact]
+    public async Task The_chart_counts_bots_and_malicious_rows_per_bucket()
+    {
+        var now = DateTimeOffset.UtcNow;
+        await _store.InsertManyAsync(
+        [
+            Entry("req-bot", now.AddMinutes(-1), "IT", "203.0.113.7", "aaaaaaaaaaaaaaaa", "Mozilla/5.0", isBot: true),
+            Entry("req-mal", now.AddMinutes(-2), "IT", "203.0.113.8", "bbbbbbbbbbbbbbbb", "curl/8", isBot: true, isMalicious: true),
+            Entry("req-human", now.AddMinutes(-3), "IT", "203.0.113.9", "cccccccccccccccc", "Mozilla/5.0", isBot: false, isMalicious: false),
+            Entry("req-unknown", now.AddMinutes(-4), "IT", "203.0.113.10", "dddddddddddddddd", "curl/8"),
+        ], default);
+
+        var model = CreateModel();
+        await model.OnGetAsync(1, 1, null, null, null, null, default);
+
+        var points = model.ChartPoints();
+        Assert.Equal(2, points.Sum(point => point.Bots));
+        Assert.Equal(1, points.Sum(point => point.Malicious));
+        Assert.Equal(2, model.TotalBots);
+        Assert.Equal(1, model.TotalMalicious);
+
+        using var document = JsonDocument.Parse(model.ChartJson());
+        JsonElement root = document.RootElement;
+        Assert.Equal(2, root.GetProperty("bots").EnumerateArray().Sum(value => value.GetInt32()));
+        Assert.Equal(1, root.GetProperty("malicious").EnumerateArray().Sum(value => value.GetInt32()));
+    }
+
     private RequestsModel CreateModel() => new(
         new StoreProvider(_store),
         Options.Create(_options),
@@ -244,7 +272,9 @@ public sealed class RequestsModelTests : IDisposable
         string country,
         string ip,
         string clientId,
-        string userAgent) => new()
+        string userAgent,
+        bool? isBot = null,
+        bool? isMalicious = null) => new()
     {
         Id = id,
         Timestamp = timestamp,
@@ -261,6 +291,8 @@ public sealed class RequestsModelTests : IDisposable
         ClientId = clientId,
         CountryCode = country,
         Service = "site",
+        IsBot = isBot,
+        IsMaliciousURL = isMalicious,
     };
 
     private sealed class StoreProvider(RequestLogStore store) : IServiceProvider
