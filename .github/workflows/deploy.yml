@@ -216,9 +216,9 @@ jobs:
             sudo docker inspect --format "user={{.Config.User}}" $(sudo docker compose ps -q site) || true
             sudo docker compose exec -T site sh -c "id; ls -ld /data/blog; touch /data/blog/.probe && rm /data/blog/.probe && echo blog-writable" || true
             curl -sS -o /dev/null -w "blog=%{http_code}\n" https://matteofabbri.org/blog || true
-            sleep 3
-            sudo docker compose logs --tail=120 site
-            sudo docker compose logs --tail=40 bot-ai || true
+            sleep 12
+            sudo docker compose logs --tail=160 site
+            sudo docker compose logs --tail=60 bot-ai || true
           '
 
       # Solo maddalena.me: gli altri due domini non hanno ancora il DNS puntato qui.

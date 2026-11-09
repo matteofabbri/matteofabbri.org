@@ -32,21 +32,22 @@ services:
       # Il modello che etichetta le richieste. Se il container AI non è su, il
       # sito scrive il log lo stesso e i flag restano null.
       BotDetection__GrpcUrl: http://bot-ai:50051
-      # Backfill delle righe già in Sperone. Spento finché non è chiaro perché
-      # il primo run ha fatto riavviare il sito; il marker in
-      # /data/sperone/bot-backfill.json farà ripartire solo le righe mancanti.
-      RequestLog__BackfillBotFlags: "false"
+      # Backfill delle righe già in Sperone. Il marker in
+      # /data/sperone/bot-backfill.json fa ripartire solo le righe mancanti.
+      RequestLog__BackfillBotFlags: "true"
     volumes:
       - blog-data:/data/blog
       - request-log-data:/data/sperone
       - /opt/matteofabbri/geoip:/data/geoip:ro
 
-  # Python inference service. No ports: the site reaches it on the compose
-  # network (bot-ai:50051, h2c). The model and the SQLite dataset live in the
-  # volumes, so rebuilding the container does not lose them.
+  # Python inference service. The generated compose puts every service on the
+  # "aspire" network: without this line the container lands on the default
+  # network, the site cannot resolve bot-ai and gRPC returns Unavailable.
   bot-ai:
     image: matteofabbri-bot-ai:latest
     restart: unless-stopped
+    networks:
+      - aspire
     volumes:
       - botdetection-models:/models
       - botdetection-data:/data
