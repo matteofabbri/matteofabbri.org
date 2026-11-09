@@ -1,3 +1,7 @@
+:root {
+    --chart-danger: #b3261e;
+}
+
 .map-toolbar {
     display: flex;
     flex-wrap: wrap;
@@ -345,6 +349,10 @@
 }
 
 @media (prefers-color-scheme: dark) {
+    :root {
+        --chart-danger: #f2a8a0;
+    }
+
     .bot-malicious {
         color: #f2a8a0;
     }

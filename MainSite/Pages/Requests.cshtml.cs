@@ -57,6 +57,8 @@ public sealed class RequestsModel(
     public string CountsJson { get; private set; } = "{}";
     public IReadOnlyList<VisitorBucket> VisitorBuckets { get; private set; } = [];
     public int UniqueVisitors { get; private set; }
+    public int TotalBots => VisitorBuckets.Sum(bucket => bucket.Bots);
+    public int TotalMalicious => VisitorBuckets.Sum(bucket => bucket.Malicious);
 
     // Le ultime 24 ore hanno barre orarie; i periodi più lunghi barre giornaliere.
     public bool HourlyPeriod => Days == 1;
@@ -69,10 +71,10 @@ public sealed class RequestsModel(
         _ => "last 30 days",
     };
 
-    public string ChartTitle => HourlyPeriod ? "Requests and visitors per hour" : "Requests and visitors per day";
+    public string ChartTitle => HourlyPeriod ? "Requests, bots and visitors per hour" : "Requests, bots and visitors per day";
 
     public string ChartAriaLabel =>
-        $"{ChartTitle}, {PeriodLabel}: {FormatNumber(TotalRequests)} requests and {FormatNumber(UniqueVisitors)} unique visitors";
+        $"{ChartTitle}, {PeriodLabel}: {FormatNumber(TotalRequests)} requests, {FormatNumber(TotalBots)} flagged as bots, {FormatNumber(TotalMalicious)} as malicious, {FormatNumber(UniqueVisitors)} unique visitors";
 
     public async Task OnGetAsync(
         int? days,
@@ -475,6 +477,8 @@ public sealed class RequestsModel(
             int count = Math.Max(1, (int)(HourStart(to).AddHours(1) - first).TotalHours);
             var sets = NewVisitorSets(count);
             var requests = new int[count];
+            var bots = new int[count];
+            var malicious = new int[count];
 
             foreach (var entry in entries)
             {
@@ -483,6 +487,10 @@ public sealed class RequestsModel(
                     continue;
 
                 requests[index]++;
+                if (entry.IsBot == true)
+                    bots[index]++;
+                if (entry.IsMaliciousURL == true)
+                    malicious[index]++;
 
                 string clientId = ClientIdOf(entry);
                 if (string.IsNullOrEmpty(clientId))
@@ -493,7 +501,13 @@ public sealed class RequestsModel(
             }
 
             VisitorBuckets = Enumerable.Range(0, count)
-                .Select(i => new VisitorBucket(first.AddHours(i), TimeSpan.FromHours(1), sets[i].Count, requests[i]))
+                .Select(i => new VisitorBucket(
+                    first.AddHours(i),
+                    TimeSpan.FromHours(1),
+                    sets[i].Count,
+                    requests[i],
+                    bots[i],
+                    malicious[i]))
                 .ToList();
         }
         else
@@ -503,6 +517,8 @@ public sealed class RequestsModel(
             int count = lastDay.DayNumber - firstDay.DayNumber + 1;
             var sets = NewVisitorSets(count);
             var requests = new int[count];
+            var bots = new int[count];
+            var malicious = new int[count];
 
             foreach (var entry in entries)
             {
@@ -511,6 +527,10 @@ public sealed class RequestsModel(
                     continue;
 
                 requests[index]++;
+                if (entry.IsBot == true)
+                    bots[index]++;
+                if (entry.IsMaliciousURL == true)
+                    malicious[index]++;
 
                 string clientId = ClientIdOf(entry);
                 if (string.IsNullOrEmpty(clientId))
@@ -522,7 +542,13 @@ public sealed class RequestsModel(
 
             var buckets = new List<VisitorBucket>(count);
             for (int i = 0; i < count; i++)
-                buckets.Add(new VisitorBucket(RomeMidnight(firstDay.AddDays(i)), TimeSpan.FromDays(1), sets[i].Count, requests[i]));
+                buckets.Add(new VisitorBucket(
+                    RomeMidnight(firstDay.AddDays(i)),
+                    TimeSpan.FromDays(1),
+                    sets[i].Count,
+                    requests[i],
+                    bots[i],
+                    malicious[i]));
 
             VisitorBuckets = buckets;
         }
@@ -565,10 +591,10 @@ public sealed class RequestsModel(
             DateTimeOffset local = RomeTime(bucket.Start);
             string label = local.ToString(HourlyPeriod ? "HH:mm" : "d MMM", English);
             string title = HourlyPeriod
-                ? $"{local.ToString("HH:mm", English)}–{local.AddHours(1).ToString("HH:mm", English)} on {local.ToString("dddd d MMMM yyyy", English)}: {FormatNumber(bucket.Visitors)} unique visitors, {FormatNumber(bucket.Requests)} requests"
-                : $"{local.ToString("dddd d MMMM yyyy", English)}: {FormatNumber(bucket.Visitors)} unique visitors, {FormatNumber(bucket.Requests)} requests";
+                ? $"{local.ToString("HH:mm", English)}–{local.AddHours(1).ToString("HH:mm", English)} on {local.ToString("dddd d MMMM yyyy", English)}: {FormatNumber(bucket.Visitors)} unique visitors, {FormatNumber(bucket.Requests)} requests, {FormatNumber(bucket.Bots)} bots, {FormatNumber(bucket.Malicious)} malicious"
+                : $"{local.ToString("dddd d MMMM yyyy", English)}: {FormatNumber(bucket.Visitors)} unique visitors, {FormatNumber(bucket.Requests)} requests, {FormatNumber(bucket.Bots)} bots, {FormatNumber(bucket.Malicious)} malicious";
 
-            points.Add(new ChartPoint(label, title, bucket.Visitors, bucket.Requests));
+            points.Add(new ChartPoint(label, title, bucket.Visitors, bucket.Requests, bucket.Bots, bucket.Malicious));
         }
 
         return points;
@@ -584,6 +610,8 @@ public sealed class RequestsModel(
             titles = points.Select(point => point.Title),
             visitors = points.Select(point => point.Visitors),
             requests = points.Select(point => point.Requests),
+            bots = points.Select(point => point.Bots),
+            malicious = points.Select(point => point.Malicious),
         });
     }
 
@@ -633,11 +661,23 @@ public sealed record CountryCount(string Code, string Name, int Count);
 // Un bucket del grafico — un'ora per le ultime 24 ore, un giorno di Roma per i
 // periodi più lunghi — con il suo inizio (in UTC), il numero di client
 // distinti e il numero di richieste che ci sono arrivate.
-public sealed record VisitorBucket(DateTimeOffset Start, TimeSpan Duration, int Visitors, int Requests);
+public sealed record VisitorBucket(
+    DateTimeOffset Start,
+    TimeSpan Duration,
+    int Visitors,
+    int Requests,
+    int Bots,
+    int Malicious);
 
 // Un punto del grafico come lo consuma Chart.js: etichetta dell'asse, titolo
 // completo del tooltip e le due serie.
-public sealed record ChartPoint(string Label, string Title, int Visitors, int Requests);
+public sealed record ChartPoint(
+    string Label,
+    string Title,
+    int Visitors,
+    int Requests,
+    int Bots,
+    int Malicious);
 
 public sealed record RequestRow(
     DateTimeOffset When,

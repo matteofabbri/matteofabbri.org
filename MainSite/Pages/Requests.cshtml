@@ -116,7 +116,7 @@ else if (Model.GeoIpUpdated is { } updated)
         </div>
         <p class="hint">
             A visitor is a Client ID: same IP and same user-agent count once per @(Model.HourlyPeriod ? "hour" : "day").
-            Requests exclude <code>/admin</code> pages.
+            Requests exclude <code>/admin</code> pages. The bot and malicious lines count the requests flagged by the model.
         </p>
     </div>
 }
@@ -322,6 +322,7 @@ else
                     muted: value('--muted'),
                     border: value('--border'),
                     surface: value('--surface'),
+                    danger: value('--chart-danger') || '#b3261e',
                     font: getComputedStyle(document.body).fontFamily,
                 };
             };
@@ -364,6 +365,40 @@ else
                                 tension: 0.3,
                                 fill: false,
                                 order: 1,
+                            },
+                            {
+                                type: 'line',
+                                label: 'Bot requests',
+                                data: series.bots,
+                                yAxisID: 'yRequests',
+                                borderColor: colors.accent,
+                                backgroundColor: colors.accent,
+                                borderWidth: 1.8,
+                                pointRadius: 0,
+                                pointHoverRadius: 4,
+                                pointHoverBackgroundColor: colors.accent,
+                                pointHoverBorderColor: colors.surface,
+                                pointHoverBorderWidth: 2,
+                                tension: 0.3,
+                                fill: false,
+                                order: 0,
+                            },
+                            {
+                                type: 'line',
+                                label: 'Malicious bots',
+                                data: series.malicious,
+                                yAxisID: 'yRequests',
+                                borderColor: colors.danger,
+                                backgroundColor: colors.danger,
+                                borderWidth: 1.8,
+                                pointRadius: 0,
+                                pointHoverRadius: 4,
+                                pointHoverBackgroundColor: colors.danger,
+                                pointHoverBorderColor: colors.surface,
+                                pointHoverBorderWidth: 2,
+                                tension: 0.3,
+                                fill: false,
+                                order: 0,
                             },
                             {
                                 type: 'bar',
