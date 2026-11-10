@@ -366,6 +366,84 @@
     outline-offset: 1px;
 }
 
+/* The same badges, on the public page, are links that set (or remove) the
+   bot/malicious filter. */
+a.bot-flag-link {
+    text-decoration: none;
+    cursor: pointer;
+}
+
+a.bot-flag-link:hover {
+    background: var(--code-bg);
+    border-color: currentColor;
+}
+
+a.bot-flag-link:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+}
+
+/* The country list folded into one accordion section per continent. */
+.continent-group {
+    margin: 0 0 0.5rem;
+}
+
+.continent-group summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.6rem 0.9rem;
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-weight: 600;
+    cursor: pointer;
+    list-style: none;
+}
+
+.continent-group summary::-webkit-details-marker {
+    display: none;
+}
+
+.continent-group summary::before {
+    content: "▸";
+    flex: 0 0 auto;
+    color: var(--muted);
+}
+
+.continent-group[open] summary::before {
+    content: "▾";
+}
+
+.continent-group summary:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.continent-group[open] summary {
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+}
+
+.continent-name {
+    flex: 1 1 auto;
+}
+
+.continent-total {
+    flex: 0 0 auto;
+    color: var(--muted);
+    font-weight: 400;
+    font-variant-numeric: tabular-nums;
+}
+
+.continent-table-wrap {
+    border: 1px solid var(--border);
+    border-top: 0;
+    border-radius: 0 0 var(--radius) var(--radius);
+    overflow: hidden;
+}
+
 .bot-human {
     color: var(--muted);
 }

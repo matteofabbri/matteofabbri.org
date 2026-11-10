@@ -14,9 +14,10 @@
         <p class="eyebrow"><a asp-page="/Admin/Index">Administration</a> / Requests</p>
         <h1>Requests</h1>
         <p class="lede">
-            Every public request with the two model flags. A flag is a button: each click moves it
-            from “—” to yes to no and back to “—”, and with both back on “—” the row belongs to the
-            model again. Country, IP, Client ID and User-Agent open the public list filtered by that value.
+            Every public request with the two model flags, one column each. A flag is a button: each
+            click moves it from “—” to yes to no and back to “—”, and with both back on “—” the row
+            belongs to the model again. Country, IP, Client ID and User-Agent open the public list
+            filtered by that value.
         </p>
     </div>
     <form method="get" class="map-controls">
@@ -72,7 +73,8 @@ else
                     <th>When</th>
                     <th>Request</th>
                     <th>Status</th>
-                    <th>Flags</th>
+                    <th>Bot</th>
+                    <th>Malicious</th>
                     <th>Country</th>
                     <th>IP</th>
                     <th>Client ID</th>
@@ -109,17 +111,26 @@ else
                                 <button type="submit" name="toggle" value="bot"
                                         class="bot-flag bot-toggle @RequestFlagState.BotBadgeClass(row.IsBot)"
                                         title="Bot flag — @RequestFlagState.ClickHint(row.IsBot)">
-                                    Bot @RequestFlagState.Label(row.IsBot)
-                                </button>
-                                <button type="submit" name="toggle" value="malicious"
-                                        class="bot-flag bot-toggle @RequestFlagState.MaliciousBadgeClass(row.IsMaliciousURL)"
-                                        title="Malicious URL flag — @RequestFlagState.ClickHint(row.IsMaliciousURL)">
-                                    Malicious @RequestFlagState.Label(row.IsMaliciousURL)
+                                    @RequestFlagState.Label(row.IsBot)
                                 </button>
                                 @if (row.BotModel == "manual")
                                 {
                                     <span class="bot-flag bot-automated">manual</span>
                                 }
+                            </form>
+                        </td>
+                        <td>
+                            <form method="post" asp-page-handler="Update" class="bot-flags-form">
+                                <input type="hidden" name="id" value="@row.Id" />
+                                <input type="hidden" name="days" value="@Model.Days" />
+                                <input type="hidden" name="pageNumber" value="@Model.PageNumber" />
+                                <input type="hidden" name="isBot" value="@RequestFlagState.Value(row.IsBot)" />
+                                <input type="hidden" name="isMalicious" value="@RequestFlagState.Value(row.IsMaliciousURL)" />
+                                <button type="submit" name="toggle" value="malicious"
+                                        class="bot-flag bot-toggle @RequestFlagState.MaliciousBadgeClass(row.IsMaliciousURL)"
+                                        title="Malicious URL flag — @RequestFlagState.ClickHint(row.IsMaliciousURL)">
+                                    @RequestFlagState.Label(row.IsMaliciousURL)
+                                </button>
                             </form>
                         </td>
                         <td>

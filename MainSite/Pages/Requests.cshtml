@@ -1,5 +1,6 @@
 @page "/requests"
 @model MainSite.Pages.RequestsModel
+@using MainSite.RequestLogging
 @{
     ViewData["Title"] = "Requests around the world";
 }
@@ -145,34 +146,48 @@ else if (Model.GeoIpUpdated is { } updated)
     </p>
 </div>
 
-@if (Model.Countries.Count > 0)
+@if (Model.ContinentGroups.Count > 0)
 {
-    <div class="table-wrap">
-        <table class="admin-table country-table">
-            <thead>
-                <tr>
-                    <th>Country</th>
-                    <th class="cell-number">Requests</th>
-                    <th class="cell-number">% of total</th>
-                    <th class="country-bar-cell"></th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var country in Model.Countries)
-                {
-                    <tr>
-                        <td>
-                            <a class="request-filter" asp-page="/Requests" asp-all-route-data="@Model.FilterRoute("country", country.Code)">@country.Name</a>
-                        </td>
-                        <td class="cell-number">@Model.FormatNumber(country.Count)</td>
-                        <td class="cell-number">@Model.PercentLabel(country.Count) %</td>
-                        <td class="country-bar-cell">
-                            <span class="country-bar" style="width:@(Model.BarWidth(country.Count))%"></span>
-                        </td>
-                    </tr>
-                }
-            </tbody>
-        </table>
+    <div class="continent-groups">
+        @for (var g = 0; g < Model.ContinentGroups.Count; g++)
+        {
+            var group = Model.ContinentGroups[g];
+            <details class="continent-group" open="@(g == 0)">
+                <summary>
+                    <span class="continent-name">@group.Name</span>
+                    <span class="continent-total">
+                        @Model.FormatNumber(group.Total) · @Model.PercentLabel(group.Total) %
+                    </span>
+                </summary>
+                <div class="table-wrap continent-table-wrap">
+                    <table class="admin-table country-table">
+                        <thead>
+                            <tr>
+                                <th>Country</th>
+                                <th class="cell-number">Requests</th>
+                                <th class="cell-number">% of total</th>
+                                <th class="country-bar-cell"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var country in group.Countries)
+                            {
+                                <tr>
+                                    <td>
+                                        <a class="request-filter" asp-page="/Requests" asp-all-route-data="@Model.FilterRoute("country", country.Code)">@country.Name</a>
+                                    </td>
+                                    <td class="cell-number">@Model.FormatNumber(country.Count)</td>
+                                    <td class="cell-number">@Model.PercentLabel(country.Count) %</td>
+                                    <td class="country-bar-cell">
+                                        <span class="country-bar" style="width:@(Model.BarWidth(country.Count))%"></span>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </details>
+        }
     </div>
 }
 
@@ -192,6 +207,7 @@ else
                     <th>Request</th>
                     <th>Status</th>
                     <th>Bot</th>
+                    <th>Malicious</th>
                     <th>Country</th>
                     <th>IP</th>
                     <th>Client ID</th>
@@ -219,21 +235,31 @@ else
                         </td>
                         <td><span class="status status-@(row.StatusCode / 100)xx">@row.StatusCode</span></td>
                         <td>
-                            @if (row.IsMaliciousURL == true)
+                            @if (row.IsBot is null)
                             {
-                                <span class="bot-flag bot-malicious">malicious</span>
-                            }
-                            else if (row.IsBot is null)
-                            {
-                                <span class="bot-flag bot-unknown">—</span>
-                            }
-                            else if (row.IsBot == true)
-                            {
-                                <span class="bot-flag bot-automated">bot</span>
+                                <span class="bot-flag bot-unknown" title="The model did not flag this request">—</span>
                             }
                             else
                             {
-                                <span class="bot-flag bot-human">human</span>
+                                <a class="bot-flag @RequestFlagState.BotBadgeClass(row.IsBot) bot-flag-link"
+                                   asp-page="/Requests" asp-all-route-data="@Model.ToggleFilterRoute("bot", RequestFlagState.Value(row.IsBot))"
+                                   title="@(row.IsBot == true ? "Bot requests — click to filter" : "Human requests — click to filter")">
+                                    @(row.IsBot == true ? "bot" : "human")
+                                </a>
+                            }
+                        </td>
+                        <td>
+                            @if (row.IsMaliciousURL is null)
+                            {
+                                <span class="bot-flag bot-unknown" title="The model did not flag this request">—</span>
+                            }
+                            else
+                            {
+                                <a class="bot-flag @RequestFlagState.MaliciousBadgeClass(row.IsMaliciousURL) bot-flag-link"
+                                   asp-page="/Requests" asp-all-route-data="@Model.ToggleFilterRoute("malicious", RequestFlagState.Value(row.IsMaliciousURL))"
+                                   title="@(row.IsMaliciousURL == true ? "Malicious requests — click to filter" : "Not malicious — click to filter")">
+                                    @(row.IsMaliciousURL == true ? "yes" : "no")
+                                </a>
                             }
                         </td>
                         <td>

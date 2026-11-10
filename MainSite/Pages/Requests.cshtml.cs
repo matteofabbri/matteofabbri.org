@@ -37,6 +37,8 @@ public sealed class RequestsModel(
     public string? IpFilter { get; private set; }
     public string? ClientIdFilter { get; private set; }
     public string? UserAgentFilter { get; private set; }
+    public string? BotFilter { get; private set; }
+    public string? MaliciousFilter { get; private set; }
     public IReadOnlyList<RequestFilter> ActiveFilters { get; private set; } = [];
     public bool HasFilters => ActiveFilters.Count > 0;
     public int FirstOnPage => PublicTotal == 0 ? 0 : (PageNumber - 1) * PageSize + 1;
@@ -53,6 +55,7 @@ public sealed class RequestsModel(
     public int UnknownRequests => Math.Max(0, TotalRequests - GeocodedRequests);
 
     public IReadOnlyList<CountryCount> Countries { get; private set; } = [];
+    public IReadOnlyList<ContinentGroup> ContinentGroups { get; private set; } = [];
     public IReadOnlyList<RequestRow> Recent { get; private set; } = [];
     public string CountsJson { get; private set; } = "{}";
     public IReadOnlyList<VisitorBucket> VisitorBuckets { get; private set; } = [];
@@ -83,10 +86,12 @@ public sealed class RequestsModel(
         string? ip,
         string? clientId,
         string? userAgent,
+        string? bot,
+        string? malicious,
         CancellationToken ct)
     {
         int requestedPage = pageNumber is > 0 ? pageNumber.Value : 1;
-        ApplyQuery(days, country, ip, clientId, userAgent);
+        ApplyQuery(days, country, ip, clientId, userAgent, bot, malicious);
 
         var resolver = services.GetService<RequestCountryResolver>();
         GeoIpAvailable = resolver?.Available ?? false;
@@ -133,6 +138,7 @@ public sealed class RequestsModel(
                 .OrderByDescending(country => country.Count)
                 .ThenBy(country => country.Name, StringComparer.CurrentCultureIgnoreCase)
                 .ToList();
+            ContinentGroups = GroupByContinent(Countries);
             CountsJson = JsonSerializer.Serialize(stats.Counts);
 
             // I visitatori unici vengono dalle righe pubbliche, che non c'erano
@@ -176,9 +182,11 @@ public sealed class RequestsModel(
         string? ip,
         string? clientId,
         string? userAgent,
+        string? bot,
+        string? malicious,
         CancellationToken ct)
     {
-        ApplyQuery(days, country, ip, clientId, userAgent);
+        ApplyQuery(days, country, ip, clientId, userAgent, bot, malicious);
 
         DateTimeOffset to = DateTimeOffset.UtcNow;
         DateTimeOffset from = to.AddDays(-Days);
@@ -228,13 +236,22 @@ public sealed class RequestsModel(
         }
     }
 
-    private void ApplyQuery(int? days, string? country, string? ip, string? clientId, string? userAgent)
+    private void ApplyQuery(
+        int? days,
+        string? country,
+        string? ip,
+        string? clientId,
+        string? userAgent,
+        string? bot,
+        string? malicious)
     {
         Days = AllowedDays.Contains(days ?? 0) ? days!.Value : 1;
         CountryFilter = NormalizeCountryFilter(country);
         IpFilter = NormalizeIpFilter(ip);
         ClientIdFilter = NormalizeClientIdFilter(clientId);
         UserAgentFilter = NormalizeUserAgentFilter(userAgent);
+        BotFilter = NormalizeFlagFilter(bot);
+        MaliciousFilter = NormalizeFlagFilter(malicious);
         ActiveFilters = BuildActiveFilters();
     }
 
@@ -291,6 +308,7 @@ public sealed class RequestsModel(
             .OrderByDescending(country => country.Count)
             .ThenBy(country => country.Name, StringComparer.CurrentCultureIgnoreCase)
             .ToList();
+        ContinentGroups = GroupByContinent(Countries);
         CountsJson = JsonSerializer.Serialize(counts);
 
         PublicTotal = filtered.Count;
@@ -314,12 +332,16 @@ public sealed class RequestsModel(
         if (UserAgentFilter is not null
             && !string.Equals(entry.UserAgent ?? "", UserAgentFilter, StringComparison.Ordinal))
             return false;
+        if (BotFilter is not null && Flag(entry.IsBot) != BotFilter)
+            return false;
+        if (MaliciousFilter is not null && Flag(entry.IsMaliciousURL) != MaliciousFilter)
+            return false;
         return true;
     }
 
     private IReadOnlyList<RequestFilter> BuildActiveFilters()
     {
-        var filters = new List<RequestFilter>(4);
+        var filters = new List<RequestFilter>(6);
         if (CountryFilter is not null)
             filters.Add(new RequestFilter("country", $"Country: {CountryLabel(CountryFilter)}", CountryFilter));
         if (IpFilter is not null)
@@ -328,6 +350,10 @@ public sealed class RequestsModel(
             filters.Add(new RequestFilter("clientId", $"Client ID: {ClientIdFilter}", ClientIdFilter));
         if (UserAgentFilter is not null)
             filters.Add(new RequestFilter("userAgent", $"User-Agent: {UserAgentFilter}", UserAgentFilter));
+        if (BotFilter is not null)
+            filters.Add(new RequestFilter("bot", $"Bot: {YesNo(BotFilter)}", BotFilter));
+        if (MaliciousFilter is not null)
+            filters.Add(new RequestFilter("malicious", $"Malicious: {YesNo(MaliciousFilter)}", MaliciousFilter));
         return filters;
     }
 
@@ -335,6 +361,19 @@ public sealed class RequestsModel(
     {
         var route = CurrentRoute();
         route[key] = value;
+        route["pageNumber"] = "1";
+        return route;
+    }
+
+    // The bot and malicious badges toggle: clicking the active state removes
+    // the filter, clicking another state replaces it.
+    public Dictionary<string, string> ToggleFilterRoute(string key, string value)
+    {
+        var route = CurrentRoute();
+        if (string.Equals(route.GetValueOrDefault(key), value, StringComparison.Ordinal))
+            route.Remove(key);
+        else
+            route[key] = value;
         route["pageNumber"] = "1";
         return route;
     }
@@ -378,11 +417,36 @@ public sealed class RequestsModel(
             route["clientId"] = ClientIdFilter;
         if (UserAgentFilter is not null)
             route["userAgent"] = UserAgentFilter;
+        if (BotFilter is not null)
+            route["bot"] = BotFilter;
+        if (MaliciousFilter is not null)
+            route["malicious"] = MaliciousFilter;
 
         return route;
     }
 
     private static string? Flag(bool? value) => value is null ? null : value.Value ? "true" : "false";
+
+    private static string YesNo(string flag) => flag == "true" ? "yes" : "no";
+
+    private static string? NormalizeFlagFilter(string? value) =>
+        value is "true" or "false" ? value : null;
+
+    // One accordion section per continent, the fullest first; "Unknown" (no
+    // geolocation) keeps its own group so it stays visible.
+    private static IReadOnlyList<ContinentGroup> GroupByContinent(IReadOnlyList<CountryCount> countries) =>
+        countries
+            .GroupBy(country => WorldCountries.ContinentOf(country.Code))
+            .Select(group => new ContinentGroup(
+                group.Key,
+                group.Sum(country => country.Count),
+                group
+                    .OrderByDescending(country => country.Count)
+                    .ThenBy(country => country.Name, StringComparer.CurrentCultureIgnoreCase)
+                    .ToList()))
+            .OrderByDescending(group => group.Total)
+            .ThenBy(group => group.Name, StringComparer.CurrentCultureIgnoreCase)
+            .ToList();
 
     private static string CountryCodeOf(string? code) =>
         string.IsNullOrWhiteSpace(code) ? "ZZ" : code.Trim().ToUpperInvariant();
@@ -642,6 +706,7 @@ public sealed class RequestsModel(
         TotalRequests = 0;
         GeocodedRequests = 0;
         Countries = [];
+        ContinentGroups = [];
         Recent = [];
         CountsJson = "{}";
         VisitorBuckets = [];
@@ -658,6 +723,13 @@ public sealed class RequestsModel(
 }
 
 public sealed record CountryCount(string Code, string Name, int Count);
+
+// One accordion section of the country list: a continent, its request total
+// and its countries, fullest first.
+public sealed record ContinentGroup(
+    string Name,
+    int Total,
+    IReadOnlyList<CountryCount> Countries);
 
 // Un bucket del grafico — un'ora per le ultime 24 ore, un giorno di Roma per i
 // periodi più lunghi — con il suo inizio (in UTC), il numero di client

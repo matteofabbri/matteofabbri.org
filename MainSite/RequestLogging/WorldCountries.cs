@@ -268,4 +268,106 @@ public static class WorldCountries
         string.IsNullOrWhiteSpace(code) ? "Unknown"
         : Names.TryGetValue(code, out string? name) ? name
         : code.ToUpperInvariant();
+
+    // Continents of the country table: the requests page groups its rows in a
+    // per-continent accordion. Transcontinental countries follow the usual
+    // convention (Cyprus, Turkey, Russia in Europe; the rest of the Caucasus
+    // in Asia); codes with no continent ("ZZ", unknown values) fall back to
+    // "Unknown" / "Other" so they still show, at the end of the list.
+    private static readonly Dictionary<string, string> Continents =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            // Europe
+            ["AD"] = "Europe", ["AL"] = "Europe", ["AT"] = "Europe", ["AX"] = "Europe",
+            ["BA"] = "Europe", ["BE"] = "Europe", ["BG"] = "Europe", ["BY"] = "Europe",
+            ["CH"] = "Europe", ["CY"] = "Europe", ["CZ"] = "Europe", ["DE"] = "Europe",
+            ["DK"] = "Europe", ["EE"] = "Europe", ["ES"] = "Europe", ["FI"] = "Europe",
+            ["FO"] = "Europe", ["FR"] = "Europe", ["GB"] = "Europe", ["GG"] = "Europe",
+            ["GI"] = "Europe", ["GR"] = "Europe", ["HR"] = "Europe", ["HU"] = "Europe",
+            ["IE"] = "Europe", ["IM"] = "Europe", ["IS"] = "Europe", ["IT"] = "Europe",
+            ["JE"] = "Europe", ["LI"] = "Europe", ["LT"] = "Europe", ["LU"] = "Europe",
+            ["LV"] = "Europe", ["MC"] = "Europe", ["MD"] = "Europe", ["ME"] = "Europe",
+            ["MK"] = "Europe", ["MT"] = "Europe", ["NL"] = "Europe", ["NO"] = "Europe",
+            ["PL"] = "Europe", ["PT"] = "Europe", ["RO"] = "Europe", ["RS"] = "Europe",
+            ["RU"] = "Europe", ["SE"] = "Europe", ["SI"] = "Europe", ["SJ"] = "Europe",
+            ["SK"] = "Europe", ["SM"] = "Europe", ["UA"] = "Europe", ["VA"] = "Europe",
+            ["XK"] = "Europe",
+
+            // Asia
+            ["AE"] = "Asia", ["AF"] = "Asia", ["AM"] = "Asia", ["AZ"] = "Asia",
+            ["BD"] = "Asia", ["BH"] = "Asia", ["BN"] = "Asia", ["BT"] = "Asia",
+            ["CN"] = "Asia", ["CN-TW"] = "Asia", ["GE"] = "Asia", ["HK"] = "Asia",
+            ["ID"] = "Asia", ["IL"] = "Asia", ["IN"] = "Asia", ["IO"] = "Africa",
+            ["IQ"] = "Asia", ["IR"] = "Asia", ["JO"] = "Asia", ["JP"] = "Asia", ["KG"] = "Asia",
+            ["KH"] = "Asia", ["KP"] = "Asia", ["KR"] = "Asia", ["KW"] = "Asia",
+            ["KZ"] = "Asia", ["LA"] = "Asia", ["LB"] = "Asia", ["LK"] = "Asia",
+            ["MM"] = "Asia", ["MN"] = "Asia", ["MO"] = "Asia", ["MV"] = "Asia",
+            ["MY"] = "Asia", ["NP"] = "Asia", ["OM"] = "Asia", ["PH"] = "Asia",
+            ["PK"] = "Asia", ["PS"] = "Asia", ["QA"] = "Asia", ["SA"] = "Asia",
+            ["SG"] = "Asia", ["SY"] = "Asia", ["TH"] = "Asia", ["TJ"] = "Asia",
+            ["TL"] = "Asia", ["TM"] = "Asia", ["TR"] = "Asia", ["TW"] = "Asia",
+            ["UZ"] = "Asia", ["VN"] = "Asia", ["YE"] = "Asia",
+
+            // Africa
+            ["AO"] = "Africa", ["BF"] = "Africa", ["BI"] = "Africa", ["BJ"] = "Africa",
+            ["BW"] = "Africa", ["CD"] = "Africa", ["CF"] = "Africa", ["CG"] = "Africa",
+            ["CI"] = "Africa", ["CM"] = "Africa", ["CV"] = "Africa", ["DJ"] = "Africa",
+            ["DZ"] = "Africa", ["EG"] = "Africa", ["EH"] = "Africa", ["ER"] = "Africa",
+            ["ET"] = "Africa", ["GA"] = "Africa", ["GH"] = "Africa", ["GM"] = "Africa",
+            ["GN"] = "Africa", ["GQ"] = "Africa", ["GW"] = "Africa", ["KE"] = "Africa",
+            ["KM"] = "Africa", ["LR"] = "Africa", ["LS"] = "Africa", ["LY"] = "Africa",
+            ["MA"] = "Africa", ["MG"] = "Africa", ["ML"] = "Africa", ["MR"] = "Africa",
+            ["MU"] = "Africa", ["MW"] = "Africa", ["MZ"] = "Africa", ["NA"] = "Africa",
+            ["NE"] = "Africa", ["NG"] = "Africa", ["RE"] = "Africa", ["RW"] = "Africa",
+            ["SC"] = "Africa", ["SD"] = "Africa", ["SH"] = "Africa", ["SL"] = "Africa",
+            ["SN"] = "Africa", ["SO"] = "Africa", ["SS"] = "Africa", ["ST"] = "Africa",
+            ["SZ"] = "Africa", ["TD"] = "Africa", ["TG"] = "Africa", ["TN"] = "Africa",
+            ["TZ"] = "Africa", ["UG"] = "Africa", ["YT"] = "Africa", ["ZA"] = "Africa",
+            ["ZM"] = "Africa", ["ZW"] = "Africa",
+
+            // North America
+            ["AG"] = "North America", ["AI"] = "North America", ["AW"] = "North America",
+            ["BB"] = "North America", ["BL"] = "North America", ["BM"] = "North America",
+            ["BQ"] = "North America", ["BS"] = "North America", ["BZ"] = "North America",
+            ["CA"] = "North America", ["CR"] = "North America", ["CU"] = "North America",
+            ["CW"] = "North America", ["DM"] = "North America", ["DO"] = "North America",
+            ["GD"] = "North America", ["GL"] = "North America", ["GP"] = "North America",
+            ["GT"] = "North America", ["HN"] = "North America", ["HT"] = "North America",
+            ["JM"] = "North America", ["KN"] = "North America", ["KY"] = "North America",
+            ["LC"] = "North America", ["MF"] = "North America", ["MQ"] = "North America",
+            ["MS"] = "North America", ["MX"] = "North America", ["NI"] = "North America",
+            ["PA"] = "North America", ["PM"] = "North America", ["PR"] = "North America",
+            ["SV"] = "North America", ["SX"] = "North America", ["TC"] = "North America",
+            ["TT"] = "North America", ["US"] = "North America", ["VC"] = "North America",
+            ["VG"] = "North America", ["VI"] = "North America",
+
+            // South America
+            ["AR"] = "South America", ["BO"] = "South America", ["BR"] = "South America",
+            ["CL"] = "South America", ["CO"] = "South America", ["EC"] = "South America",
+            ["FK"] = "South America", ["GF"] = "South America", ["GY"] = "South America",
+            ["PE"] = "South America", ["PY"] = "South America", ["SR"] = "South America",
+            ["UY"] = "South America", ["VE"] = "South America",
+
+            // Oceania
+            ["AS"] = "Oceania", ["AU"] = "Oceania", ["CC"] = "Oceania", ["CK"] = "Oceania",
+            ["CX"] = "Oceania", ["FJ"] = "Oceania", ["FM"] = "Oceania", ["GU"] = "Oceania",
+            ["KI"] = "Oceania", ["MH"] = "Oceania", ["MP"] = "Oceania", ["NC"] = "Oceania",
+            ["NF"] = "Oceania", ["NR"] = "Oceania", ["NU"] = "Oceania", ["NZ"] = "Oceania",
+            ["PG"] = "Oceania", ["PF"] = "Oceania", ["PN"] = "Oceania", ["PW"] = "Oceania",
+            ["SB"] = "Oceania", ["TK"] = "Oceania", ["TO"] = "Oceania", ["TV"] = "Oceania",
+            ["UM"] = "Oceania", ["VU"] = "Oceania", ["WF"] = "Oceania", ["WS"] = "Oceania",
+
+            // Antarctica and the sub-Antarctic territories
+            ["AQ"] = "Antarctica", ["BV"] = "Antarctica", ["GS"] = "Antarctica",
+            ["HM"] = "Antarctica", ["TF"] = "Antarctica",
+        };
+
+    public static string ContinentOf(string? code)
+    {
+        if (string.IsNullOrWhiteSpace(code))
+            return "Unknown";
+        if (code.Trim().Equals("ZZ", StringComparison.OrdinalIgnoreCase))
+            return "Unknown";
+        return Continents.TryGetValue(code, out string? continent) ? continent : "Other";
+    }
 }

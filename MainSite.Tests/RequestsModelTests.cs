@@ -47,16 +47,16 @@ public sealed class RequestsModelTests : IDisposable
 
         var model = CreateModel();
 
-        await model.OnGetAsync(30, 1, "IT", null, null, null, default);
+        await model.OnGetAsync(30, 1, "IT", null, null, null, null, null, default);
         Assert.Equal(3, model.PublicTotal);
         Assert.Equal(["/req-a", "/req-c", "/req-d"], model.Recent.Select(row => row.Path));
         Assert.Contains(model.ActiveFilters, filter => filter.Key == "country");
 
-        await model.OnGetAsync(30, 1, "IT", "203.0.113.7", null, null, default);
+        await model.OnGetAsync(30, 1, "IT", "203.0.113.7", null, null, null, null, default);
         Assert.Equal(2, model.PublicTotal);
         Assert.Equal(["/req-a", "/req-c"], model.Recent.Select(row => row.Path));
 
-        await model.OnGetAsync(30, 1, "IT", "203.0.113.7", "0123456789abcdef", null, default);
+        await model.OnGetAsync(30, 1, "IT", "203.0.113.7", "0123456789abcdef", null, null, null, default);
         Assert.Equal(1, model.PublicTotal);
         Assert.Equal(["/req-a"], model.Recent.Select(row => row.Path));
         Assert.Equal(3, model.ActiveFilters.Count);
@@ -89,7 +89,7 @@ public sealed class RequestsModelTests : IDisposable
         ], default);
 
         var model = CreateModel();
-        await model.OnGetAsync(30, 1, null, null, null, "curl/8", default);
+        await model.OnGetAsync(30, 1, null, null, null, "curl/8", null, null, default);
 
         Assert.Equal(0, model.PublicTotal);
         Assert.Empty(model.Recent);
@@ -109,7 +109,7 @@ public sealed class RequestsModelTests : IDisposable
         ], default);
 
         var model = CreateModel();
-        await model.OnGetAsync(30, 1, null, null, null, null, default);
+        await model.OnGetAsync(30, 1, null, null, null, null, null, null, default);
 
         Assert.Equal(2, model.UniqueVisitors);
         Assert.True(model.VisitorBuckets.Count >= 30);
@@ -128,7 +128,7 @@ public sealed class RequestsModelTests : IDisposable
         Assert.Contains(points, point => point.Visitors == 2 && point.Requests == 3);
         Assert.Contains("\"visitors\":", model.ChartJson());
 
-        await model.OnGetAsync(30, 1, null, null, "0123456789abcdef", null, default);
+        await model.OnGetAsync(30, 1, null, null, "0123456789abcdef", null, null, null, default);
         Assert.Equal(1, model.UniqueVisitors);
         Assert.Equal(1, model.VisitorBuckets[^1].Visitors);
     }
@@ -146,7 +146,7 @@ public sealed class RequestsModelTests : IDisposable
         ], default);
 
         var model = CreateModel();
-        await model.OnGetAsync(null, 1, null, null, null, null, default);
+        await model.OnGetAsync(null, 1, null, null, null, null, null, null, default);
 
         Assert.Equal(1, model.Days);
         Assert.Equal("last 24 hours", model.PeriodLabel);
@@ -182,7 +182,7 @@ public sealed class RequestsModelTests : IDisposable
 
         var model = CreateModel();
         var result = Assert.IsType<FileContentResult>(
-            await model.OnGetCsvAsync(30, "IT", null, null, null, default));
+            await model.OnGetCsvAsync(30, "IT", null, null, null, null, null, default));
 
         Assert.Equal("text/csv", result.ContentType?.Split(';')[0]);
         Assert.EndsWith(".csv", result.FileDownloadName);
@@ -210,7 +210,7 @@ public sealed class RequestsModelTests : IDisposable
 
         var model = CreateModel();
         var result = Assert.IsType<FileContentResult>(
-            await model.OnGetCsvAsync(30, null, null, null, null, default));
+            await model.OnGetCsvAsync(30, null, null, null, null, null, null, default));
 
         string csv = Encoding.UTF8.GetString(result.FileContents);
         Assert.Contains("'=HYPERLINK", csv);
@@ -246,7 +246,7 @@ public sealed class RequestsModelTests : IDisposable
         ], default);
 
         var model = CreateModel();
-        await model.OnGetAsync(1, 1, null, null, null, null, default);
+        await model.OnGetAsync(1, 1, null, null, null, null, null, null, default);
 
         var points = model.ChartPoints();
         Assert.Equal(2, points.Sum(point => point.Bots));
@@ -258,6 +258,81 @@ public sealed class RequestsModelTests : IDisposable
         JsonElement root = document.RootElement;
         Assert.Equal(2, root.GetProperty("bots").EnumerateArray().Sum(value => value.GetInt32()));
         Assert.Equal(1, root.GetProperty("malicious").EnumerateArray().Sum(value => value.GetInt32()));
+    }
+
+    [Fact]
+    public async Task The_bot_and_malicious_filters_narrow_the_list_and_toggle_as_chips()
+    {
+        var now = DateTimeOffset.UtcNow;
+        await _store.InsertManyAsync(
+        [
+            Entry("req-bot", now.AddMinutes(-1), "IT", "203.0.113.7", "aaaaaaaaaaaaaaaa", "Mozilla/5.0", isBot: true),
+            Entry("req-mal", now.AddMinutes(-2), "IT", "203.0.113.7", "bbbbbbbbbbbbbbbb", "curl/8", isBot: true, isMalicious: true),
+            Entry("req-human", now.AddMinutes(-3), "IT", "203.0.113.8", "cccccccccccccccc", "Mozilla/5.0", isBot: false, isMalicious: false),
+            Entry("req-unknown", now.AddMinutes(-4), "IT", "203.0.113.8", "dddddddddddddddd", "curl/8"),
+        ], default);
+
+        var model = CreateModel();
+
+        await model.OnGetAsync(30, 1, null, null, null, null, "true", null, default);
+        Assert.Equal(2, model.PublicTotal);
+        Assert.Equal(["/req-bot", "/req-mal"], model.Recent.Select(row => row.Path));
+        Assert.Contains(model.ActiveFilters, filter => filter.Key == "bot" && filter.Label == "Bot: yes");
+
+        await model.OnGetAsync(30, 1, null, null, null, null, "false", "false", default);
+        Assert.Equal(1, model.PublicTotal);
+        Assert.Equal(["/req-human"], model.Recent.Select(row => row.Path));
+        Assert.Contains(model.ActiveFilters, filter => filter.Label == "Malicious: no");
+
+        // Unknown rows belong to no flag filter: "no" means the model said so.
+        await model.OnGetAsync(30, 1, null, null, null, null, "false", null, default);
+        Assert.Equal(1, model.PublicTotal);
+
+        // A filter value the page does not recognise is ignored.
+        await model.OnGetAsync(30, 1, null, null, null, null, "maybe", null, default);
+        Assert.Equal(4, model.PublicTotal);
+
+        // The badge link toggles: the active state removes the filter.
+        var set = model.ToggleFilterRoute("bot", "true");
+        Assert.Equal("true", set["bot"]);
+        Assert.Equal("1", set["pageNumber"]);
+
+        model = CreateModel();
+        await model.OnGetAsync(30, 1, null, null, null, null, "true", null, default);
+        var removed = model.ToggleFilterRoute("bot", "true");
+        Assert.False(removed.ContainsKey("bot"));
+
+        var replaced = model.ToggleFilterRoute("bot", "false");
+        Assert.Equal("false", replaced["bot"]);
+    }
+
+    [Fact]
+    public async Task The_country_list_is_grouped_by_continent_with_the_fullest_first()
+    {
+        var now = DateTimeOffset.UtcNow;
+        await _store.InsertManyAsync(
+        [
+            Entry("req-a", now.AddMinutes(-1), "IT", "203.0.113.7", "aaaaaaaaaaaaaaaa", "Mozilla/5.0"),
+            Entry("req-b", now.AddMinutes(-2), "IT", "203.0.113.7", "aaaaaaaaaaaaaaaa", "Mozilla/5.0"),
+            Entry("req-c", now.AddMinutes(-3), "US", "198.51.100.9", "bbbbbbbbbbbbbbbb", "curl/8"),
+            Entry("req-d", now.AddMinutes(-4), "JP", "198.51.100.10", "cccccccccccccccc", "curl/8"),
+            Entry("req-e", now.AddMinutes(-5), "ZZ", "203.0.113.9", "dddddddddddddddd", "curl/8"),
+        ], default);
+
+        var model = CreateModel();
+        await model.OnGetAsync(30, 1, null, null, null, null, null, null, default);
+
+        // The aggregate counts come from the country index, which has no
+        // bucket for unknown ("ZZ"): those rows only show in the filtered view.
+        Assert.Equal(
+            ["Europe", "Asia", "North America"],
+            model.ContinentGroups.Select(group => group.Name));
+        Assert.Equal(2, model.ContinentGroups[0].Total);
+        Assert.Equal(["Italy"], model.ContinentGroups[0].Countries.Select(country => country.Name));
+
+        var northAmerica = model.ContinentGroups.Single(group => group.Name == "North America");
+        Assert.Equal("United States of America", northAmerica.Countries.Single().Name);
+        Assert.Equal(1, northAmerica.Total);
     }
 
     private RequestsModel CreateModel() => new(
