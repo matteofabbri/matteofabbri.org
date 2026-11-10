@@ -464,9 +464,13 @@ public sealed class RequestLogStore : IDisposable
 
     // Rewrites both flags on every row of one client. The admin page passes the
     // period's public entries (the same list the public page reads), so a click
-    // is about the client, not the single row. Returns how many rows the store
-    // accepted.
-    public async Task<int> UpdateClientFlagsAsync(
+    // is about the client, not the single row.
+    //
+    // One row at a time, with the failures counted instead of thrown: a single
+    // unreadable row must not block the other requests of the same client, and
+    // the admin page can report how many went through and why the first one
+    // did not.
+    public async Task<ClientFlagUpdate> UpdateClientFlagsAsync(
         IReadOnlyList<RequestLogEntry> entries,
         string clientId,
         bool? isBot,
@@ -474,7 +478,7 @@ public sealed class RequestLogStore : IDisposable
         CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(clientId))
-            return 0;
+            return new ClientFlagUpdate(0, 0, 0, null);
 
         var matches = new List<RequestLogEntry>();
         foreach (var entry in entries)
@@ -491,14 +495,32 @@ public sealed class RequestLogStore : IDisposable
             });
         }
 
-        if (matches.Count == 0)
-            return 0;
-
         int updated = 0;
-        foreach (var chunk in matches.Chunk(_options.EffectiveBatchSize))
-            updated += await UpdateManyAsync(chunk, ct);
+        int skipped = 0;
+        string? firstError = null;
 
-        return updated;
+        foreach (var entry in matches)
+        {
+            try
+            {
+                if (await UpdateAsync(entry, ct))
+                {
+                    updated++;
+                    continue;
+                }
+
+                skipped++;
+                firstError ??= "the store rejected the update";
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                skipped++;
+                firstError ??= $"{ex.GetType().Name}: {ex.Message}";
+                _logger.LogWarning(ex, "Requests admin: update rejected for {RequestId}", entry.Id);
+            }
+        }
+
+        return new ClientFlagUpdate(matches.Count, updated, skipped, firstError);
     }
 
     private static string ClientIdOf(RequestLogEntry entry) =>
@@ -803,6 +825,11 @@ public sealed record RequestLogPage(
 {
     public static readonly RequestLogPage Empty = new([], 0, 1, 1);
 }
+
+// The outcome of a client-wide flag change from the admin page: how many rows
+// the client had in the period, how many were written, how many the store
+// refused (with the first reason, for the admin message).
+public sealed record ClientFlagUpdate(int Matched, int Updated, int Skipped, string? FirstError);
 
 // Una pagina dei payload /info-send, dalla più recente.
 public sealed record InfoPage(

@@ -88,7 +88,7 @@ public sealed class RequestsModel(
             }
 
             string clientId = ClientIdOf(entry);
-            int updated;
+            ClientFlagUpdate update;
             if (clientId.Length == 0)
             {
                 // No client identity (no IP and no user agent): the row is all
@@ -100,17 +100,25 @@ public sealed class RequestsModel(
                     BotProbability = null,
                     BotModel = bot is null && malicious is null ? null : "manual",
                 };
-                updated = await store.UpdateAsync(single, ct) ? 1 : 0;
+                bool saved = await store.UpdateAsync(single, ct);
+                update = new ClientFlagUpdate(
+                    1, saved ? 1 : 0, saved ? 0 : 1, saved ? null : "the store rejected the update");
             }
             else
             {
                 IReadOnlyList<RequestLogEntry> entries = await PeriodEntriesAsync(ct);
-                updated = await store.UpdateClientFlagsAsync(entries, clientId, bot, malicious, ct);
+                update = await store.UpdateClientFlagsAsync(entries, clientId, bot, malicious, ct);
             }
 
-            if (updated == 0)
+            if (update.Matched == 0)
             {
-                TempData["Errore"] = "Could not update the request.";
+                TempData["Errore"] = "No request of this client matched in the period.";
+                return RedirectToPage(new { days = Days, pageNumber = PageNumber });
+            }
+
+            if (update.Updated == 0)
+            {
+                TempData["Errore"] = $"Could not update the request ({update.FirstError}).";
                 return RedirectToPage(new { days = Days, pageNumber = PageNumber });
             }
 
@@ -123,7 +131,9 @@ public sealed class RequestsModel(
                 : await SendClientFeedbackAsync(clientId, bot, malicious, ct);
 
             TempData["Messaggio"] =
-                $"Flags updated on {FormatNumber(updated)} requests of this client ({PeriodLabel}).{modelNote}";
+                $"Flags updated on {FormatNumber(update.Updated)} requests of this client ({PeriodLabel})."
+                + (update.Skipped > 0 ? $" {FormatNumber(update.Skipped)} could not be updated." : "")
+                + modelNote;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -162,16 +172,26 @@ public sealed class RequestsModel(
         if (classifier is null)
             return "";
 
-        var feedback = await classifier.LabelClientAsync(
-            clientId, bot, malicious, User.Identity?.Name, ct);
-
-        return feedback switch
+        try
         {
-            null => " The model did not answer: the flags are saved in the log only.",
-            { ManualLabelActive: false } => " The model cleared its manual label for this client.",
-            _ => $" The model applied the label to {FormatNumber(feedback.ObservationsUpdated)} observations"
-                 + (feedback.RetrainRequested ? " and asked for a retraining run." : "."),
-        };
+            var feedback = await classifier.LabelClientAsync(
+                clientId, bot, malicious, User.Identity?.Name, ct);
+
+            return feedback switch
+            {
+                null => " The model did not answer: the flags are saved in the log only.",
+                { ManualLabelActive: false } => " The model cleared its manual label for this client.",
+                _ => $" The model applied the label to {FormatNumber(feedback.ObservationsUpdated)} observations"
+                     + (feedback.RetrainRequested ? " and asked for a retraining run." : "."),
+            };
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // The flags are already saved: a model hiccup must not turn a
+            // successful update into an error page.
+            logger.LogWarning(ex, "Requests admin: the model did not take the client label");
+            return " The model did not answer: the flags are saved in the log only.";
+        }
     }
 
     public string FormatWhen(DateTimeOffset value) =>

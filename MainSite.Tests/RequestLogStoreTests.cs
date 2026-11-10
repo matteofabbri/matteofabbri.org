@@ -277,10 +277,13 @@ public sealed class RequestLogStoreTests : IDisposable
         await store.InsertManyAsync([sameOne, sameTwo, other, outside], CancellationToken.None);
 
         var entries = await store.GetPublicEntriesAsync(now.AddDays(-1));
-        int updated = await store.UpdateClientFlagsAsync(
+        var update = await store.UpdateClientFlagsAsync(
             entries, "aaaaaaaaaaaaaaaa", isBot: true, isMalicious: false, CancellationToken.None);
 
-        Assert.Equal(2, updated);
+        Assert.Equal(2, update.Matched);
+        Assert.Equal(2, update.Updated);
+        Assert.Equal(0, update.Skipped);
+        Assert.Null(update.FirstError);
         var first = await store.GetAsync("req-client-1");
         var second = await store.GetAsync("req-client-2");
         Assert.True(first!.IsBot);
@@ -291,9 +294,9 @@ public sealed class RequestLogStoreTests : IDisposable
         Assert.Null((await store.GetAsync("req-outside"))!.IsBot);
 
         // Both flags back on "—": the client belongs to the model again.
-        int cleared = await store.UpdateClientFlagsAsync(
+        var cleared = await store.UpdateClientFlagsAsync(
             entries, "aaaaaaaaaaaaaaaa", isBot: null, isMalicious: null, CancellationToken.None);
-        Assert.Equal(2, cleared);
+        Assert.Equal(2, cleared.Updated);
         var afterClear = await store.GetAsync("req-client-1");
         Assert.Null(afterClear!.IsBot);
         Assert.Null(afterClear.BotModel);
