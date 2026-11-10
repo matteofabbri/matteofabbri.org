@@ -261,6 +261,43 @@ public sealed class RequestsModelTests : IDisposable
     }
 
     [Fact]
+    public async Task Every_number_on_the_page_counts_the_same_public_rows()
+    {
+        var now = DateTimeOffset.UtcNow;
+        await _store.InsertManyAsync(
+        [
+            Entry("req-bot", now.AddMinutes(-1), "IT", "203.0.113.7", "aaaaaaaaaaaaaaaa", "curl/8", isBot: true),
+            Entry("req-human", now.AddMinutes(-2), "IT", "203.0.113.9", "cccccccccccccccc", "Mozilla/5.0", isBot: false),
+            Entry("req-admin-bot", now.AddMinutes(-3), "IT", "203.0.113.8", "bbbbbbbbbbbbbbbb", "curl/8", isBot: true)
+                with { Path = "/admin/requests" },
+        ], default);
+
+        var model = CreateModel();
+        await model.OnGetAsync(1, 1, null, null, null, null, null, null, default);
+
+        // The /admin row is invisible everywhere on the page: the summary, the
+        // country map, the chart and the list agree on the two public rows.
+        Assert.Equal(2, model.TotalRequests);
+        Assert.Equal(2, model.PublicTotal);
+        Assert.Equal(2, model.GeocodedRequests);
+        Assert.Equal(0, model.UnknownRequests);
+        Assert.Equal(1, model.TotalBots);
+        Assert.Equal(2, model.Recent.Count);
+        Assert.DoesNotContain(model.Recent, row => row.Path.StartsWith("/admin", StringComparison.Ordinal));
+
+        var points = model.ChartPoints();
+        Assert.Equal(model.TotalRequests, points.Sum(point => point.Requests));
+        Assert.Equal(model.TotalBots, points.Sum(point => point.Bots));
+
+        // The bot filter is the same rows again: its number must equal the bot
+        // total the page prints next to the chart.
+        var filtered = CreateModel();
+        await filtered.OnGetAsync(1, 1, null, null, null, null, "true", null, default);
+        Assert.Equal(model.TotalBots, filtered.TotalRequests);
+        Assert.Equal(filtered.TotalRequests, filtered.ChartPoints().Sum(point => point.Bots));
+    }
+
+    [Fact]
     public async Task The_bot_and_malicious_filters_narrow_the_list_and_toggle_as_chips()
     {
         var now = DateTimeOffset.UtcNow;

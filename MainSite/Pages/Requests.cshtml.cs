@@ -26,7 +26,7 @@ public sealed class RequestsModel(
     private static readonly TimeZoneInfo Rome = TimeZoneInfo.FindSystemTimeZoneById("Europe/Rome");
     private static readonly CultureInfo English = CultureInfo.GetCultureInfo("en-GB");
 
-    public const int PageSize = 200;
+    public const int PageSize = 30;
 
     public int Days { get; private set; } = 1;
     public int PageNumber { get; private set; } = 1;
@@ -110,59 +110,21 @@ public sealed class RequestsModel(
             DateTimeOffset to = DateTimeOffset.UtcNow;
             DateTimeOffset from = to.AddDays(-Days);
 
-            if (HasFilters)
+            // One read for the whole page. The summary, the country map, the
+            // chart, the list and the CSV all describe the same public
+            // requests, so no number on the page can disagree with another:
+            // /admin paths are indexed as "public=0" and stay out of all of
+            // them. Filtering happens in memory on this list; a filtered view
+            // is then the same data set with a narrower predicate.
+            string entriesKey = $"requests:public:{Days}";
+            if (!cache.TryGetValue(entriesKey, out IReadOnlyList<RequestLogEntry>? entries) || entries is null)
             {
-                string entriesKey = $"requests:public:{Days}";
-                if (!cache.TryGetValue(entriesKey, out IReadOnlyList<RequestLogEntry>? entries) || entries is null)
-                {
-                    entries = await store.GetPublicEntriesAsync(from, ct);
-                    cache.Set(entriesKey, entries, TimeSpan.FromSeconds(20));
-                }
-
-                var filtered = ApplyFiltered(entries, requestedPage);
-                SetVisitors(filtered, from, to);
-                return;
+                entries = await store.GetPublicEntriesAsync(from, ct);
+                cache.Set(entriesKey, entries, TimeSpan.FromSeconds(20));
             }
 
-            string countsKey = $"requests:countries:{Days}";
-            if (!cache.TryGetValue(countsKey, out CountryStats? stats) || stats is null)
-            {
-                stats = await LoadCountriesAsync(store, from, ct);
-                cache.Set(countsKey, stats, TimeSpan.FromSeconds(20));
-            }
-
-            TotalRequests = stats.Total;
-            GeocodedRequests = stats.Geocoded;
-            Countries = stats.Counts
-                .Select(pair => new CountryCount(pair.Key, WorldCountries.NameOf(pair.Key), pair.Value))
-                .OrderByDescending(country => country.Count)
-                .ThenBy(country => country.Name, StringComparer.CurrentCultureIgnoreCase)
-                .ToList();
-            ContinentGroups = GroupByContinent(Countries);
-            CountsJson = JsonSerializer.Serialize(stats.Counts);
-
-            // I visitatori unici vengono dalle righe pubbliche, che non c'erano
-            // nella lettura solo-indice dei conteggi: stessa cache dei filtri.
-            string visitorsKey = $"requests:public:{Days}";
-            if (!cache.TryGetValue(visitorsKey, out IReadOnlyList<RequestLogEntry>? publicEntries) || publicEntries is null)
-            {
-                publicEntries = await store.GetPublicEntriesAsync(from, ct);
-                cache.Set(visitorsKey, publicEntries, TimeSpan.FromSeconds(20));
-            }
-
-            SetVisitors(publicEntries, from, to);
-
-            string pageKey = $"requests:page:{Days}:{requestedPage}";
-            if (!cache.TryGetValue(pageKey, out RequestLogPage? logPage) || logPage is null)
-            {
-                logPage = await store.GetPageAsync(requestedPage, PageSize, from, ct);
-                cache.Set(pageKey, logPage, TimeSpan.FromSeconds(20));
-            }
-
-            PageNumber = logPage.Page;
-            PageCount = logPage.PageCount;
-            PublicTotal = logPage.Total;
-            Recent = logPage.Entries.Select(ToRow).ToList();
+            var filtered = ApplyFiltered(entries, requestedPage);
+            SetVisitors(filtered, from, to);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -506,25 +468,6 @@ public sealed class RequestsModel(
 
     public string FormatDuration(double milliseconds) => milliseconds.ToString("N1", English) + " ms";
 
-    private async Task<CountryStats> LoadCountriesAsync(RequestLogStore store, DateTimeOffset from, CancellationToken ct)
-    {
-        int total = await store.CountSinceAsync(from, ct);
-
-        var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-        int geocoded = 0;
-        foreach (string code in WorldCountries.Codes)
-        {
-            int count = await store.CountByCountryAsync(code, from, ct);
-            if (count == 0)
-                continue;
-
-            counts[code] = count;
-            geocoded += count;
-        }
-
-        return new CountryStats(total, geocoded, counts);
-    }
-
     // Visitatori unici: client distinti per bucket. Nelle ultime 24 ore il
     // bucket è un'ora (barre allineate all'ora UTC, etichette in ora di Roma);
     // nei periodi più lunghi è un giorno di Roma, compresi quelli senza
@@ -715,11 +658,6 @@ public sealed class RequestsModel(
         PageCount = 1;
         PublicTotal = 0;
     }
-
-    private sealed record CountryStats(
-        int Total,
-        int Geocoded,
-        IReadOnlyDictionary<string, int> Counts);
 }
 
 public sealed record CountryCount(string Code, string Name, int Count);

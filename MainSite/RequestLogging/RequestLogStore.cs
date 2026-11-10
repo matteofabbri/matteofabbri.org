@@ -217,9 +217,8 @@ public sealed class RequestLogStore : IDisposable
             : null;
     }
 
-    // Quante richieste ci sono dal periodo richiesto in poi. La query usa
-    // l'indice scalare timestamp e non legge i payload: alla mappa servono
-    // solo i conteggi.
+    // How many requests start at the given moment. The query uses the
+    // timestamp scalar index and does not read payloads.
     public async Task<int> CountSinceAsync(DateTimeOffset from, CancellationToken ct = default)
     {
         if (!await EnsureInitializedAsync(ct) || _db is null)
@@ -234,10 +233,10 @@ public sealed class RequestLogStore : IDisposable
         return result == OperationResult.Success ? items.Count : 0;
     }
 
-    // Richieste di un paese nel periodo. Il paese è il generatore (la posting
-    // list è piccola), il timestamp è il filtro successivo. Le righe scritte
-    // prima dell'introduzione dell'indice "country" non compaiono qui: restano
-    // contate nel totale e quindi tra le non geolocalizzate.
+    // Requests from one country in the period. The country is the generator
+    // (its posting list is small) and the timestamp is the next filter. Rows
+    // written before the "country" index existed do not appear here; they are
+    // still counted in the total.
     public async Task<int> CountByCountryAsync(string countryCode, DateTimeOffset from, CancellationToken ct = default)
     {
         if (!await EnsureInitializedAsync(ct) || _db is null)

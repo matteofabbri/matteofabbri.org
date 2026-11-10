@@ -110,14 +110,19 @@ else if (Model.GeoIpUpdated is { } updated)
     <div class="map-card">
         <div class="map-header">
             <h2>@Model.ChartTitle</h2>
-            <span class="hint">@Model.FormatNumber(Model.UniqueVisitors) distinct visitors in the period</span>
+            <span class="hint">
+                @Model.FormatNumber(Model.TotalBots) flagged as bots ·
+                @Model.FormatNumber(Model.TotalMalicious) malicious ·
+                @Model.FormatNumber(Model.UniqueVisitors) distinct visitors in the period
+            </span>
         </div>
         <div class="chart-frame">
             <canvas id="visitor-chart" role="img" aria-label="@Model.ChartAriaLabel"></canvas>
         </div>
         <p class="hint">
             A visitor is a Client ID: same IP and same user-agent count once per @(Model.HourlyPeriod ? "hour" : "day").
-            Requests exclude <code>/admin</code> pages. The bot and malicious lines count the requests flagged by the model.
+            The summary, the chart and the list count the same requests: <code>/admin</code> pages are left out.
+            The bot and malicious lines count the rows flagged by the model.
         </p>
     </div>
 }

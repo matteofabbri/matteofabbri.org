@@ -21,7 +21,7 @@ public sealed class RequestsModel(
     IOptions<RequestLogOptions> options,
     ILogger<RequestsModel> logger) : PageModel
 {
-    private const int PageSize = 200;
+    private const int PageSize = 30;
     private static readonly int[] AllowedDays = [1, 7, 30, 90];
     private static readonly TimeZoneInfo Rome = TimeZoneInfo.FindSystemTimeZoneById("Europe/Rome");
     private static readonly CultureInfo English = CultureInfo.GetCultureInfo("en-GB");
