@@ -25,6 +25,7 @@ public sealed class RequestLogStore : IDisposable
     private const string InfoCollectionDescription = "Payload grezzi ricevuti da POST /info-send: GUID, IP, paese e body";
     private const string LedeCollection = "ledes";
     private const string LedeCollectionDescription = "Frasi brevi mostrate a caso nel jumbotron della home";
+    private const string FullTextRemovedMarker = "fulltext-index-dropped.json";
 
     private readonly RequestLogOptions _options;
     private readonly IHostEnvironment _environment;
@@ -73,6 +74,10 @@ public sealed class RequestLogStore : IDisposable
             // Per un log di richieste serve solo BM25: niente modello
             // semantico, quindi niente download/caricamento dei ~2,3 GB.
             SemanticModel.ModelLocation = null;
+
+            // Must run before the database opens: it deletes index stores
+            // that no process may have open.
+            DropLegacyFullTextIndexes();
 
             Database? db = _db;
             bool ownsNew = false;
@@ -159,6 +164,46 @@ public sealed class RequestLogStore : IDisposable
         finally
         {
             _initGate.Release();
+        }
+    }
+
+    // One-time migration (2026-11-10). The request log no longer indexes path and
+    // host (see IndexingOf): the pinned Sperone version can lose a full-text
+    // overflow chunk, after which every Update of that row throws and the manual
+    // bot flags plus the backfill fail. Deleting the persisted full-text stores
+    // before the database is opened makes the next update of an old row find no
+    // index to remove from (IndexManager.Remove tolerates a missing index); the
+    // new spec never recreates it. Runs once, guarded by a marker next to the
+    // database; every collection is visited because the folder names are GUIDs
+    // and only the request collection ever had a full-text index.
+    private void DropLegacyFullTextIndexes()
+    {
+        string marker = Path.Combine(ResolvedPath, FullTextRemovedMarker);
+        if (File.Exists(marker))
+            return;
+
+        try
+        {
+            string storage = Path.Combine(ResolvedPath, "collections_storage");
+            if (Directory.Exists(storage))
+            {
+                foreach (string collection in Directory.GetDirectories(storage))
+                {
+                    string fullText = Path.Combine(collection, "idx", "ft");
+                    if (Directory.Exists(fullText))
+                        Directory.Delete(fullText, recursive: true);
+                }
+            }
+
+            Directory.CreateDirectory(ResolvedPath);
+            File.WriteAllText(marker, "{\"droppedAt\":\"" + DateTimeOffset.UtcNow.ToString("O") + "\"}");
+            _logger.LogInformation("Sperone: full-text indexes dropped (one-time migration)");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // No marker: the next start retries. Deleting a missing folder is a
+            // no-op, so a partially failed run is safe to repeat.
+            _logger.LogWarning(ex, "Sperone: could not drop the full-text indexes; will retry on the next start");
         }
     }
 
@@ -648,8 +693,14 @@ public sealed class RequestLogStore : IDisposable
         }
     }
 
-    // Indexing per ogni riga. Scalar su timestamp/status/durata/paese
-    // servono per i filtri; full-text su percorso e host per la ricerca libera.
+    // One indexing spec per row: the scalar entries drive the filters (timestamp
+    // range, status, duration, country) and the "public" flag that hides /admin
+    // paths. No full-text index: nothing searches path or host, and the pinned
+    // Sperone version can lose a full-text overflow chunk, after which every
+    // Update of that row fails (the manual bot flags and the backfill). Rows
+    // written before this change keep their old spec — with path/host — until
+    // they are updated; the full-text store is dropped once on the server so
+    // those updates find no index to remove from.
     private static IndexElementCommand IndexingOf(RequestLogEntry entry) => new(
         Scalar:
         [
@@ -657,15 +708,15 @@ public sealed class RequestLogStore : IDisposable
             new ScalarIndexCommand("status", false, entry.StatusCode.ToString(CultureInfo.InvariantCulture)),
             new ScalarIndexCommand("durationMs", false, ((long)Math.Round(entry.DurationMs)).ToString(CultureInfo.InvariantCulture)),
             new ScalarIndexCommand("country", false, NormalizeCountry(entry.CountryCode)),
-            new ScalarIndexCommand("public", false, entry.Path.StartsWith("/admin", StringComparison.OrdinalIgnoreCase) ? "0" : "1"),
+            new ScalarIndexCommand("public", false, PublicPathOf(entry) ? "1" : "0"),
         ],
         Geographic: null,
         Vectorial: null,
-        FullText:
-        [
-            new FullTextIndexCommand("path", entry.Path + entry.QueryString),
-            new FullTextIndexCommand("host", entry.Host),
-        ]);
+        FullText: null);
+
+    // Old payloads can carry null for fields that are non-nullable in the record.
+    private static bool PublicPathOf(RequestLogEntry entry) =>
+        !(entry.Path ?? "").StartsWith("/admin", StringComparison.OrdinalIgnoreCase);
 
     private static string Ticks(DateTimeOffset value) => value.UtcTicks.ToString(CultureInfo.InvariantCulture);
 

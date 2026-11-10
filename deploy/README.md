@@ -594,11 +594,13 @@ sezione `environment` dell'override (es. `RequestLog__RetentionDays: 30`) e
 ricrea il container. Non ci sono segreti da configurare.
 
 **Indici.** Ogni riga è indicizzata con scalar `timestamp`, `status`,
-`durationMs`, `country` e `public` e full-text `path` e `host`: si possono
-filtrare gli intervalli di tempo, gli errori e il paese, escludere le pagine
-`/admin` e cercare per percorso/host. Il payload JSON completo (IP, User-Agent
-grezzo, Client ID, referer, ...) resta leggibile con `Database.Get` o con
-`RequestLogStore.GetAsync`.
+`durationMs`, `country` e `public`: si possono filtrare gli intervalli di
+tempo, gli errori e il paese, ed escludere le pagine `/admin`. Non c'è un
+indice full-text su `path`/`host`: nessuna pagina lo interrogava e nella
+versione di Sperone fissata dal submodule un blocco di overflow perso faceva
+fallire ogni `Update` della riga (flag manuali e backfill). Il payload JSON
+completo (IP, User-Agent grezzo, Client ID, referer, ...) resta leggibile con
+`Database.Get` o con `RequestLogStore.GetAsync`.
 
 **Leggere i log.** La pagina pubblica `/requests` è la UI: mappa per paese e
 ultime richieste. Per esplorare il database in altro modo si usa la libreria (o

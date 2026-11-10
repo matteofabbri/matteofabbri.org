@@ -198,6 +198,62 @@ public sealed class RequestLogStoreTests : IDisposable
         Assert.Single(await store.GetLedesAsync());
     }
 
+    [Fact]
+    public async Task Aggiorna_i_flag_di_una_riga_e_la_rilegge()
+    {
+        using var store = CreateStore();
+        var entry = CreateEntry("req-flag") with
+        {
+            Timestamp = DateTimeOffset.UtcNow,
+            Path = "/requests",
+            QueryString = "?days=30&userAgent=" + new string('x', 400),
+        };
+        await store.InsertManyAsync([entry], CancellationToken.None);
+
+        var updated = entry with
+        {
+            IsBot = true,
+            IsMaliciousURL = false,
+            BotModel = "manual",
+        };
+
+        Assert.True(await store.UpdateAsync(updated, CancellationToken.None));
+
+        var reread = await store.GetAsync("req-flag", CancellationToken.None);
+        Assert.NotNull(reread);
+        Assert.True(reread.IsBot);
+        Assert.False(reread.IsMaliciousURL);
+        Assert.Equal("manual", reread.BotModel);
+        Assert.Equal(updated.QueryString, reread.QueryString);
+    }
+
+    [Fact]
+    public async Task La_prima_inizializzazione_elimina_i_vecchi_indici_full_text_una_volta()
+    {
+        string storage = Path.Combine(_path, "collections_storage");
+        string collection = Path.Combine(storage, "00000000000000000000000000000001");
+        string legacy = Path.Combine(collection, "idx", "ft", "meta");
+        Directory.CreateDirectory(legacy);
+        File.WriteAllText(Path.Combine(legacy, "x"), "x");
+
+        using (var store = CreateStore())
+            await store.InsertManyAsync(
+                [CreateEntry("req-ft") with { Timestamp = DateTimeOffset.UtcNow }],
+                CancellationToken.None);
+
+        Assert.False(Directory.Exists(Path.Combine(collection, "idx", "ft")));
+        Assert.True(File.Exists(Path.Combine(_path, "fulltext-index-dropped.json")));
+
+        // The marker keeps the deletion off every later start.
+        string recreated = Path.Combine(collection, "idx", "ft");
+        Directory.CreateDirectory(recreated);
+        using (var store = CreateStore())
+            await store.InsertManyAsync(
+                [CreateEntry("req-ft-2") with { Timestamp = DateTimeOffset.UtcNow }],
+                CancellationToken.None);
+        Assert.True(Directory.Exists(recreated));
+    }
+
     public void Dispose()
     {
         try
