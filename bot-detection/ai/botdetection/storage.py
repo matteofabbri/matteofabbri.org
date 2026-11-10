@@ -75,6 +75,18 @@ CREATE TABLE IF NOT EXISTS training_runs (
     model_version TEXT,
     notes        TEXT
 );
+
+-- Manual feedback from the admin page: one row per labelled client. The
+-- observations table keeps the training labels; this table lets the decision
+-- policy apply the label to the client's NEXT requests without a retrained
+-- model in between.
+CREATE TABLE IF NOT EXISTS client_labels (
+    client_id     TEXT PRIMARY KEY,
+    is_bot        INTEGER NOT NULL,
+    is_malicious  INTEGER NOT NULL,
+    labelled_by   TEXT NOT NULL DEFAULT '',
+    labelled_at   TEXT NOT NULL
+);
 """
 
 _INSERT_SQL = """
@@ -121,6 +133,10 @@ class ObservationRecord:
     is_malicious: bool
     probability: float
     model_version: str
+    # Set when the client carries a manual label: the observation is stored
+    # with that label instead of the weak rule, so retraining inherits the
+    # human verdict.
+    manual_label: int | None = None
 
 
 class SqliteStore:
@@ -147,7 +163,7 @@ class SqliteStore:
     def migrate(self) -> None:
         connection = self._connection
         connection.executescript(_SCHEMA)
-        connection.execute("PRAGMA user_version = 2")
+        connection.execute("PRAGMA user_version = 3")
         _LOGGER.info("dataset schema ready")
 
     def close(self) -> None:
@@ -172,9 +188,98 @@ class SqliteStore:
 
         return max(inserted, 0)
 
+    def load_client_labels(self) -> dict[str, tuple[bool, bool]]:
+        """The manual client labels, for the in-memory override map."""
+        rows = self._connection.execute(
+            "SELECT client_id, is_bot, is_malicious FROM client_labels"
+        ).fetchall()
+        return {
+            str(row["client_id"]): (bool(row["is_bot"]), bool(row["is_malicious"]))
+            for row in rows
+        }
+
+    def set_client_label(
+        self,
+        client_id: str,
+        is_bot: bool,
+        is_malicious: bool,
+        labelled_by: str,
+    ) -> int:
+        """Upserts the manual verdict and rewrites the client's training labels.
+
+        Returns how many observations of the client were relabelled (0 when the
+        client has never been classified here).
+        """
+        with self._connection as connection:
+            connection.execute(
+                "INSERT INTO client_labels"
+                " (client_id, is_bot, is_malicious, labelled_by, labelled_at)"
+                " VALUES (?, ?, ?, ?, ?)"
+                " ON CONFLICT(client_id) DO UPDATE SET"
+                "  is_bot = excluded.is_bot,"
+                "  is_malicious = excluded.is_malicious,"
+                "  labelled_by = excluded.labelled_by,"
+                "  labelled_at = excluded.labelled_at",
+                (client_id, int(is_bot), int(is_malicious), labelled_by or "", _utc_now()),
+            )
+
+        return self._apply_manual_label(client_id, 1 if (is_bot or is_malicious) else 0)
+
+    def clear_client_label(self, client_id: str) -> int:
+        """Removes the manual verdict and restores the weak labels."""
+        with self._connection as connection:
+            connection.execute("DELETE FROM client_labels WHERE client_id = ?", (client_id,))
+
+        return self._apply_manual_label(client_id, None)
+
+    def _apply_manual_label(self, client_id: str, label: int | None) -> int:
+        rows = self._connection.execute(
+            "SELECT request_id, path, user_agent, http_status, auth_failures_last_minute"
+            " FROM observations WHERE client_id = ?",
+            (client_id,),
+        ).fetchall()
+        if not rows:
+            return 0
+
+        if label is None:
+            values = [
+                (
+                    derive_weak_label(
+                        {
+                            "path": row["path"],
+                            "user_agent": row["user_agent"],
+                            "http_status": row["http_status"],
+                            "auth_failures_last_minute": row["auth_failures_last_minute"],
+                        }
+                    ),
+                    "weak_rule",
+                    row["request_id"],
+                )
+                for row in rows
+            ]
+        else:
+            values = [(label, "manual", row["request_id"]) for row in rows]
+
+        with self._connection as connection:
+            connection.executemany(
+                "UPDATE observations SET weak_label = ?, label_source = ? WHERE request_id = ?",
+                values,
+            )
+        return len(values)
+
     def count_observations(self) -> int:
         row = self._connection.execute("SELECT COUNT(*) AS total FROM observations").fetchone()
         return int(row["total"])
+
+    def observation_label(self, request_id: str) -> tuple[int | None, str | None]:
+        """The training label of one observation, or (None, None) when absent."""
+        row = self._connection.execute(
+            "SELECT weak_label, label_source FROM observations WHERE request_id = ?",
+            (request_id,),
+        ).fetchone()
+        if row is None:
+            return (None, None)
+        return (row["weak_label"], row["label_source"])
 
     def count_labelled(self) -> int:
         row = self._connection.execute(
@@ -226,14 +331,19 @@ class SqliteStore:
             )
 
     def _to_row(self, record: ObservationRecord) -> tuple[object, ...]:
-        weak_label = derive_weak_label(
-            {
-                "path": record.path,
-                "user_agent": record.user_agent,
-                "http_status": record.http_status,
-                "auth_failures_last_minute": record.auth_failures_last_minute,
-            }
-        )
+        if record.manual_label is not None:
+            weak_label = record.manual_label
+            label_source = "manual"
+        else:
+            weak_label = derive_weak_label(
+                {
+                    "path": record.path,
+                    "user_agent": record.user_agent,
+                    "http_status": record.http_status,
+                    "auth_failures_last_minute": record.auth_failures_last_minute,
+                }
+            )
+            label_source = "weak_rule"
 
         return (
             record.request_id,
@@ -262,7 +372,7 @@ class SqliteStore:
             record.probability,
             record.model_version,
             weak_label,
-            "weak_rule",
+            label_source,
             _utc_now(),
         )
 

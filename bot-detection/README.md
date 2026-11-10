@@ -134,6 +134,28 @@ Bot flags backfill finished: 740000 scanned, 640000 updated, 100000 skipped
 The work runs inside the site process because Sperone is embedded: one owner of
 the database, no second instance against the same volume.
 
+## Manual feedback from the admin
+
+`/admin/requests` is the other half of the loop. A flag button there is about the
+row's **client** (the 16-hex Client ID: IP + user agent), not the single row:
+
+1. every public request of that client in the selected period gets the same two
+   flags (`BotModel="manual"`), so the public page, the chart and the CSV show
+   the corrected verdict;
+2. the site calls `LabelClient` on the model. The Python service
+   - rewrites the training label (`weak_label`) of every observation of that
+     client in its SQLite dataset, so the next retraining run learns it, and
+   - keeps the verdict in `client_labels` and applies it to the client's
+     **next** requests immediately (the decision is overridden, signal
+     `manual-client-label`), without waiting for a promoted model;
+3. clicking through yes → no → "—" walks the cycle; with both flags back on
+   "—" the manual label is removed and the observations return to their weak
+   labels.
+
+If the model is down, the log flags are still saved and the admin page says so.
+The site's 20-second `/requests` cache is dropped by the update, so the public
+page shows the new verdict on the next visit.
+
 ## Aspire
 
 The model is one container in the site's existing app model
@@ -161,7 +183,7 @@ dataset.
 ## Run
 
 ```bash
-# unit tests (15)
+# unit tests (17)
 cd bot-detection
 PYTHONPATH=ai python -m unittest discover -s ai/tests -v
 
@@ -169,8 +191,9 @@ PYTHONPATH=ai python -m unittest discover -s ai/tests -v
 dotnet run --project ../MatteoFabbri.org.AppHost
 ```
 
-Useful endpoints: `GET /requests` (the new Bot column), the CSV button on the
-same page, `GET /healthz` and `GET /metrics` on the Python service.
+Useful endpoints: `GET /requests` (the public list with the Bot column), the CSV
+button on the same page, `GET /admin/requests` (the flags, one click per client),
+`GET /healthz` and `GET /metrics` on the Python service.
 
 ## Note on visibility
 

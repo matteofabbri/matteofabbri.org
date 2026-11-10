@@ -15,9 +15,11 @@
         <h1>Requests</h1>
         <p class="lede">
             Every public request with the two model flags, one column each. A flag is a button: each
-            click moves it from “—” to yes to no and back to “—”, and with both back on “—” the row
-            belongs to the model again. Country, IP, Client ID and User-Agent open the public list
-            filtered by that value.
+            click moves every request of this client in the period from “—” to yes to no and back to
+            “—”, and with both back on “—” the client belongs to the model again. The verdict is sent
+            to the model: it applies it to the client's next requests and learns it at the next
+            retraining run. Country, IP, Client ID and User-Agent open the public list filtered by
+            that value.
         </p>
     </div>
     <form method="get" class="map-controls">
@@ -110,7 +112,7 @@ else
                                 <input type="hidden" name="isMalicious" value="@RequestFlagState.Value(row.IsMaliciousURL)" />
                                 <button type="submit" name="toggle" value="bot"
                                         class="bot-flag bot-toggle @RequestFlagState.BotBadgeClass(row.IsBot)"
-                                        title="Bot flag — @RequestFlagState.ClickHint(row.IsBot)">
+                                        title="Bot flag for this client — @RequestFlagState.ClickHint(row.IsBot)">
                                     @RequestFlagState.Label(row.IsBot)
                                 </button>
                                 @if (row.BotModel == "manual")
@@ -128,7 +130,7 @@ else
                                 <input type="hidden" name="isMalicious" value="@RequestFlagState.Value(row.IsMaliciousURL)" />
                                 <button type="submit" name="toggle" value="malicious"
                                         class="bot-flag bot-toggle @RequestFlagState.MaliciousBadgeClass(row.IsMaliciousURL)"
-                                        title="Malicious URL flag — @RequestFlagState.ClickHint(row.IsMaliciousURL)">
+                                        title="Malicious URL flag for this client — @RequestFlagState.ClickHint(row.IsMaliciousURL)">
                                     @RequestFlagState.Label(row.IsMaliciousURL)
                                 </button>
                             </form>

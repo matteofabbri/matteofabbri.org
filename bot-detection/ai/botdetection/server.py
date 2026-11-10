@@ -22,7 +22,7 @@ from .hot_reload import HotReloadWatcher
 from .model import ModelBundle, heuristic_bundle, load_bundle
 from .predictor import Predictor
 from .retrain import RetrainScheduler
-from .service import build_grpc_server
+from .service import ClientLabels, build_grpc_server
 from .storage import SqliteStore
 
 _LOGGER = logging.getLogger(__name__)
@@ -140,7 +140,10 @@ def main() -> int:
     watcher = HotReloadWatcher(settings.model_path, predictor, settings.reload_interval_seconds)
     watcher.start()
 
-    server = build_grpc_server(settings, predictor, store, scheduler.notify)
+    labels = ClientLabels(store.load_client_labels())
+    server = build_grpc_server(
+        settings, predictor, store, labels, scheduler.notify, scheduler.request
+    )
     server.start()
     readiness.set()
     _LOGGER.info("grpc server listening on port %d", settings.grpc_port)

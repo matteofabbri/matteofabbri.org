@@ -1,7 +1,9 @@
 using System.Globalization;
+using BotDetection.Client;
 using MainSite.RequestLogging;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
 
 namespace MainSite.Pages.Admin;
@@ -10,14 +12,19 @@ namespace MainSite.Pages.Admin;
 // The page sits under /Admin, so it is covered by the blog policy.
 //
 // Each flag is one button: a click moves it to its next state ("—" → yes → no
-// → "—") and saves the row with BotModel="manual", so the backfill, which
-// skips rows that have both flags set, never overwrites a manual choice. With
-// both flags back on "—" the row is the model's again.
+// → "—") and saves it with BotModel="manual", so the backfill, which skips rows
+// that have both flags set, never overwrites a manual choice. A click is about
+// the CLIENT, not the single row: every public request of the same Client ID in
+// the period gets the same flags. The verdict is also sent to the Python model,
+// which applies it to the client's next requests and learns it at the next
+// retraining run.
 //
 // Country, IP, Client ID and User-Agent link to the public requests page with
 // the matching filter applied, exactly like the cells of that page.
 public sealed class RequestsModel(
     RequestLogStore store,
+    IServiceProvider services,
+    IMemoryCache cache,
     IOptions<RequestLogOptions> options,
     ILogger<RequestsModel> logger) : PageModel
 {
@@ -80,17 +87,43 @@ public sealed class RequestsModel(
                 return RedirectToPage(new { days = Days, pageNumber = PageNumber });
             }
 
-            var updated = entry with
+            string clientId = ClientIdOf(entry);
+            int updated;
+            if (clientId.Length == 0)
             {
-                IsBot = bot,
-                IsMaliciousURL = malicious,
-                BotProbability = null,
-                BotModel = bot is null && malicious is null ? null : "manual",
-            };
+                // No client identity (no IP and no user agent): the row is all
+                // this click can mark, and the model has nothing to learn.
+                var single = entry with
+                {
+                    IsBot = bot,
+                    IsMaliciousURL = malicious,
+                    BotProbability = null,
+                    BotModel = bot is null && malicious is null ? null : "manual",
+                };
+                updated = await store.UpdateAsync(single, ct) ? 1 : 0;
+            }
+            else
+            {
+                IReadOnlyList<RequestLogEntry> entries = await PeriodEntriesAsync(ct);
+                updated = await store.UpdateClientFlagsAsync(entries, clientId, bot, malicious, ct);
+            }
 
-            bool saved = await store.UpdateAsync(updated, ct);
-            TempData[saved ? "Messaggio" : "Errore"] =
-                saved ? "Flags updated." : "Could not update the request.";
+            if (updated == 0)
+            {
+                TempData["Errore"] = "Could not update the request.";
+                return RedirectToPage(new { days = Days, pageNumber = PageNumber });
+            }
+
+            // The public page shares this list through the 20-second cache: drop
+            // it so the new flags are visible on the next visit, not after the TTL.
+            cache.Remove($"requests:public:{Days}");
+
+            string modelNote = clientId.Length == 0
+                ? ""
+                : await SendClientFeedbackAsync(clientId, bot, malicious, ct);
+
+            TempData["Messaggio"] =
+                $"Flags updated on {FormatNumber(updated)} requests of this client ({PeriodLabel}).{modelNote}";
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -99,6 +132,46 @@ public sealed class RequestsModel(
         }
 
         return RedirectToPage(new { days = Days, pageNumber = PageNumber });
+    }
+
+    private string PeriodLabel => Days switch
+    {
+        7 => "last 7 days",
+        30 => "last 30 days",
+        90 => "last 90 days",
+        _ => "last 24 hours",
+    };
+
+    // The period's public rows, read fresh: a click must include the client's
+    // newest requests too, so it does not reuse the public page's cached list.
+    // That list is dropped after the update, so the public page does not keep
+    // showing the old flags for the rest of the TTL.
+    private Task<IReadOnlyList<RequestLogEntry>> PeriodEntriesAsync(CancellationToken ct) =>
+        store.GetPublicEntriesAsync(DateTimeOffset.UtcNow.AddDays(-Days), ct);
+
+    // Best effort: the log flags are already saved. The model applies the
+    // verdict to the client's next requests and relabels its stored
+    // observations, so the next retraining run learns it too.
+    private async Task<string> SendClientFeedbackAsync(
+        string clientId,
+        bool? bot,
+        bool? malicious,
+        CancellationToken ct)
+    {
+        var classifier = services.GetService<BotClassifier>();
+        if (classifier is null)
+            return "";
+
+        var feedback = await classifier.LabelClientAsync(
+            clientId, bot, malicious, User.Identity?.Name, ct);
+
+        return feedback switch
+        {
+            null => " The model did not answer: the flags are saved in the log only.",
+            { ManualLabelActive: false } => " The model cleared its manual label for this client.",
+            _ => $" The model applied the label to {FormatNumber(feedback.ObservationsUpdated)} observations"
+                 + (feedback.RetrainRequested ? " and asked for a retraining run." : "."),
+        };
     }
 
     public string FormatWhen(DateTimeOffset value) =>
@@ -152,6 +225,7 @@ public sealed class RequestsModel(
     private static AdminRequestRow ToRow(RequestLogEntry entry)
     {
         string path = entry.Path + entry.QueryString;
+        string clientId = ClientIdOf(entry);
         return new AdminRequestRow(
             entry.Id,
             entry.Timestamp,
@@ -161,7 +235,7 @@ public sealed class RequestsModel(
             CountryCodeOf(entry.CountryCode),
             WorldCountries.NameOf(entry.CountryCode),
             entry.RemoteIp ?? "—",
-            string.IsNullOrEmpty(entry.ClientId) ? "—" : entry.ClientId,
+            string.IsNullOrEmpty(clientId) ? "—" : clientId,
             entry.UserAgent ?? "—",
             entry.DurationMs,
             entry.IsBot,
@@ -169,6 +243,11 @@ public sealed class RequestsModel(
             entry.BotModel,
             RequestLinks.SafeHref(path));
     }
+
+    // Same identity the public page shows: the stored id, or the hash of IP and
+    // user agent for rows written before the field existed.
+    private static string ClientIdOf(RequestLogEntry entry) =>
+        entry.ClientId ?? ClientIds.For(entry.RemoteIp, entry.UserAgent) ?? "";
 
     private static string CountryCodeOf(string? code) =>
         string.IsNullOrWhiteSpace(code) ? "ZZ" : code.Trim().ToUpperInvariant();

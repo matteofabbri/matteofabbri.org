@@ -97,5 +97,67 @@ public sealed class BotClassifier : IDisposable
         }
     }
 
+    /// <summary>
+    /// Sends a manual verdict for one client: the model relabels that client's
+    /// stored observations (so the next retraining run learns it) and applies
+    /// the verdict to its next requests immediately. Returns null when the
+    /// model does not answer; the caller keeps the flags it already stored.
+    /// </summary>
+    public async Task<BotFeedbackResult?> LabelClientAsync(
+        string clientId,
+        bool? isBot,
+        bool? isMalicious,
+        string? labelledBy,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(clientId) || !_options.Enabled)
+        {
+            return null;
+        }
+
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        cts.CancelAfter(TimeSpan.FromMilliseconds(_options.TimeoutMilliseconds));
+
+        try
+        {
+            var request = new LabelClientRequest
+            {
+                ClientId = clientId,
+                LabelledBy = labelledBy ?? "",
+            };
+            if (isBot is bool bot)
+            {
+                request.IsBot = bot;
+            }
+            if (isMalicious is bool malicious)
+            {
+                request.IsMalicious = malicious;
+            }
+
+            var response = await _client
+                .LabelClientAsync(request, cancellationToken: cts.Token)
+                .ConfigureAwait(false);
+
+            return new BotFeedbackResult(
+                response.ObservationsUpdated,
+                response.ManualLabelActive,
+                response.RetrainRequested);
+        }
+        catch (RpcException ex)
+        {
+            _logger.LogWarning(
+                "Bot detection unavailable for the client label ({Status}); the log flags are already saved",
+                ex.StatusCode);
+            return null;
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogWarning(
+                "Client label timed out after {Timeout} ms; the log flags are already saved",
+                _options.TimeoutMilliseconds);
+            return null;
+        }
+    }
+
     public void Dispose() => _channel.Dispose();
 }

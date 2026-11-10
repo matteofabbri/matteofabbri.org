@@ -52,18 +52,49 @@ RPC_LATENCY = Histogram(
 )
 
 
+class ClientLabels:
+    """Manual client labels, served to the classification workers.
+
+    The admin page writes these at human speed, so copy-on-write with a single
+    reference swap is enough: a reader sees the old map or the new one, never a
+    map being mutated. No lock on the classification path.
+    """
+
+    def __init__(self, initial: dict[str, tuple[bool, bool]] | None = None) -> None:
+        self._labels: dict[str, tuple[bool, bool]] = dict(initial or {})
+
+    def get(self, client_id: str) -> tuple[bool, bool] | None:
+        return self._labels.get(client_id) if client_id else None
+
+    def set(self, client_id: str, is_bot: bool, is_malicious: bool) -> None:
+        updated = dict(self._labels)
+        updated[client_id] = (is_bot, is_malicious)
+        self._labels = updated
+
+    def clear(self, client_id: str) -> None:
+        if client_id not in self._labels:
+            return
+        updated = dict(self._labels)
+        updated.pop(client_id, None)
+        self._labels = updated
+
+
 class BotDetectionServicer(pb_grpc.BotDetectionServiceServicer):
     def __init__(
         self,
         predictor: Predictor,
         settings: Settings,
         store: SqliteStore,
+        labels: ClientLabels,
         on_ingested: Callable[[int], None] | None = None,
+        on_feedback: Callable[[], None] | None = None,
     ) -> None:
         self._predictor = predictor
         self._settings = settings
         self._store = store
+        self._labels = labels
         self._on_ingested = on_ingested or (lambda _inserted: None)
+        self._on_feedback = on_feedback
 
     def Classify(self, request: pb.BotClassificationRequest, context: grpc.ServicerContext):
         bundle = self._predictor.acquire()
@@ -111,6 +142,48 @@ class BotDetectionServicer(pb_grpc.BotDetectionServiceServicer):
             reload_count=self._predictor.reload_count,
         )
 
+    def LabelClient(self, request: pb.LabelClientRequest, context: grpc.ServicerContext):
+        """Manual verdict for one client: dataset labels + the live override.
+
+        The site calls this when an admin clicks a flag on a request. Both
+        booleans unset means "clear the manual label": the observations go back
+        to their weak labels and the next requests are the model's again.
+        """
+        client_id = (request.client_id or "").strip().lower()
+        if not client_id:
+            context.abort(grpc.StatusCode.INVALID_ARGUMENT, "client_id is required")
+
+        active = request.HasField("is_bot") or request.HasField("is_malicious")
+        try:
+            if active:
+                is_bot = request.is_bot if request.HasField("is_bot") else False
+                is_malicious = request.is_malicious if request.HasField("is_malicious") else False
+                updated = self._store.set_client_label(
+                    client_id, is_bot, is_malicious, request.labelled_by or ""
+                )
+                self._labels.set(client_id, is_bot, is_malicious)
+            else:
+                updated = self._store.clear_client_label(client_id)
+                self._labels.clear(client_id)
+        except sqlite3.Error:
+            _LOGGER.exception("could not store the client label")
+            context.abort(grpc.StatusCode.INTERNAL, "label not stored")
+            return pb.LabelClientResponse()
+
+        retrain = bool(updated and self._on_feedback is not None)
+        if retrain:
+            self._on_feedback()
+
+        _LOGGER.info(
+            "client label stored",
+            extra={"client_id": client_id, "samples": updated},
+        )
+        return pb.LabelClientResponse(
+            observations_updated=updated,
+            manual_label_active=active,
+            retrain_requested=retrain,
+        )
+
     def _classify_one(
         self,
         item: pb.BotClassificationRequest,
@@ -120,6 +193,13 @@ class BotDetectionServicer(pb_grpc.BotDetectionServiceServicer):
         observation = Observation.from_request(item)
         probability = bundle.score(to_vector(observation))
         is_bot, is_malicious, signals = decide(probability, observation, self._settings)
+
+        manual = self._labels.get(item.client_id)
+        if manual is not None:
+            # A human decided this client: the verdict wins over the model for
+            # its next requests, without waiting for a retrained bundle.
+            is_bot, is_malicious = manual
+            signals = [*signals, "manual-client-label"]
 
         elapsed_seconds = (time.perf_counter_ns() - started) / 1_000_000_000
         INFERENCE_LATENCY.observe(elapsed_seconds)
@@ -164,6 +244,7 @@ class BotDetectionServicer(pb_grpc.BotDetectionServiceServicer):
             is_malicious=is_malicious,
             probability=probability,
             model_version=bundle.version,
+            manual_label=(1 if (is_bot or is_malicious) else 0) if manual is not None else None,
         )
 
         return response, record
@@ -231,7 +312,9 @@ def build_grpc_server(
     settings: Settings,
     predictor: Predictor,
     store: SqliteStore,
+    labels: ClientLabels,
     on_ingested: Callable[[int], None] | None = None,
+    on_feedback: Callable[[], None] | None = None,
 ) -> grpc.Server:
     server = grpc.server(
         futures.ThreadPoolExecutor(
@@ -251,7 +334,7 @@ def build_grpc_server(
     )
 
     pb_grpc.add_BotDetectionServiceServicer_to_server(
-        BotDetectionServicer(predictor, settings, store, on_ingested),
+        BotDetectionServicer(predictor, settings, store, labels, on_ingested, on_feedback),
         server,
     )
 

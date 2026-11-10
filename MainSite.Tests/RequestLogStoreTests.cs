@@ -254,6 +254,51 @@ public sealed class RequestLogStoreTests : IDisposable
         Assert.True(Directory.Exists(recreated));
     }
 
+    [Fact]
+    public async Task Aggiorna_i_flag_di_tutte_le_richieste_di_un_client_nel_periodo()
+    {
+        using var store = CreateStore();
+        var now = DateTimeOffset.UtcNow;
+
+        var sameOne = CreateEntry("req-client-1") with { Timestamp = now, ClientId = "aaaaaaaaaaaaaaaa" };
+        var sameTwo = CreateEntry("req-client-2") with { Timestamp = now.AddMinutes(-5), ClientId = "aaaaaaaaaaaaaaaa" };
+        var other = CreateEntry("req-other") with
+        {
+            Timestamp = now,
+            ClientId = "bbbbbbbbbbbbbbbb",
+            Path = "/blog/due",
+        };
+        var outside = CreateEntry("req-outside") with
+        {
+            Timestamp = now.AddDays(-10),
+            ClientId = "aaaaaaaaaaaaaaaa",
+        };
+
+        await store.InsertManyAsync([sameOne, sameTwo, other, outside], CancellationToken.None);
+
+        var entries = await store.GetPublicEntriesAsync(now.AddDays(-1));
+        int updated = await store.UpdateClientFlagsAsync(
+            entries, "aaaaaaaaaaaaaaaa", isBot: true, isMalicious: false, CancellationToken.None);
+
+        Assert.Equal(2, updated);
+        var first = await store.GetAsync("req-client-1");
+        var second = await store.GetAsync("req-client-2");
+        Assert.True(first!.IsBot);
+        Assert.False(first.IsMaliciousURL);
+        Assert.Equal("manual", first.BotModel);
+        Assert.True(second!.IsBot);
+        Assert.Null((await store.GetAsync("req-other"))!.IsBot);
+        Assert.Null((await store.GetAsync("req-outside"))!.IsBot);
+
+        // Both flags back on "—": the client belongs to the model again.
+        int cleared = await store.UpdateClientFlagsAsync(
+            entries, "aaaaaaaaaaaaaaaa", isBot: null, isMalicious: null, CancellationToken.None);
+        Assert.Equal(2, cleared);
+        var afterClear = await store.GetAsync("req-client-1");
+        Assert.Null(afterClear!.IsBot);
+        Assert.Null(afterClear.BotModel);
+    }
+
     public void Dispose()
     {
         try

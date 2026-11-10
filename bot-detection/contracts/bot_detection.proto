@@ -20,6 +20,12 @@ service BotDetectionService {
 
   // Operational endpoint: which model is loaded, since when, with which checksum.
   rpc GetModelInfo(ModelInfoRequest) returns (ModelInfoResponse);
+
+  // Manual feedback from the admin page. It rewrites the training label of
+  // every observation of one client (so the next retraining run learns it) and
+  // makes the decision policy apply the label to that client's next requests
+  // immediately, without waiting for a new model.
+  rpc LabelClient(LabelClientRequest) returns (LabelClientResponse);
 }
 
 message BotClassificationRequest {
@@ -97,4 +103,30 @@ message ModelInfoResponse {
   string checksum = 5;
   double loaded_at_unix = 6;
   int64 reload_count = 7;
+}
+
+message LabelClientRequest {
+  // Stable 16-hex client identifier, the same the site stores.
+  string client_id = 1;
+
+  // The manual verdict for this client, applied to its next requests and to
+  // its training rows. Both unset = clear the manual label and let the model
+  // decide again.
+  optional bool is_bot = 2;
+  optional bool is_malicious = 3;
+
+  // Who made the call (the site's authenticated mailbox), for the audit trail.
+  string labelled_by = 4;
+}
+
+message LabelClientResponse {
+  // Observations of the client whose training label was rewritten.
+  int32 observations_updated = 1;
+
+  // True when a manual label is now active for the client, false when the call
+  // cleared it.
+  bool manual_label_active = 2;
+
+  // True when the call asked the retraining scheduler for a run.
+  bool retrain_requested = 3;
 }

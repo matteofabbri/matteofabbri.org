@@ -462,6 +462,48 @@ public sealed class RequestLogStore : IDisposable
         return result == OperationResult.Success;
     }
 
+    // Rewrites both flags on every row of one client. The admin page passes the
+    // period's public entries (the same list the public page reads), so a click
+    // is about the client, not the single row. Returns how many rows the store
+    // accepted.
+    public async Task<int> UpdateClientFlagsAsync(
+        IReadOnlyList<RequestLogEntry> entries,
+        string clientId,
+        bool? isBot,
+        bool? isMalicious,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(clientId))
+            return 0;
+
+        var matches = new List<RequestLogEntry>();
+        foreach (var entry in entries)
+        {
+            if (!string.Equals(ClientIdOf(entry), clientId, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            matches.Add(entry with
+            {
+                IsBot = isBot,
+                IsMaliciousURL = isMalicious,
+                BotProbability = null,
+                BotModel = isBot is null && isMalicious is null ? null : "manual",
+            });
+        }
+
+        if (matches.Count == 0)
+            return 0;
+
+        int updated = 0;
+        foreach (var chunk in matches.Chunk(_options.EffectiveBatchSize))
+            updated += await UpdateManyAsync(chunk, ct);
+
+        return updated;
+    }
+
+    private static string ClientIdOf(RequestLogEntry entry) =>
+        entry.ClientId ?? ClientIds.For(entry.RemoteIp, entry.UserAgent) ?? "";
+
     private UpdateElementCommand? BuildUpdateCommand(RequestLogEntry entry, DateTimeOffset now)
     {
         long? ttl = _options.RetentionSeconds is { } retention
