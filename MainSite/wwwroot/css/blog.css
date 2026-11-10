@@ -285,6 +285,13 @@ main.wrap {
     margin-bottom: 2.5rem;
 }
 
+/* The text block always takes the rest of the row: a page head must never
+   collapse to a readability column (the lede carries no max-width). */
+.page-head > :first-child {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
 .eyebrow {
     margin: 0 0 0.5rem;
     color: var(--muted);
@@ -307,7 +314,6 @@ main.wrap {
 }
 
 .lede {
-    max-width: 55ch;
     margin: 0.25rem 0 0;
     color: var(--muted);
     font-size: 1.05rem;
