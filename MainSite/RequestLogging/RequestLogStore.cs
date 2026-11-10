@@ -26,6 +26,7 @@ public sealed class RequestLogStore : IDisposable
     private const string LedeCollection = "ledes";
     private const string LedeCollectionDescription = "Frasi brevi mostrate a caso nel jumbotron della home";
     private const string FullTextRemovedMarker = "fulltext-index-dropped.json";
+    private const string ScalarIndexesDroppedMarker = "scalar-indexes-dropped.json";
 
     private readonly RequestLogOptions _options;
     private readonly IHostEnvironment _environment;
@@ -95,6 +96,10 @@ public sealed class RequestLogStore : IDisposable
                             LogPageBits: _options.EffectiveLogPageBits));
                     ownsNew = true;
                 }
+
+                // Before the collection is opened for the first time in this
+                // process: a corrupt scalar index would make every write throw.
+                await DropCorruptScalarIndexesAsync(db);
 
                 var created = await db.Create(new CreateCollectionCommand(
                     _options.EffectiveDatabaseName,
@@ -204,6 +209,42 @@ public sealed class RequestLogStore : IDisposable
             // No marker: the next start retries. Deleting a missing folder is a
             // no-op, so a partially failed run is safe to repeat.
             _logger.LogWarning(ex, "Sperone: could not drop the full-text indexes; will retry on the next start");
+        }
+    }
+
+    // One-off repair (2026-11-10). The pinned Sperone version can lose an
+    // overflow chunk of a scalar B-tree node, after which every InsertMany and
+    // every Update of the collection throws ("Blocco di overflow N non trovato
+    // nello store") and the request log stops. The payloads are intact, so the
+    // index is rebuildable: delete the requests collection's scalar-multiple
+    // store before the collection opens (the next Insert/Update recreates it on
+    // demand) and let RequestLogReindex refill it from the rows. The marker next
+    // to the database keeps this to one run.
+    private async Task DropCorruptScalarIndexesAsync(Database db)
+    {
+        string marker = Path.Combine(ResolvedPath, ScalarIndexesDroppedMarker);
+        if (File.Exists(marker))
+            return;
+
+        try
+        {
+            var (found, metadata) = await db.GetMetadata(_options.EffectiveCollection);
+            if (found)
+            {
+                string scalarIndexes = Path.Combine(metadata.Folder, "idx", "multi");
+                if (Directory.Exists(scalarIndexes))
+                    Directory.Delete(scalarIndexes, recursive: true);
+            }
+
+            Directory.CreateDirectory(ResolvedPath);
+            File.WriteAllText(marker, "{\"droppedAt\":\"" + DateTimeOffset.UtcNow.ToString("O") + "\"}");
+            _logger.LogWarning(
+                "Sperone: scalar indexes of {Collection} dropped; the reindex job rebuilds them",
+                _options.EffectiveCollection);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _logger.LogWarning(ex, "Sperone: could not drop the scalar indexes; will retry on the next start");
         }
     }
 
@@ -445,6 +486,53 @@ public sealed class RequestLogStore : IDisposable
 
         var results = await _db.UpdateMany(commands);
         return results.Count(result => result == OperationResult.Success);
+    }
+
+    // One page of the index rebuild: enumerate the element store (keys only, no
+    // index involved), then rewrite each row's indexing spec. The payload does
+    // not change and BuildUpdateCommand keeps the remaining TTL; rows the store
+    // refuses are counted and left to a later pass.
+    public async Task<RequestLogReindexPage> ReindexPageAsync(int skip, int take, CancellationToken ct = default)
+    {
+        if (take <= 0)
+            take = 200;
+
+        if (!await EnsureInitializedAsync(ct) || _db is null)
+            return new RequestLogReindexPage(0, 0, 0);
+
+        var (result, ids) = await _db.ListElements(_options.EffectiveCollection, Math.Max(0, skip), take);
+        if (result != OperationResult.Success || ids.Count == 0)
+            return new RequestLogReindexPage(0, 0, 0);
+
+        int updated = 0;
+        int failed = 0;
+        DateTimeOffset now = _timeProvider.GetUtcNow();
+
+        foreach (string id in ids)
+        {
+            try
+            {
+                var (found, payload) = await _db.Get(new GetElementCommand(_options.EffectiveCollection, id));
+                if (!found)
+                    continue;
+
+                var entry = JsonSerializer.Deserialize(payload.Span, RequestLogJsonContext.Default.RequestLogEntry);
+                if (entry is null || BuildUpdateCommand(entry, now) is not { } command)
+                    continue;
+
+                if (await _db.Update(command) == OperationResult.Success)
+                    updated++;
+                else
+                    failed++;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                failed++;
+                _logger.LogWarning(ex, "Reindex richieste: riga {RequestId} non reindicizzata", id);
+            }
+        }
+
+        return new RequestLogReindexPage(ids.Count, updated, failed);
     }
 
     // Riscrive una singola riga: è la modifica manuale dei flag dalla pagina
@@ -830,6 +918,10 @@ public sealed record RequestLogPage(
 // the client had in the period, how many were written, how many the store
 // refused (with the first reason, for the admin message).
 public sealed record ClientFlagUpdate(int Matched, int Updated, int Skipped, string? FirstError);
+
+// One page of the index rebuild: ids returned by the element store, rows whose
+// indexing spec was rewritten, rows the store refused.
+public sealed record RequestLogReindexPage(int Scanned, int Updated, int Failed);
 
 // Una pagina dei payload /info-send, dalla più recente.
 public sealed record InfoPage(

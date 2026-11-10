@@ -64,6 +64,13 @@ public sealed class RequestLogOptions
     public int BackfillDays { get; set; } = 90;
     public bool BackfillForce { get; set; }
 
+    // One-shot rebuild of the scalar indexes from the stored payloads. The
+    // pinned Sperone version can lose an overflow chunk of a scalar B-tree
+    // node, which makes every insert and update of the collection throw; the
+    // store drops the corrupt index on the same start, and this job refills it.
+    // A marker next to the database makes it a single pass.
+    public bool ReindexIndexes { get; set; }
+
     public string EffectivePath => string.IsNullOrWhiteSpace(Path) ? "App_Data/sperone" : Path.Trim();
     public string EffectiveGeoIpDatabasePath => string.IsNullOrWhiteSpace(GeoIpDatabasePath)
         ? "App_Data/geoip/dbip-city-lite.mmdb"

@@ -35,6 +35,9 @@ services:
       # Backfill delle righe già in Sperone. Il marker in
       # /data/sperone/bot-backfill.json fa ripartire solo le righe mancanti.
       RequestLog__BackfillBotFlags: "true"
+      # One-shot rebuild of the scalar indexes from the payloads, after the
+      # corrupt-store drop. The marker in /data/sperone makes it a single pass.
+      RequestLog__ReindexIndexes: "true"
     volumes:
       - blog-data:/data/blog
       - request-log-data:/data/sperone

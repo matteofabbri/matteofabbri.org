@@ -302,6 +302,31 @@ public sealed class RequestLogStoreTests : IDisposable
         Assert.Null(afterClear.BotModel);
     }
 
+    [Fact]
+    public async Task Reindicizza_le_righe_dai_payload_senza_toccarli()
+    {
+        using var store = CreateStore();
+        var now = DateTimeOffset.UtcNow;
+        await store.InsertManyAsync(
+            [
+                CreateEntry("req-a") with { Timestamp = now, IsBot = true },
+                CreateEntry("req-b") with { Timestamp = now.AddMinutes(-1) },
+            ],
+            CancellationToken.None);
+
+        var page = await store.ReindexPageAsync(0, 10, CancellationToken.None);
+        Assert.Equal(2, page.Scanned);
+        Assert.Equal(2, page.Updated);
+        Assert.Equal(0, page.Failed);
+
+        var after = await store.GetAsync("req-a", CancellationToken.None);
+        Assert.NotNull(after);
+        Assert.True(after.IsBot);
+
+        var beyond = await store.ReindexPageAsync(2, 10, CancellationToken.None);
+        Assert.Equal(0, beyond.Scanned);
+    }
+
     public void Dispose()
     {
         try

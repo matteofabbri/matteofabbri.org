@@ -55,6 +55,7 @@ public class Program
             builder.Services.AddSingleton<IRequestLogSink>(services => services.GetRequiredService<RequestLogQueue>());
             builder.Services.AddHostedService<RequestLogWriter>();
             builder.Services.AddHostedService<RequestLogBackfill>();
+            builder.Services.AddHostedService<RequestLogReindex>();
         }
 
         // --- Blog: articoli su file, accesso delegato a mailcow ---------------
