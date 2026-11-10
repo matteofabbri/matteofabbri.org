@@ -222,6 +222,11 @@ public sealed class RequestLogStore : IDisposable
     // to the database keeps this to one run.
     private async Task DropCorruptScalarIndexesAsync(Database db)
     {
+        // Only the recovery run asks for it: a healthy database must keep its
+        // indexes (a development machine does not set ReindexIndexes).
+        if (!_options.ReindexIndexes)
+            return;
+
         string marker = Path.Combine(ResolvedPath, ScalarIndexesDroppedMarker);
         if (File.Exists(marker))
             return;
