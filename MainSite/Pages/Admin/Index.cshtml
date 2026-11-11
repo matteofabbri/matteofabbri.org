@@ -22,6 +22,31 @@
     </div>
 </div>
 
+<h2 class="section-title">Pages</h2>
+<p class="hint">Long-form pages outside the blog.</p>
+<div class="table-wrap">
+    <table class="admin-table">
+        <thead>
+            <tr>
+                <th>Page</th>
+                <th class="cell-actions">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>
+                    <a class="table-title" asp-page="/Admin/SitePage" asp-route-slug="about">@Model.AboutTitle</a>
+                    <span class="table-slug">/about</span>
+                </td>
+                <td class="cell-actions">
+                    <a asp-page="/Admin/SitePage" asp-route-slug="about">Edit</a>
+                    <a asp-page="/About">View</a>
+                </td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
 <h2 class="section-title">Posts</h2>
 <p class="hint">@(Model.Posts.Count == 1 ? "1 post in total, drafts included." : $"{Model.Posts.Count} posts in total, drafts included.")</p>
 

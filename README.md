@@ -73,7 +73,8 @@ the two, and there will not be one.
 
 - **The blog** — Markdown files on a volume, no database. The home page renders the first
   five posts in full; posts at `/blog/{slug}`, tags, RSS, two sitemaps (HTML and XML).
-- **`/about`** — the manifesto, with the Aspire AppHost and request-path diagrams.
+- **`/about`** — the manifesto, editable from `/admin/page/about`, with the Aspire AppHost
+  and request-path diagrams.
 - **`/requests`** — the request log made public: offline GeoIP map, visitors chart, country
   table, filters, CSV export, bot and malicious URL flags.
 - **`/info-send` and `/info-bot`** — a public endpoint stores whatever raw body a bot posts;
@@ -115,10 +116,15 @@ Useful local switches:
 ## Content is not code
 
 Posts are Markdown files with YAML front matter. Locally they live in
-`MainSite/App_Data/blog/content`; in production they live in the `blog-data` volume, never
+`MainSite/App_Data/blog`; in production they live in the `blog-data` volume, never
 in the image. Images go in the `media/` folder next to them and are served from
 `/blog/media/{name}`. The editor at `/admin` writes the same files, so a post can be
 created either way and the content survives a redesign of the site.
+
+Long-form pages are stored the same way, under `pages/` in the same volume. `/about` is
+the first: edit it at `/admin/page/about`, and the change is live immediately — no
+deploy. On a fresh volume it is seeded from the built-in copy in
+`MainSite/Blog/AboutPage.cs`.
 
 The content folders are intentionally git-ignored: the repository contains the software,
 the volumes contain the writing. Back up `blog-data` and `auth-data`.
@@ -129,7 +135,7 @@ the volumes contain the writing. Back up `blog-data` and `auth-data`.
 dotnet test MatteoFabbri.org.slnx
 ```
 
-137 test methods across the two xUnit projects (`MainSite.Tests`, `TheQult.Tests`). The
+The two xUnit projects (`MainSite.Tests`, `TheQult.Tests`) run the full suite. The
 Python service has its own suite; see [bot-detection/README.md](bot-detection/README.md).
 
 ## Deploy

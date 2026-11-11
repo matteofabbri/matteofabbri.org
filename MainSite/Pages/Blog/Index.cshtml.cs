@@ -6,6 +6,7 @@ namespace MainSite.Pages.Blog;
 
 public sealed class IndexModel(
     BlogStore store,
+    SitePageStore pages,
     BlogClock clock,
     TimeProvider time,
     IWebHostEnvironment environment,
@@ -24,6 +25,8 @@ public sealed class IndexModel(
     public string? PhotoUrl { get; private set; }
     public string? VideoUrl { get; private set; }
     public string? Lede { get; private set; }
+    public string ManifestoTitle { get; private set; } = AboutPage.DefaultTitle;
+    public string ManifestoText { get; private set; } = AboutPage.DefaultDescription;
     public BlogClock Clock => clock;
 
     public async Task OnGetAsync(CancellationToken ct)
@@ -50,6 +53,10 @@ public sealed class IndexModel(
         {
             logger.LogWarning(ex, "Impossibile leggere i lede da Sperone");
         }
+
+        var about = await pages.GetAsync(AboutPage.Slug, ct);
+        ManifestoTitle = about.Title;
+        ManifestoText = about.Description;
 
         var now = time.GetUtcNow();
         IsAuthor = BlogAuth.IsAuthor(User);

@@ -74,6 +74,7 @@ public class Program
         builder.Services.Configure<UmamiOptions>(builder.Configuration.GetSection(UmamiOptions.Section));
         builder.Services.AddSingleton<BlogClock>();
         builder.Services.AddSingleton<BlogStore>();
+        builder.Services.AddSingleton<SitePageStore>();
         builder.Services.AddSingleton<BlogMediaStore>();
         builder.Services.AddSingleton<JumbotronMediaStore>();
         builder.Services.AddSingleton<NotFoundMediaStore>();
@@ -228,6 +229,17 @@ public class Program
             app.Logger.LogError(
                 ex,
                 "Local accounts are unavailable: /admin cannot sign anyone in until the database is reachable.");
+        }
+
+        // Editable pages (/about): seed the Markdown on a brand-new volume. The
+        // file then belongs to the admin editor and a deploy never overwrites it.
+        try
+        {
+            await app.Services.GetRequiredService<SitePageStore>().EnsureSeededAsync();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            app.Logger.LogError(ex, "Editable pages are unavailable; /about will use the built-in copy.");
         }
 
         app.UseForwardedHeaders();

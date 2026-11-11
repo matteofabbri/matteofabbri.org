@@ -4,14 +4,20 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 
 namespace MainSite.Pages.Admin;
 
-public sealed class IndexModel(BlogStore store, BlogClock clock, TimeProvider time) : PageModel
+public sealed class IndexModel(
+    BlogStore store,
+    SitePageStore pages,
+    BlogClock clock,
+    TimeProvider time) : PageModel
 {
     public IReadOnlyList<BlogPost> Posts { get; private set; } = [];
+    public string AboutTitle { get; private set; } = AboutPage.DefaultTitle;
     public BlogClock Clock => clock;
 
     public async Task OnGetAsync(CancellationToken ct)
     {
         Posts = await store.GetAllAsync(ct);
+        AboutTitle = (await pages.GetAsync(AboutPage.Slug, ct)).Title;
     }
 
     public string Status(BlogPost post)

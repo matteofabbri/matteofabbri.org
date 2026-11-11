@@ -1,0 +1,111 @@
+@page "/admin/page/{slug}"
+@model MainSite.Pages.Admin.SitePageModel
+@{
+    ViewData["Title"] = "Edit page";
+}
+
+@section Head {
+    <link rel="stylesheet" href="~/lib/toastui-editor/toastui-editor.min.css" asp-append-version="true" />
+}
+
+<div class="page-head">
+    <div>
+        <p class="eyebrow"><a asp-page="/Admin/Index">Administration</a> / Page</p>
+        <h1>Edit page</h1>
+        <p class="lede">
+            The content of <code>/@Model.Slug</code>. Saving writes the Markdown to the blog
+            volume, so the change is live immediately and no deploy is involved.
+        </p>
+    </div>
+    <div class="actions">
+        <a class="button button-secondary" asp-page="/About" target="_blank" rel="noopener">Open page</a>
+    </div>
+</div>
+
+@if (TempData["Messaggio"] is string message)
+{
+    <div class="alert success">@message</div>
+}
+@if (TempData["Errore"] is string error)
+{
+    <div class="alert error">@error</div>
+}
+
+@if (!ViewData.ModelState.IsValid)
+{
+    <div class="alert error">
+        <ul>
+            @foreach (var entry in ViewData.ModelState.Values.SelectMany(v => v.Errors))
+            {
+                if (!string.IsNullOrWhiteSpace(entry.ErrorMessage))
+                {
+                    <li>@entry.ErrorMessage</li>
+                }
+            }
+        </ul>
+    </div>
+}
+
+<form method="post" class="editor-form">
+    <div class="field">
+        <label asp-for="Input.Title">Title</label>
+        <input asp-for="Input.Title" class="input input-title" autocomplete="off" />
+    </div>
+
+    <div class="field">
+        <label asp-for="Input.Description">Lede</label>
+        <textarea asp-for="Input.Description" class="input" rows="2" maxlength="300"
+                  placeholder="One or two lines shown under the title and in the home box."></textarea>
+        <span class="hint">Also used as the meta description and as the text of the home box.</span>
+    </div>
+
+    <div class="field">
+        <label asp-for="Input.Markdown">Body</label>
+        <textarea asp-for="Input.Markdown" id="markdown-input" class="input editor" spellcheck="false"
+                  placeholder="Write here. The editor switches between visual and Markdown mode."></textarea>
+        <div id="markdown-editor"></div>
+        <span class="hint">
+            Markdown only; raw HTML is not executed. Site images:
+            <code>/img/aspire-apphost.png</code>, <code>/img/request-path.png</code>.
+            The home box title and lede come from the fields above, so they stay in sync.
+        </span>
+    </div>
+
+    <div class="editor-actions">
+        <button type="submit" class="button">Save</button>
+    </div>
+</form>
+
+@section Scripts {
+    <script src="~/lib/toastui-editor/toastui-editor-all.min.js" asp-append-version="true"></script>
+    <script>
+        (() => {
+            const textarea = document.getElementById('markdown-input');
+            const container = document.getElementById('markdown-editor');
+            if (!textarea || !container || !window.toastui) return;
+
+            const editor = new toastui.Editor({
+                el: container,
+                height: '600px',
+                initialEditType: 'wysiwyg',
+                previewStyle: 'vertical',
+                initialValue: textarea.value,
+                usageStatistics: false,
+                toolbarItems: [
+                    ['heading', 'bold', 'italic', 'strike'],
+                    ['hr', 'quote'],
+                    ['ul', 'ol', 'task', 'indent', 'outdent'],
+                    ['table', 'image', 'link'],
+                    ['code', 'codeblock']
+                ]
+            });
+
+            textarea.hidden = true;
+            if (textarea.form) {
+                textarea.form.addEventListener('submit', () => {
+                    textarea.value = editor.getMarkdown();
+                });
+            }
+        })();
+    </script>
+}
