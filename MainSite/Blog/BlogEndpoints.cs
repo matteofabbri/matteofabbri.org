@@ -78,6 +78,8 @@ public static class BlogEndpoints
                 new XElement(ns + "url",
                     new XElement(ns + "loc", $"{baseUrl}/")),
                 new XElement(ns + "url",
+                    new XElement(ns + "loc", $"{baseUrl}/about")),
+                new XElement(ns + "url",
                     new XElement(ns + "loc", $"{baseUrl}/requests")),
                 new XElement(ns + "url",
                     new XElement(ns + "loc", $"{baseUrl}/booking")),

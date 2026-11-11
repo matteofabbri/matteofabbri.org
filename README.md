@@ -8,8 +8,7 @@ page with the most recent articles. The format is correct; the description is no
 This is a production test bench that also publishes articles. The request log, the bot
 classifier, the calendar integration, the analytics stack and a second community site all
 run on the real domain, against real traffic, next to the writing. The long version of
-the idea is the first post:
-[/blog/not-a-blog-not-even-a-sandbox](https://matteofabbri.org/blog/not-a-blog-not-even-a-sandbox).
+the idea is the [About page](https://matteofabbri.org/about).
 
 ![Aspire AppHost diagram](docs/img/aspire-apphost.png)
 
@@ -74,6 +73,7 @@ the two, and there will not be one.
 
 - **The blog** — Markdown files on a volume, no database. The home page renders the first
   five posts in full; posts at `/blog/{slug}`, tags, RSS, two sitemaps (HTML and XML).
+- **`/about`** — the manifesto, with the Aspire AppHost and request-path diagrams.
 - **`/requests`** — the request log made public: offline GeoIP map, visitors chart, country
   table, filters, CSV export, bot and malicious URL flags.
 - **`/info-send` and `/info-bot`** — a public endpoint stores whatever raw body a bot posts;

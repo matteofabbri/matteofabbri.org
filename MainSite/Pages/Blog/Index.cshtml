@@ -33,6 +33,16 @@
     </div>
 </section>
 
+<a class="manifesto-box" asp-page="/About">
+    <span class="eyebrow">About this site</span>
+    <span class="manifesto-title">Not a blog, not even a sandbox</span>
+    <span class="manifesto-text">
+        A production test bench that also publishes articles: real domain, real traffic,
+        no staging copy. The long version of the idea.
+    </span>
+    <span class="manifesto-cta">Read the manifesto →</span>
+</a>
+
 @if (Model.Posts.Count == 0)
 {
     <div class="empty">
