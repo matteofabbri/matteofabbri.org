@@ -82,15 +82,13 @@ var acmeEmail = builder.AddParameter("acme-email");
 
 // Public site names. Caddy terminates TLS only for the SITES; every other
 // name is not this machine's business (mail lives on OVH, not here).
-// The sites are THREE, plus the analytics dashboard:
+// The sites are THREE (Umami is served under /analytics on the personal site):
 //   - site-domain      -> personal site (e.g. matteofabbri.org)
 //   - theqult-domain   -> theqult.org   (default here, override from .env)
 //   - maddalena-domain -> maddalena.me  (default here, override from .env)
-//   - umami-domain     -> analytics dashboard (e.g. analytics.matteofabbri.org)
 var siteDomain = builder.AddParameter("site-domain");
 var thequltDomain = builder.AddParameter("theqult-domain", () => builder.Configuration["Parameters:theqult-domain"] ?? "theqult.org");
 var maddalenaDomain = builder.AddParameter("maddalena-domain", () => builder.Configuration["Parameters:maddalena-domain"] ?? "maddalena.me");
-var umamiDomain = builder.AddParameter("umami-domain");
 
 // --- Il sito personale -------------------------------------------------------
 // The booking API is UNCONFIGURED here: its backend was the mailcow stack
@@ -183,16 +181,28 @@ var theqult = builder.AddProject<Projects.TheQult>("theqult")
 var maddalena = builder.AddProject<Projects.Maddalena>("maddalena");
 
 // --- Umami analytics ---------------------------------------------------------
-// Cookieless analytics on its own subdomain. Umami needs PostgreSQL: both
-// containers run only on the compose network and Caddy publishes the dashboard.
-// Secrets come from the server .env; the website id is read by the site from
-// the compose override, after the website is created in the dashboard.
+// Cookieless analytics under /analytics on the personal site. Umami needs
+// PostgreSQL; both containers run only on the compose network and Caddy
+// proxies /analytics to Umami. The image is built with BASE_PATH=/analytics
+// (Umami's base path is a build-time setting), so this is a custom image, not
+// the upstream one. Secrets come from the server .env; the website id is read
+// by the site from the compose override after the website is created.
+// Local `aspire run` needs usable defaults; in publish mode the empty value is
+// the placeholder that the server .env fills before `docker compose up`.
 var umamiDbPassword = builder.AddParameter("umami-db-password",
-    () => builder.Configuration["Parameters:umami-db-password"] ?? "", secret: true);
+    () => builder.Configuration["Parameters:umami-db-password"]
+          ?? (builder.ExecutionContext.IsPublishMode ? "" : "umami-dev-db-password"),
+    secret: true);
 var umamiAppSecret = builder.AddParameter("umami-app-secret",
-    () => builder.Configuration["Parameters:umami-app-secret"] ?? "", secret: true);
+    () => builder.Configuration["Parameters:umami-app-secret"]
+          ?? (builder.ExecutionContext.IsPublishMode ? "" : "umami-dev-app-secret-change-me"),
+    secret: true);
 var umamiTwoFactorKey = builder.AddParameter("umami-two-factor-key",
-    () => builder.Configuration["Parameters:umami-two-factor-key"] ?? "", secret: true);
+    () => builder.Configuration["Parameters:umami-two-factor-key"]
+          ?? (builder.ExecutionContext.IsPublishMode
+              ? ""
+              : "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"),
+    secret: true);
 
 var umamiDb = builder.AddContainer("umami-db", "postgres", "15-alpine")
     .WithEnvironment("POSTGRES_DB", "umami")
@@ -211,7 +221,7 @@ var umamiDb = builder.AddContainer("umami-db", "postgres", "15-alpine")
         };
     });
 
-var umami = builder.AddContainer("umami", "docker.umami.is/umami-software/umami", "latest")
+var umami = builder.AddContainer("umami", "matteofabbri-umami", "latest")
     // The password is part of the connection string: Aspire writes the ${...}
     // placeholder and compose substitutes it from the server .env.
     .WithEnvironment("DATABASE_URL",
@@ -231,7 +241,8 @@ var umami = builder.AddContainer("umami", "docker.umami.is/umami-software/umami"
         service.DependsOn["umami-db"] = new ServiceDependency { Condition = "service_healthy" };
         service.Healthcheck = new Healthcheck
         {
-            Test = ["CMD-SHELL", "curl -fsS http://localhost:3000/api/heartbeat || exit 1"],
+            // BASE_PATH=/analytics moves the API under the prefix too.
+            Test = ["CMD-SHELL", "curl -fsS http://localhost:3000/analytics/api/heartbeat || exit 1"],
             Interval = "5s",
             Timeout = "5s",
             Retries = 5,
@@ -271,7 +282,6 @@ var caddy = builder.AddDockerfile("caddy", "caddy")
     .WithEnvironment("SITE_DOMAIN", siteDomain)
     .WithEnvironment("THEQULT_DOMAIN", thequltDomain)
     .WithEnvironment("MADDALENA_DOMAIN", maddalenaDomain)
-    .WithEnvironment("UMAMI_DOMAIN", umamiDomain)
     .WithEnvironment("SITE_UPSTREAM", siteUpstream)
     .WithEnvironment("THEQULT_UPSTREAM", thequltUpstream)
     .WithEnvironment("MADDALENA_UPSTREAM", maddalenaUpstream)

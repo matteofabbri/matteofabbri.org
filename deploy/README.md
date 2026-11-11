@@ -1,18 +1,17 @@
-# Deploy — i tre siti e Umami dietro Caddy
+# Deploy — i tre siti dietro Caddy (+ Umami sotto /analytics)
 
 Uno stack docker solo, quello generato da Aspire. Caddy fa da portineria sulle
-porte 80/443 e termina il TLS (certificati Let's Encrypt) di tre siti e della
-dashboard Umami:
+porte 80/443 e termina il TLS (certificati Let's Encrypt) dei tre siti:
 
 - `matteofabbri.org` (`SITE_DOMAIN`) → sito personale (progetto `site`)
 - `theqult.org` (`THEQULT_DOMAIN`)   → sito `TheQult` (community di ospitalità)
 - `maddalena.me` (`MADDALENA_DOMAIN`) → sito `Maddalena` (per ora un hello world)
-- `analytics.matteofabbri.org` (`UMAMI_DOMAIN`) → dashboard Umami (e tracker)
 
 Oltre a questi non ci sono altri nomi pubblici serviti da questa macchina: la
-posta è su un provider esterno (MX OVH) e non passa da qui. Nel Caddyfile il
-layer4 riconosce il SNI di questi nomi e inoltra il traffico al server HTTP
-interno con il **PROXY protocol**, così l'IP vero del client arriva al sito
+posta è su un provider esterno (MX OVH) e non passa da qui. Umami non ha un nome
+suo: vive sotto `matteofabbri.org/analytics` e usa il certificato del sito. Nel
+Caddyfile il layer4 riconosce il SNI dei tre siti e inoltra il traffico al server
+HTTP interno con il **PROXY protocol**, così l'IP vero del client arriva al sito
 (serve a GeoIP, rate limit e `/requests`).
 
 > mailcow non fa più parte di questo stack: la posta è su OVH. Le prenotazioni
@@ -59,7 +58,6 @@ AUTH_BOOTSTRAP_PASSWORD=
 AUTH_BOOTSTRAP_DISPLAY_NAME=
 
 # Umami analytics (sezione 3-bis). I tre segreti si generano una volta sola.
-UMAMI_DOMAIN=analytics.matteofabbri.org
 UMAMI_DB_PASSWORD=                        # openssl rand -hex 24
 UMAMI_APP_SECRET=                         # openssl rand -hex 32
 UMAMI_TWO_FACTOR_KEY=                     # openssl rand -hex 32 (per il 2FA)
@@ -432,39 +430,46 @@ ripartire da zero basta cancellare la cartella `MainSite/App_Data/auth`.
 
 ## 3-bis. Umami (analytics)
 
-Umami è l'analytics **cookieless** del sito: dashboard su
-`https://analytics.matteofabbri.org`, tracker caricato dalle pagine pubbliche di
-matteofabbri.org. Non usa cookie e non richiede un banner di consenso.
+Umami è l'analytics **cookieless** del sito, servito sotto **`/analytics`** sullo
+stesso dominio: dashboard su `https://matteofabbri.org/analytics`, tracker su
+`https://matteofabbri.org/analytics/script.js`. Non usa cookie e non richiede un
+banner di consenso.
 
-**Composizione.** Due container nello stesso stack: `umami` (immagine ufficiale
-`docker.umami.is/umami-software/umami:latest`) e `umami-db`
-(`postgres:15-alpine`, volume `umami-db-data`). Umami aspetta che il database
-sia healthy prima di partire; i due container sono raggiungibili solo sulla rete
-del compose, Caddy pubblica il solo sottodominio.
+**Immagine custom.** Il base path di Umami (`BASE_PATH`) è un'impostazione di
+**build**, quindi l'immagine ufficiale non può girare sotto `/analytics`: serve
+`matteofabbri-umami:latest`, costruita con:
+
+```bash
+sudo rm -rf /tmp/umami-src
+sudo git clone --depth 1 https://github.com/umami-software/umami.git /tmp/umami-src
+sudo docker build --build-arg BASE_PATH=/analytics \
+  -t matteofabbri-umami:latest /tmp/umami-src
+sudo rm -rf /tmp/umami-src
+```
+
+Il workflow di deploy la costruisce sul server una volta sola (se manca); per un
+deploy manuale, costruiscila prima di `docker compose up`.
+
+**Composizione.** `umami` + `umami-db` (`postgres:15-alpine`, volume
+`umami-db-data`), healthcheck su `/analytics/api/heartbeat`, solo sulla rete del
+compose. Caddy inoltra `/analytics` e `/analytics/*` al container **senza
+togliere il prefisso**; gli header di sicurezza del sito (HSTS, X-Frame-Options,
+Referrer-Policy, -Server/-Via) valgono anche per la dashboard. Nessun DNS o
+certificato aggiuntivo: usa quello di `matteofabbri.org`.
 
 **Primo avvio.** Nel `.env` del server servono, una volta sola:
 
 ```ini
-UMAMI_DOMAIN=analytics.matteofabbri.org
 UMAMI_DB_PASSWORD=<openssl rand -hex 24>
 UMAMI_APP_SECRET=<openssl rand -hex 32>
 UMAMI_TWO_FACTOR_KEY=<openssl rand -hex 32>
 ```
 
-Poi copia il nuovo `docker-compose.yaml` sul server (i due servizi sono nuovi) e:
+Poi copia il compose, costruisci l'immagine se manca e avvia. La prima volta
+Umami applica le migrazioni: aspetta che l'healthcheck diventi healthy (può
+richiedere un minuto). Il database vive nel volume `matteofabbri_umami-db-data`.
 
-```bash
-cd /opt/matteofabbri && sudo docker compose up -d
-```
-
-La prima volta Umami applica le migrazioni: aspetta che l'healthcheck diventi
-healthy (può richiedere un minuto). Il database vive nel volume
-`matteofabbri_umami-db-data`.
-
-**DNS.** Aggiungi il record A `analytics.matteofabbri.org` → IP del server;
-Caddy emette il certificato da solo.
-
-**Primo login.** Apri `https://analytics.matteofabbri.org` con `admin`/`umami`,
+**Primo login.** Apri `https://matteofabbri.org/analytics` con `admin`/`umami`,
 cambia subito la password e, se vuoi, abilita il 2FA (la chiave è già
 configurata). La chiave del 2FA non va più cambiata dopo averlo abilitato.
 
@@ -477,9 +482,9 @@ UMAMI_WEBSITE_ID=<uuid>
 
 poi `sudo docker compose up -d site`. Finché è vuoto il tracker non viene
 renderizzato; con il valore, il layout di MainSite aggiunge a ogni pagina
-(pubblica) `<script defer src="https://analytics.matteofabbri.org/script.js"
-data-website-id="...">`. Le pagine `/admin` sono escluse: le visite
-dell'autore sono rumore. Il tracker è cookieless.
+(pubblica) `<script defer src="https://matteofabbri.org/analytics/script.js"
+data-website-id="...">`. Le pagine `/admin` sono escluse: le visite dell'autore
+sono rumore. Il tracker è cookieless.
 
 **Backup.** Un dump consistente del database:
 
@@ -488,11 +493,17 @@ cd /opt/matteofabbri
 sudo docker compose exec -T umami-db pg_dump -U umami umami > umami-$(date +%F).sql
 ```
 
-**Aggiornare Umami.** L'immagine è `:latest`:
+**Aggiornare Umami.** Non c'è un'immagine upstream da pullare: ricostruisci la
+custom image e ricrea il container:
 
 ```bash
 cd /opt/matteofabbri
-sudo docker compose pull umami && sudo docker compose up -d umami
+sudo rm -rf /tmp/umami-src
+sudo git clone --depth 1 https://github.com/umami-software/umami.git /tmp/umami-src
+sudo docker build --build-arg BASE_PATH=/analytics \
+  -t matteofabbri-umami:latest /tmp/umami-src
+sudo rm -rf /tmp/umami-src
+sudo docker compose up -d umami
 ```
 
 Le migrazioni girano da sole al riavvio.
@@ -691,18 +702,18 @@ sudo docker compose start theqult
 
 ## 6. DNS (perché i certificati funzionino)
 
-Per il TLS di Caddy servono solo i record A dei siti e della dashboard Umami,
-tutti verso l'IP di questa macchina:
+Per il TLS di Caddy servono solo i record A dei siti, tutti verso l'IP di questa
+macchina:
 
 | Record | Nome | Valore |
 |--------|------|--------|
 | A | `matteofabbri.org` | IP del server |
 | A | `theqult.org` | IP del server |
 | A | `maddalena.me` | IP del server |
-| A | `analytics.matteofabbri.org` | IP del server |
 
 `www.` è facoltativo per i tre siti: se esiste, Caddy gli fa il certificato e lo
-redirige al dominio senza www. La dashboard Umami non ha un `www.`.
+redirige al dominio senza www. Umami usa lo stesso certificato di
+`matteofabbri.org` e non ha un nome suo.
 
 La posta **non** è gestita da questa macchina: gli MX dei tre domini puntano a
 OVH e non hanno niente a che vedere con il deploy del sito. I nomi `mail.*`,
@@ -713,9 +724,9 @@ configurare qui.
 
 ## 7. Un sito web su un altro dominio
 
-`matteofabbri.org`, `theqult.org`, `maddalena.me` e
-`analytics.matteofabbri.org` sono già cablati in Caddy. Per i loro certificati
-basta il record A → IP del server (Caddy fa il resto).
+`matteofabbri.org`, `theqult.org` e `maddalena.me` sono già cablati in Caddy
+(Umami è sotto `matteofabbri.org/analytics`, non è un nome separato). Per i loro
+certificati basta il record A → IP del server (Caddy fa il resto).
 
 Per un **altro** dominio (è un sito, non posta, quindi tocca Caddy):
 1. nell'`AppHost.cs`: aggiungi il parametro del dominio e la sua `XXX_UPSTREAM`,

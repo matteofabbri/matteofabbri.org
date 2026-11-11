@@ -170,6 +170,26 @@ jobs:
             fi
           '
 
+      # Umami vive sotto /analytics e BASE_PATH e' un'impostazione di BUILD in
+      # Umami: l'immagine ufficiale non va bene. La costruiamo sul server una
+      # volta sola; i deploy successivi riusano l'immagine gia' presente.
+      - name: "Umami: immagine con BASE_PATH=/analytics (se manca)"
+        run: |
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$SERVER" '
+            set -e
+            if sudo docker image inspect matteofabbri-umami:latest >/dev/null 2>&1; then
+              echo "immagine Umami gia presente"
+              exit 0
+            fi
+            sudo rm -rf /tmp/umami-src
+            sudo git clone --depth 1 https://github.com/umami-software/umami.git /tmp/umami-src
+            sudo docker build \
+              --build-arg BASE_PATH=/analytics \
+              -t matteofabbri-umami:latest \
+              /tmp/umami-src
+            sudo rm -rf /tmp/umami-src
+          '
+
       # up -d --build ricrea SOLO i container cambiati (immagine nuova o contesto
       # di build cambiato). --remove-orphans butta i container dei servizi che
       # NON ESISTONO PIU' nel compose (un servizio tolto dall'AppHost); il prune

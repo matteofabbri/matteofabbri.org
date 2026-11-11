@@ -17,9 +17,10 @@
 #    mounted at /data/auth. On a brand-new install the first account is created
 #    from AUTH_BOOTSTRAP_USERNAME/AUTH_BOOTSTRAP_PASSWORD; once one exists the
 #    bootstrap values are ignored and can be removed.
-#  - the Umami tracker is configured here: the script URL comes from
-#    UMAMI_DOMAIN, the website id from UMAMI_WEBSITE_ID (created in the Umami
-#    dashboard; empty = no tracker on the site).
+#  - the Umami tracker is configured here: it lives under /analytics on the
+#    main site, so the script URL is <SITE_DOMAIN>/analytics/script.js; the
+#    website id comes from UMAMI_WEBSITE_ID (created in the Umami dashboard;
+#    empty = no tracker on the site).
 #
 # Booking is UNCONFIGURED: its backend was the mailcow stack (SOGo CalDAV) and
 # it is not part of this stack any more; the booking API answers 503. Blog
@@ -32,7 +33,7 @@ services:
       Auth__BootstrapUsername: ${AUTH_BOOTSTRAP_USERNAME:-}
       Auth__BootstrapPassword: ${AUTH_BOOTSTRAP_PASSWORD:-}
       Auth__BootstrapDisplayName: ${AUTH_BOOTSTRAP_DISPLAY_NAME:-}
-      Umami__ScriptUrl: https://${UMAMI_DOMAIN:-analytics.matteofabbri.org}/script.js
+      Umami__ScriptUrl: https://${SITE_DOMAIN:-matteofabbri.org}/analytics/script.js
       Umami__WebsiteId: ${UMAMI_WEBSITE_ID:-}
       RequestLog__Path: /data/sperone
       RequestLog__GeoIpDatabasePath: /data/geoip/dbip-city-lite.mmdb

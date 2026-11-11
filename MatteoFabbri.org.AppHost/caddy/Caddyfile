@@ -5,17 +5,17 @@
 # more: a name that is not one of these is simply not routed.
 #
 # The SITES are THREE (each with its block at the bottom + its name in the
-# @site matcher below), plus the Umami analytics dashboard:
-#   - matteofabbri.org  (SITE_DOMAIN)      -> personal site
+# @site matcher below). Umami analytics is not a separate host: it is served
+# under /analytics on the personal site, from a custom image built with
+# BASE_PATH=/analytics.
+#   - matteofabbri.org  (SITE_DOMAIN)      -> personal site (+ /analytics)
 #   - theqult.org       (THEQULT_DOMAIN)   -> TheQult site (community)
 #   - maddalena.me      (MADDALENA_DOMAIN) -> Maddalena MVC site
-#   - analytics.*       (UMAMI_DOMAIN)     -> Umami dashboard and tracker
 #
 # Variables (set by the Aspire AppHost / the compose .env):
 #   SITE_DOMAIN           -> personal site domain   (e.g. matteofabbri.org)
 #   THEQULT_DOMAIN        -> second site            (e.g. theqult.org)
 #   MADDALENA_DOMAIN      -> third site             (e.g. maddalena.me)
-#   UMAMI_DOMAIN          -> analytics dashboard    (e.g. analytics.matteofabbri.org)
 #   SITE_UPSTREAM         -> personal site backend  (e.g. site:8080)
 #   THEQULT_UPSTREAM      -> TheQult backend        (e.g. theqult:8080)
 #   MADDALENA_UPSTREAM    -> Maddalena backend      (e.g. maddalena:8080)
@@ -52,7 +52,7 @@
 			# Sites: recognise the name in the handshake (SNI) and terminate
 			# TLS here. For a new site: add its domain (and its www.) to this
 			# line and create its block at the bottom of the file.
-			@site tls sni {$SITE_DOMAIN} www.{$SITE_DOMAIN} {$THEQULT_DOMAIN} www.{$THEQULT_DOMAIN} {$MADDALENA_DOMAIN} www.{$MADDALENA_DOMAIN} {$UMAMI_DOMAIN}
+			@site tls sni {$SITE_DOMAIN} www.{$SITE_DOMAIN} {$THEQULT_DOMAIN} www.{$THEQULT_DOMAIN} {$MADDALENA_DOMAIN} www.{$MADDALENA_DOMAIN}
 			route @site {
 				proxy {
 					upstream 127.0.0.1:8443
@@ -66,7 +66,7 @@
 		# Public HTTP (80)
 		:80 {
 			# Sites: to Caddy's internal HTTP server (it redirects to https).
-			@site http host {$SITE_DOMAIN} www.{$SITE_DOMAIN} {$THEQULT_DOMAIN} www.{$THEQULT_DOMAIN} {$MADDALENA_DOMAIN} www.{$MADDALENA_DOMAIN} {$UMAMI_DOMAIN}
+			@site http host {$SITE_DOMAIN} www.{$SITE_DOMAIN} {$THEQULT_DOMAIN} www.{$THEQULT_DOMAIN} {$MADDALENA_DOMAIN} www.{$MADDALENA_DOMAIN}
 			route @site {
 				proxy {
 					upstream 127.0.0.1:8080
@@ -106,6 +106,15 @@
 	@www host www.{$SITE_DOMAIN}
 	redir @www https://{$SITE_DOMAIN}{uri} permanent
 
+	# Umami analytics under the main domain. The custom Umami image is built
+	# with BASE_PATH=/analytics, so the prefix is forwarded as-is (no strip).
+	# Umami itself redirects /analytics/ to /analytics: do not add a redirect
+	# here or the two bounce forever.
+	@analytics path /analytics /analytics/*
+	handle @analytics {
+		reverse_proxy {$UMAMI_UPSTREAM}
+	}
+
 	# Everything else -> the personal site.
 	handle {
 		reverse_proxy {$SITE_UPSTREAM}
@@ -135,17 +144,6 @@
 	# Everything else -> the Maddalena site.
 	handle {
 		reverse_proxy {$MADDALENA_UPSTREAM}
-	}
-}
-
-# --- analytics.matteofabbri.org (Umami) --------------------------------------
-# The dashboard and the tracker script (served by Umami itself). Umami is
-# cookieless; the site loads /script.js from this host.
-{$UMAMI_DOMAIN} {
-	import secure_headers
-
-	handle {
-		reverse_proxy {$UMAMI_UPSTREAM}
 	}
 }
 
