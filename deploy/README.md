@@ -1,84 +1,28 @@
-# Deploy — sito + mailcow dietro Caddy
+# Deploy — i tre siti e Umami dietro Caddy
 
-Due stack docker separati sulla stessa macchina, collegati da una rete condivisa
-"neutra" (`matteo-shared`). Caddy fa da portineria sulle porte 80/443 e smista
-per nome:
+Uno stack docker solo, quello generato da Aspire. Caddy fa da portineria sulle
+porte 80/443 e termina il TLS (certificati Let's Encrypt) di tre siti e della
+dashboard Umami:
 
 - `matteofabbri.org` (`SITE_DOMAIN`) → sito personale (progetto `site`)
 - `theqult.org` (`THEQULT_DOMAIN`)   → sito `TheQult` (community di ospitalità)
 - `maddalena.me` (`MADDALENA_DOMAIN`) → sito `Maddalena` (per ora un hello world)
-- `<dominio>/mail` (tutti e tre)     → redirect a `https://<WEBMAIL_HOST>`
-- **qualunque altro nome**           → mailcow (TLS **passato sigillato**: il
-  certificato se lo fa mailcow)
+- `analytics.matteofabbri.org` (`UMAMI_DOMAIN`) → dashboard Umami (e tracker)
 
-Tutti e tre i SITI hanno il TLS terminato da Caddy (certificati Let's Encrypt).
+Oltre a questi non ci sono altri nomi pubblici serviti da questa macchina: la
+posta è su un provider esterno (MX OVH) e non passa da qui. Nel Caddyfile il
+layer4 riconosce il SNI di questi nomi e inoltra il traffico al server HTTP
+interno con il **PROXY protocol**, così l'IP vero del client arriva al sito
+(serve a GeoIP, rate limit e `/requests`).
 
-La regola d'oro: Caddy conosce solo i SITI. I nomi della posta
-(`mail.maddalena.me`, domini futuri) NON vanno dichiarati in Caddy: ci passano
-da soli. Per quelli si lavora solo lato mailcow e DNS (vedi sezione 4).
-Unica eccezione, dichiarata: `autoconfig.maddalena.me` e
-`autodiscover.maddalena.me` hanno un forward esplicito verso mailcow nel
-Caddyfile (matcher `@mailauto`, sia su 443 che su 80) — sempre in passthrough,
-il certificato resta di mailcow.
-
-Le porte della posta vera (SMTP 25/465/587, IMAP 143/993, POP 110/995, sieve
-4190) le pubblica mailcow direttamente verso l'esterno: NON passano da Caddy.
-Lista completa porte da aprire/non aprire (+ note OVH): [porte.md](porte.md).
+> mailcow non fa più parte di questo stack: la posta è su OVH. Le prenotazioni
+> erano agganciate al suo CalDAV (SOGo) e oggi sono **spente**
+> (`/api/booking/*` risponde 503). Il login del blog è tornato attivo con
+> **account locali su SQLite** (sezione 3), senza provider esterno.
 
 ---
 
-## 0. Una volta sola: la rete condivisa
-
-```bash
-docker network create matteo-shared
-```
-
-È "di nessuno": così quando aggiorni mailcow il corridoio resta in piedi.
-
----
-
-## 1. mailcow (stack separato, suo ciclo di vita)
-
-Nel file `mailcow.conf` (generato da `generate_config.sh`):
-
-```ini
-# Per ORA il nuovo mailcow serve solo maddalena.me/theqult.org: la posta di
-# matteofabbri.org resta sul vecchio server, DNS incluso (nessuna collisione:
-# mail.maddalena.me e' un sottodominio nuovo, non ancora usato da nessuno).
-MAILCOW_HOSTNAME=mail.maddalena.me
-
-# Caddy tiene 80/443 sull'host: mailcow ascolta su porte interne e si pubblica
-# solo su loopback, così non va in conflitto. Caddy lo raggiunge comunque per
-# nome sulla rete condivisa (nginx-mailcow:8080 / :8443).
-HTTP_PORT=8080
-HTTP_BIND=127.0.0.1
-HTTPS_PORT=8443
-HTTPS_BIND=127.0.0.1
-
-# Let's Encrypt resta ATTIVO: mailcow si fa il suo certificato (la sfida HTTP-01
-# entra dalla porta 80 e Caddy la inoltra a mailcow). NON impostare SKIP_LETS_ENCRYPT.
-```
-
-Copia l'override accanto al `docker-compose.yml` di mailcow:
-
-```bash
-cp deploy/mailcow/docker-compose.override.yml /percorso/mailcow-dockerized/docker-compose.override.yml
-```
-
-Avvia mailcow:
-
-```bash
-cd /percorso/mailcow-dockerized
-docker compose up -d
-```
-
-> L'override affaccia `nginx-mailcow` e `postfix-mailcow` sulla rete condivisa.
-> Scommenta `dovecot-mailcow` nell'override se il sito deve anche LEGGERE le
-> caselle via IMAP (oltre a inviare).
-
----
-
-## 2. Stack Aspire (sito + Caddy)
+## 1. Stack Aspire (sito + Caddy)
 
 Genera il compose con lo script (fa `aspire publish` + copia il contesto di
 build di Caddy, che la publish da sola non porta con se'):
@@ -102,29 +46,31 @@ ACME_EMAIL=tua@mail.it
 SITE_DOMAIN=matteofabbri.org             # dominio del sito (Caddy lo termina lui)
 THEQULT_DOMAIN=theqult.org               # secondo sito (Caddy lo termina lui)
 MADDALENA_DOMAIN=maddalena.me            # terzo sito (Caddy lo termina lui)
-WEBMAIL_HOST=mail.maddalena.me           # bersaglio del redirect /mail (per ora: solo maddalena.me/theqult.org)
 SITE_IMAGE=matteofabbri-site:latest       # immagine del sito (la fa publish.ps1)
 SITE_PORT=8080                            # porta interna del sito
 THEQULT_IMAGE=matteofabbri-theqult:latest # immagine di TheQult (la fa publish.ps1)
 THEQULT_PORT=8080                         # porta interna di TheQult
 MADDALENA_IMAGE=matteofabbri-maddalena:latest # immagine di Maddalena (la fa publish.ps1)
 MADDALENA_PORT=8080                       # porta interna di Maddalena
-MAILCOW_TLS_UPSTREAM=nginx-mailcow:8443   # nginx di mailcow, HTTPS
-MAILCOW_HTTP_UPSTREAM=nginx-mailcow:8080  # nginx di mailcow, HTTP
 
-# Prenotazioni (calendario CalDAV su SOGo): vedi la sezione 2-quater.
-# Vuote = funzione spenta (l'API risponde 503), il sito parte lo stesso.
-CALDAV_URL=https://mail.maddalena.me/SOGo/dav/
-CALDAV_PASSWORD=                         # APP PASSWORD con accesso DAV, NON la password vera
-                                         # l'account è hardcodato: matteo@matteofabbri.org
+# Solo primo avvio: creano il primo account locale (sezione 3).
+AUTH_BOOTSTRAP_USERNAME=
+AUTH_BOOTSTRAP_PASSWORD=
+AUTH_BOOTSTRAP_DISPLAY_NAME=
 
-# Blog (accesso con mailcow via OAuth2): vedi la sezione 2-quinquies.
-# Vuote = area di scrittura spenta, il blog resta leggibile da tutti.
-# Non c'è un elenco di autori: entra qualunque casella del server mailcow.
-MAILCOW_OAUTH_URL=https://mail.maddalena.me
-MAILCOW_OAUTH_CLIENT_ID=                 # da mailcow: Configuration → Access → OAuth2 Apps
-MAILCOW_OAUTH_CLIENT_SECRET=             # generato da mailcow insieme al client
+# Umami analytics (sezione 3-bis). I tre segreti si generano una volta sola.
+UMAMI_DOMAIN=analytics.matteofabbri.org
+UMAMI_DB_PASSWORD=                        # openssl rand -hex 24
+UMAMI_APP_SECRET=                         # openssl rand -hex 32
+UMAMI_TWO_FACTOR_KEY=                     # openssl rand -hex 32 (per il 2FA)
+UMAMI_WEBSITE_ID=                         # da Umami dopo il primo login; vuoto = tracker spento
 ```
+
+Non ci sono variabili per posta o calendario: quelle integrazioni erano su
+mailcow e oggi le prenotazioni sono spente (sezione 2). L'accesso al blog usa
+account locali; le tre variabili `AUTH_BOOTSTRAP_*` servono solo al primo avvio
+e vanno tolte dopo. Le variabili `UMAMI_*` configurano il servizio analytics: il
+website ID si aggiunge dopo il primo login in Umami.
 
 > `THEQULT_DOMAIN`/`MADDALENA_DOMAIN` hanno gia' un default nell'AppHost
 > (`theqult.org`/`maddalena.me`): nel `.env` servono solo se vuoi cambiarli.
@@ -143,11 +89,11 @@ docker compose up -d --build
 > `proxy_protocol` e `fallback_policy use` (con `IGNORE`, il default, l'indirizzo
 > verrebbe scartato), disponibile in Caddy ≥ 2.8. Il workflow di deploy valida
 > il Caddyfile con l'immagine già in uso **prima** di sostituirlo: un errore
-> ferma il deploy senza toccare siti e posta.
+> ferma il deploy senza toccare i siti.
 
 ---
 
-## 2-ter. Togliere un servizio: la pulizia di docker
+## 1-ter. Togliere un servizio: la pulizia di docker
 
 Quando un servizio esce di scena, sul server restano i suoi avanzi: container
 fermo, volume con dentro i dati, immagine costruita. La pulizia è **generica** —
@@ -178,29 +124,27 @@ per togliere un servizio davvero:
 > tolto: nel volume di postgres (`...-postgres-data`, vedi `docker volume ls |
 > grep postgres`) ci sono gli account e le licenze di Maddalena, e nel volume
 > `matteofabbri_blog-data` ci sono **tutti gli articoli e le immagini del
-> blog**. La pulizia li cancella per sempre, senza chiedere conferma. Se pensi
-> che possano ancora servire, salvali PRIMA di aggiornare il compose sul
-> server:
+> blog**, nel volume `matteofabbri_auth-data` ci sono **gli account locali**
+> (senza quel database nessun autore può più entrare in `/admin`) e nel volume
+> `matteofabbri_umami-db-data` ci sono **i dati analytics**. La pulizia li
+> cancella per sempre, senza chiedere conferma. Se pensi che possano ancora
+> servire, salvali PRIMA di aggiornare il compose sul server:
 >
 > ```bash
 > sudo docker run --rm -v NOME_VOLUME:/dati -v "$(pwd)":/backup alpine \
 >   tar czf /backup/backup-$(date +%F).tar.gz -C /dati .
 > ```
 
-La pulizia non può sbagliare bersaglio fuori casa propria: i volumi di mailcow
-non hanno la label di questo progetto, e la rete `matteo-shared` è esterna al
-compose quindi resta in piedi comunque.
-
 ---
 
-## 2-quater. Prenotazioni: il calendario di mailcow (CalDAV)
+## 2. Prenotazioni (CalDAV — spente)
 
 Le API vivono in **MainSite** (matteofabbri.org), sotto `/api/booking/`; la
-pagina pubblica è **`/booking`**. Leggono e scrivono il calendario della
-casella su **SOGo**, il groupware che mailcow include: mailcow non ha un
-calendario "suo", ma SOGo espone quello di ogni casella via CalDAV, ed è
-l'unico modo per arrivarci. La casella è **hardcodata**:
-`matteo@matteofabbri.org`.
+pagina pubblica è **`/booking`**. Leggono e scrivono un calendario CalDAV. Oggi
+la funzione è **spenta**: il calendario era su SOGo dentro mailcow, che non fa
+più parte dello stack, e non c'è né URL né password (`Calendar:CalDavUrl` e
+`Calendar:Password` sono vuoti): l'API risponde **503** e il sito parte lo
+stesso. La casella è **hardcodata**: `matteo@matteofabbri.org`.
 
 ```
 GET  /booking                         vista settimanale con gli impegni già occupati
@@ -224,33 +168,22 @@ descrizione.
 Il POST accetta `start` **e** `end` (ISO 8601 con offset) più `meetingUrl` (link
 http/https alla video call scelta da chi prenota), `name`, `email` e `note`.
 
-### Le credenziali: un'app password, non la password vera
+### Riconfigurare (se un domani riaccendi le prenotazioni)
 
-SOGo accetta Basic auth con **email + app password**. Le password vere
-cambiano, e con 2FA un client DAV non funziona affatto.
+Serve un server CalDAV raggiungibile (SOGo, Nextcloud, Radicale, ...) e una
+**app password** con accesso DAV per `matteo@matteofabbri.org`:
 
-1. entra nella webmail (`https://mail.maddalena.me`) con
-   `matteo@matteofabbri.org`;
-2. **Impostazioni → App password → Crea**: nome (`prenotazioni`), protocollo
-   **DAV** abilitato (bastano DAV; non serve IMAP/SMTP a questo scopo);
-3. copia la password generata: si vede una volta sola.
+1. crea l'app password dal pannello del calendario (si vede una volta sola);
+2. in sviluppo passala come variabili d'ambiente
+   `Calendar__CalDavUrl` e `Calendar__Password` (oppure usa
+   `Calendar__UseFake=true` per il calendario in memoria, senza credenziali);
+3. in produzione mettile nell'override del compose o nel `.env` del server. Se
+   una delle due è vuota le prenotazioni restano spente (503) e il sito parte
+   lo stesso.
 
-Poi, in sviluppo (mai nel repo):
-
-```powershell
-dotnet user-secrets set "Parameters:caldav-password" "<app password DAV>" --project MatteoFabbri.org.AppHost
-```
-
-Su server: **solo `CALDAV_PASSWORD`** nel `.env` dell'AppHost (vedi sezione 2);
-l'username è nel codice. Se la password è vuota le prenotazioni sono spente
-(503) e il sito parte lo stesso — un `.env` incompleto non deve buttare giù i
-siti. Un vecchio `CALDAV_USERNAME` nel `.env` viene ignorato.
-
-> L'URL è `https://mail.maddalena.me/SOGo/dav/` e il percorso del calendario è
-> `Calendar/personal/` (insieme fanno
-> `.../SOGo/dav/matteo@matteofabbri.org/Calendar/personal/`). Se un domani vuoi
-> un calendario separato ("Appuntamenti") per non mescolare gli impegni
-> privati, crealo in SOGo e metti il suo percorso in `Calendar:CalendarPath`.
+> L'URL deve finire con `/`; il percorso del calendario è
+> `Calendar:CalendarPath` (default `Calendar/personal/`) e viene unito al
+> principal dell'utente.
 
 ### Come si decide cosa è prenotabile
 
@@ -318,12 +251,11 @@ prenotazione senza toccare il server. **Mai in produzione**: le prenotazioni
 non finirebbero da nessuna parte.
 
 > Non c'è ancora l'email di conferma al richiedente: l'appuntamento compare nel
-> calendario, e la risposta dell'API basta al sito per mostrare la conferma. Se
-> serve, il passo successivo è un invio da mailcow (SMTP della stessa casella).
+> calendario, e la risposta dell'API basta al sito per mostrare la conferma.
 
 ---
 
-## 2-quinquies. Blog: accesso con mailcow (OAuth2)
+## 3. Blog
 
 Il blog vive in **MainSite**:
 
@@ -341,8 +273,9 @@ Il blog vive in **MainSite**:
 | `/404` | pagina di errore con un media casuale |
 | `/info-send` | POST: salva un body grezzo nella collezione Sperone `info` |
 | `/info-bot` | elenco paginato dei payload |
-| `/admin/login` | accesso autori |
+| `/admin/login` | accesso autori (account locali) |
 | `/admin` | amministrazione: post, lede, immagini, richieste |
+| `/admin/users` | gestione account locali: crea, abilita/disabilita, password |
 | `/admin/ledes` | lista editabile delle frasi del jumbotron |
 | `/admin/jumbotron` | upload e gestione di foto/video del jumbotron |
 | `/admin/404` | upload e gestione di foto/video della pagina 404 |
@@ -351,64 +284,35 @@ Gli articoli sono file **Markdown con front matter YAML**. In produzione stanno
 nel volume Docker `blog-data`, montato in `/data/blog`: un deploy ricostruisce
 il container ma non tocca il volume. Non c'è nessun database da amministrare.
 
-### Perché OAuth2 (e non una password)
+### Accesso autori (account locali su SQLite)
 
-mailcow include un server OAuth2 (`/oauth/authorize`, `/oauth/token`,
-`/oauth/profile`). Il sito manda l'autore sulla webmail, riceve un codice, lo
-scambia con un token, legge il profilo della casella e crea il proprio cookie.
-La password della casella **non passa mai dal sito**, e il 2FA di mailcow
-continua a funzionare. Non serve un'app password: quella del CalDAV (sezione
-2-quater) è un'altra cosa.
+Il login non usa più un provider esterno: gli autori sono **account locali**
+con username e password, salvati in un database SQLite nel volume `auth-data`
+(`/data/auth/auth.db`). Le password sono hash PBKDF2-HMAC-SHA256 (210.000
+iterazioni, salt casuale): il database non contiene password in chiaro.
 
-mailcow dice *chi sei* e il blog si fida: entra **qualunque casella** del
-server, senza un elenco di autori da mantenere. Gli account amministratore di
-mailcow **non** sono caselle e non possono accedere al blog.
+**Primo account (una volta sola).** Con il database vuoto il container crea un
+account di bootstrap leggendo queste variabili dal `.env` del server:
 
-### Configurazione (una volta sola)
+```ini
+AUTH_BOOTSTRAP_USERNAME=matteo
+AUTH_BOOTSTRAP_PASSWORD=...
+AUTH_BOOTSTRAP_DISPLAY_NAME=Matteo Fabbri
+```
 
-1. entra in mailcow come **amministratore**;
-2. **Configuration → Access → OAuth2 Apps → Add OAuth2 client** (se la voce
-   non c'è, aggiorna mailcow: vedi "Aggiornare mailcow" in fondo);
-3. come Redirect URI metti esattamente:
+poi ricrea il servizio (`sudo docker compose up -d --build site`). Appena esiste
+un account i valori di bootstrap vengono ignorati: **toglili dal `.env`**. Se non
+sono impostati il sito parte lo stesso e `/admin/login` spiega che non ci sono
+account.
 
-   ```
-   https://matteofabbri.org/admin/login/callback
-   ```
+**Gli altri account** si gestiscono da **`/admin/users`** (pulsante **Accounts**
+in `/admin`): crea account, abilita/disabilita, imposta una nuova password.
+Disabilitare un account o cambiargli la password chiude subito le sue sessioni
+aperte; l'ultimo account abilitato non può essere disabilitato (niente lockout).
 
-   niente slash finale e niente `http`; se il sito usa un altro dominio, usa
-   quello (`SITE_DOMAIN`);
-4. salva **Client ID** e **Client Secret** (il secret si vede al momento della
-   creazione);
-5. nel `.env` dello stack (sezione 2) aggiungi:
-
-   ```ini
-   MAILCOW_OAUTH_URL=https://mail.maddalena.me
-   MAILCOW_OAUTH_CLIENT_ID=...
-   MAILCOW_OAUTH_CLIENT_SECRET=...
-   ```
-
-   Non serve altro: qualunque casella del server mailcow può accedere all'area
-   di scrittura. Se client ID o secret sono vuoti l'area di scrittura è spenta
-   e il blog resta leggibile da tutti;
-6. aggiorna il compose sul server: il blog aggiunge il **volume** `blog-data` e
-   le variabili qui sopra, quindi il deploy automatico da solo non basta.
-   Rigenera e copia il compose:
-
-   ```powershell
-   .\publish.ps1
-   scp out\docker-compose.yaml root@IP_SERVER:/opt/matteofabbri/
-   ```
-
-   poi sul server:
-
-   ```bash
-   cd /opt/matteofabbri && sudo docker compose up -d --build
-   ```
-
-   Il volume `matteofabbri_blog-data` viene creato al primo avvio e conserva gli
-   articoli anche ai deploy successivi;
-7. apri `https://matteofabbri.org/admin/login` → **Accedi con mailcow**. La
-   prima volta mailcow chiede di autorizzare l'app.
+Requisiti: username 3-64 caratteri (`a-z`, `0-9`, `.`, `_`, `-`, deve iniziare
+con una lettera o una cifra), password almeno 12 caratteri. Il login è limitato
+a 20 tentativi ogni 10 minuti per IP.
 
 ### Scrivere e pubblicare
 
@@ -487,9 +391,9 @@ ce ne sono, non viene mostrato.
 
 ### Amministrazione e lede
 
-**`/admin`** è la pagina di amministrazione: la raggiunge qualunque casella
-registrata su mailcow (non c'è allowlist). Da lì si crea un post con **New
-post**, si gestiscono i **lede**, i **media del jumbotron**, i **media della
+**`/admin`** è la pagina di amministrazione: la raggiunge qualunque autore
+autenticato (non c'è allowlist). Da lì si crea un post con **New post**, si
+gestiscono i **lede**, i **media del jumbotron**, i **media della
 404**, le immagini e si vedono le richieste. Il pulsante di creazione non sta
 nella home.
 
@@ -498,36 +402,104 @@ aggiungono, si modificano in riga e si eliminano (massimo 300 caratteri). La
 home ne sceglie una a caso a ogni apertura; la collezione Sperone `ledes` è
 permanente e vive nella stessa istanza `/data/sperone`.
 
-### Backup degli articoli
+### Backup di articoli e account
 
 ```bash
 sudo docker run --rm -v matteofabbri_blog-data:/dati -v "$(pwd)":/backup alpine \
   tar czf /backup/blog-$(date +%F).tar.gz -C /dati .
+sudo docker run --rm -v matteofabbri_auth-data:/dati -v "$(pwd)":/backup alpine \
+  tar czf /backup/auth-$(date +%F).tar.gz -C /dati .
 ```
 
 ### Sviluppo locale
 
-`appsettings.Development.json` imposta `Blog:Auth:UseFake=true`: in locale si
-entra in `/admin/login` con l'identità di sviluppo (`sviluppo@localhost`),
-senza mailcow. **In produzione l'accesso finto viene ignorato** anche se
-impostato. Il vero OAuth in locale richiederebbe HTTPS (il cookie di
-correlazione è `Secure`); per provare il giro completo conviene usare lo stack
-reale.
+In sviluppo il database è `MainSite/App_Data/auth/auth.db` (ignorato da git).
+Al primo avvio valorizza `Auth__BootstrapUsername` e `Auth__BootstrapPassword`
+come variabili d'ambiente, poi crea gli altri account da `/admin/users`. Per
+ripartire da zero basta cancellare la cartella `MainSite/App_Data/auth`.
 
 ### Se l'accesso non funziona
 
-- **"Accesso non configurato"**: mancano le variabili nel `.env` o il container
-  non è stato ricreato dopo aver aggiornato il compose.
-- **"Accesso non riuscito"**: redirect URI diverso da quello registrato, client
-  ID/secret sbagliati, oppure mailcow irraggiungibile dal sito. Log:
-  `sudo docker compose logs site`.
-- **La casella è giusta ma non entra**: controlla che sia una casella, non un
-  account admin di mailcow: gli account amministratore non sono caselle e
-  l'OAuth non li autentica.
+- **"No accounts yet"**: il database è vuoto; imposta le credenziali di
+  bootstrap e riavvia il container.
+- **"The account database is unavailable"**: il volume `auth-data` non è
+  scrivibile (UID 1654) o il file è corrotto; log: `sudo docker compose logs site`.
+- **Password dimenticata**: un altro autore può reimpostarla da `/admin/users`.
+  Se non c'è nessun altro account, cancella `auth.db` dal volume e riparti dal
+  bootstrap (perdi solo gli account, non gli articoli).
 
 ---
 
-## 2-sexies. Log delle richieste (Sperone embedded)
+## 3-bis. Umami (analytics)
+
+Umami è l'analytics **cookieless** del sito: dashboard su
+`https://analytics.matteofabbri.org`, tracker caricato dalle pagine pubbliche di
+matteofabbri.org. Non usa cookie e non richiede un banner di consenso.
+
+**Composizione.** Due container nello stesso stack: `umami` (immagine ufficiale
+`docker.umami.is/umami-software/umami:latest`) e `umami-db`
+(`postgres:15-alpine`, volume `umami-db-data`). Umami aspetta che il database
+sia healthy prima di partire; i due container sono raggiungibili solo sulla rete
+del compose, Caddy pubblica il solo sottodominio.
+
+**Primo avvio.** Nel `.env` del server servono, una volta sola:
+
+```ini
+UMAMI_DOMAIN=analytics.matteofabbri.org
+UMAMI_DB_PASSWORD=<openssl rand -hex 24>
+UMAMI_APP_SECRET=<openssl rand -hex 32>
+UMAMI_TWO_FACTOR_KEY=<openssl rand -hex 32>
+```
+
+Poi copia il nuovo `docker-compose.yaml` sul server (i due servizi sono nuovi) e:
+
+```bash
+cd /opt/matteofabbri && sudo docker compose up -d
+```
+
+La prima volta Umami applica le migrazioni: aspetta che l'healthcheck diventi
+healthy (può richiedere un minuto). Il database vive nel volume
+`matteofabbri_umami-db-data`.
+
+**DNS.** Aggiungi il record A `analytics.matteofabbri.org` → IP del server;
+Caddy emette il certificato da solo.
+
+**Primo login.** Apri `https://analytics.matteofabbri.org` con `admin`/`umami`,
+cambia subito la password e, se vuoi, abilita il 2FA (la chiave è già
+configurata). La chiave del 2FA non va più cambiata dopo averlo abilitato.
+
+**Collegare il sito.** In Umami: **Settings → Websites → Add website**, domain
+`matteofabbri.org`; copia il **website ID** e mettilo nel `.env`:
+
+```ini
+UMAMI_WEBSITE_ID=<uuid>
+```
+
+poi `sudo docker compose up -d site`. Finché è vuoto il tracker non viene
+renderizzato; con il valore, il layout di MainSite aggiunge a ogni pagina
+(pubblica) `<script defer src="https://analytics.matteofabbri.org/script.js"
+data-website-id="...">`. Le pagine `/admin` sono escluse: le visite
+dell'autore sono rumore. Il tracker è cookieless.
+
+**Backup.** Un dump consistente del database:
+
+```bash
+cd /opt/matteofabbri
+sudo docker compose exec -T umami-db pg_dump -U umami umami > umami-$(date +%F).sql
+```
+
+**Aggiornare Umami.** L'immagine è `:latest`:
+
+```bash
+cd /opt/matteofabbri
+sudo docker compose pull umami && sudo docker compose up -d umami
+```
+
+Le migrazioni girano da sole al riavvio.
+
+---
+
+## 4. Log delle richieste (Sperone embedded)
 
 MainSite registra **ogni richiesta HTTP** in un database Sperone **embedded**:
 la libreria gira nello stesso processo del sito e scrive in una cartella su
@@ -544,7 +516,7 @@ Cosa finisce in ogni riga:
 | User-Agent grezzo | stringa completa (troncata a 512 caratteri), nessun parsing |
 | Client ID | 16 caratteri esadecimali, hash di IP + User-Agent |
 | Referer, Accept-Language | header grezzi (troncati) |
-| Utente autenticato, se presente | `matteo@maddalena.me` |
+| Utente autenticato, se presente | `matteo@example.com` |
 | Request id e trace id | per correlare con i log/tracce |
 
 La query string viene salvata, ma i valori dei parametri sensibili (`code`,
@@ -683,7 +655,7 @@ righe senza paese. L'elenco delle richieste usa `timestamp` + `public`, mostra
 
 ---
 
-## 2-septies. TheQult (theqult.org)
+## 5. TheQult (theqult.org)
 
 La community di ospitalità senza abbonamenti (la "versione rifatta meglio di
 Couchsurfing"): profili, richieste di soggiorno e referenze. Razor Pages +
@@ -717,58 +689,35 @@ sudo docker compose start theqult
 
 ---
 
-## 3. DNS (perché certificati e posta funzionino)
+## 6. DNS (perché i certificati funzionino)
 
-Scelta corrente: il nuovo mailcow serve **solo maddalena.me/theqult.org**.
-**matteofabbri.org non si tocca** — resta sul suo server di posta attuale.
+Per il TLS di Caddy servono solo i record A dei siti e della dashboard Umami,
+tutti verso l'IP di questa macchina:
 
 | Record | Nome | Valore |
 |--------|------|--------|
-| A | `matteofabbri.org` | IP del server (sito, non posta) |
-| A | `theqult.org` | IP del server (sito) |
-| A | `maddalena.me` | IP del server (sito) |
-| A | `mail.maddalena.me` | IP del server |
-| A | `autodiscover.maddalena.me` | IP del server |
-| A | `autoconfig.maddalena.me` | IP del server |
-| MX | `maddalena.me` | `mail.maddalena.me` |
-| MX | `theqult.org` | `mail.maddalena.me` |
-| PTR (reverse) | IP del server | `mail.maddalena.me` |
-| TXT (SPF/DKIM/DMARC) | maddalena.me, theqult.org | come indicato dal pannello mailcow |
+| A | `matteofabbri.org` | IP del server |
+| A | `theqult.org` | IP del server |
+| A | `maddalena.me` | IP del server |
+| A | `analytics.matteofabbri.org` | IP del server |
 
-Il reverse DNS (PTR) che punta a `mail.maddalena.me` è importante per non
-finire in spam: si imposta dal pannello del provider della macchina.
+`www.` è facoltativo per i tre siti: se esiste, Caddy gli fa il certificato e lo
+redirige al dominio senza www. La dashboard Umami non ha un `www.`.
 
-Su matteofabbri.org non aggiungere/cambiare nulla lato posta (niente MX,
-niente autodiscover/autoconfig, niente PTR): il record A del sito è l'unico
-che lo riguarda qui.
+La posta **non** è gestita da questa macchina: gli MX dei tre domini puntano a
+OVH e non hanno niente a che vedere con il deploy del sito. I nomi `mail.*`,
+`autoconfig.*` e `autodiscover.*` non esistono più; non c'è nessun PTR da
+configurare qui.
 
 ---
 
-## 4. Più domini e un'eventuale futura migrazione di matteofabbri.org
+## 7. Un sito web su un altro dominio
 
-### Aggiungere un altro dominio di posta (oltre maddalena.me/theqult.org)
+`matteofabbri.org`, `theqult.org`, `maddalena.me` e
+`analytics.matteofabbri.org` sono già cablati in Caddy. Per i loro certificati
+basta il record A → IP del server (Caddy fa il resto).
 
-Solo pannello admin di mailcow ("Configurazione e dettagli > Domini > Aggiungi
-dominio") + il suo MX -> `mail.maddalena.me` + TXT (SPF/DKIM/DMARC) come
-indicato dal pannello. I client si connettono sempre a `mail.maddalena.me`
-(un server, molti domini). Caddy non si tocca.
-
-### Se un domani vorrai spostare qui anche la posta di matteofabbri.org
-
-Basta cambiare l'MX di matteofabbri.org da quello attuale a
-`mail.maddalena.me`, aggiungere il dominio in mailcow e impostare SPF/DKIM/DMARC
-dal pannello. Non serve nessun trucco di hostname provvisorio: `mail.maddalena.me`
-non va in conflitto con nulla del vecchio server di posta, quindi puoi testare
-l'invio con calma anche PRIMA di girare l'MX definitivo (manda una mail di
-prova in uscita per verificare che la porta 25 sia sbloccata sul nuovo VPS,
-vedi [porte.md](porte.md)).
-
-### Un sito web su un altro dominio
-
-`matteofabbri.org`, `theqult.org` e `maddalena.me` sono già cablati in Caddy.
-Per i loro certificati basta il record A → IP del server (Caddy fa il resto).
-
-Per un **quarto** dominio (è un sito, non posta, quindi tocca Caddy):
+Per un **altro** dominio (è un sito, non posta, quindi tocca Caddy):
 1. nell'`AppHost.cs`: aggiungi il parametro del dominio e la sua `XXX_UPSTREAM`,
    sul modello di `theqult-domain`/`THEQULT_UPSTREAM`;
 2. nel `Caddyfile`: aggiungi `{$XXX_DOMAIN}` alle due righe `@site` (:443 e :80)
@@ -778,10 +727,10 @@ Per un **quarto** dominio (è un sito, non posta, quindi tocca Caddy):
 
 ---
 
-## 5. Server nuovo da zero (bootstrap automatico)
+## 8. Server nuovo da zero (bootstrap automatico)
 
-C'è uno script che fa tutto sul server Linux (Debian/Ubuntu): installa docker,
-crea la rete condivisa, configura e avvia mailcow, avvia lo stack del sito.
+C'è uno script che fa tutto sul server Linux (Debian/Ubuntu): installa docker e
+avvia lo stack del sito (i tre siti, Caddy e bot-ai).
 
 Dal PC (PowerShell), prepara e copia tutto:
 
@@ -791,7 +740,7 @@ cd MatteoFabbri.org
 docker save matteofabbri-site:latest -o out\matteofabbri-site.tar
 docker save matteofabbri-theqult:latest -o out\matteofabbri-theqult.tar
 docker save matteofabbri-maddalena:latest -o out\matteofabbri-maddalena.tar
-# COMPILA out\.env PRIMA di copiarlo (vedi sezione 2)
+# COMPILA out\.env PRIMA di copiarlo (vedi sezione 1)
 scp -r out deploy root@IP_SERVER:~/
 ```
 
@@ -801,10 +750,8 @@ Sul server:
 sudo bash ~/deploy/server-setup.sh
 ```
 
-Lo script è rilanciabile: se un passo è già fatto lo salta. L'unico momento
-interattivo è la prima configurazione di mailcow (`generate_config.sh`), che
-chiede l'hostname: rispondi `mail.maddalena.me`. Se il `.env` è incompleto
-lo script si ferma e ti dice cosa compilare.
+Lo script è rilanciabile: se un passo è già fatto lo salta. Se il `.env` è
+incompleto lo script si ferma e ti dice cosa compilare.
 
 Per gli aggiornamenti successivi (i tre siti insieme; salta quelli che non sono cambiati):
 
@@ -819,40 +766,8 @@ ssh root@IP_SERVER 'cd /opt/matteofabbri && docker compose up -d --build --remov
 
 ## Ordine consigliato (se fai a mano)
 
-1. `docker network create matteo-shared`
-2. mailcow su (prende il suo certificato via Caddy:80)
-3. stack Aspire su
-4. configura il DNS e verifica i certificati
+1. stack Aspire su
+2. configura il DNS e verifica i certificati
 
-## Aggiornare mailcow
-
-Sul server (installazione in `/opt/mailcow-dockerized`, vedi `server-setup.sh`).
-
-Prima di partire, controlla lo spazio: l'update scarica immagini nuove e su
-questa macchina il disco pieno di agosto ha corrotto tre container di mailcow.
-
-```bash
-df -h /
-```
-
-Con parecchi GB liberi si va tranquilli; sotto i ~10 GB meglio fare ordine prima.
-
-```bash
-cd /opt/mailcow-dockerized
-sudo ./update.sh
-```
-
-Lo script chiede il ramo (default = stabile: Invio), poi fa da solo `git pull`,
-`docker compose pull` e `up -d`. Se alla fine propone di rimuovere le immagini
-vecchie, `y` libera disco (con `N` restano per un rollback). Si aggiorna solo
-da terminale con `update.sh`, mai dal pannello web. Durante l'aggiornamento la
-webmail sta giù qualche minuto: la posta in arrivo non si perde, i server
-mittenti riprovano da soli.
-
-Verifica a fine aggiornamento: `sudo docker compose ps` (tutti Up; i container
-partono in ordine, dai 1-2 minuti) e la webmail su `https://mail.maddalena.me`.
-
-Lo stack Aspire non si tocca: progetto diverso, rete condivisa intatta. Anche
-`mailcow.conf` e `docker-compose.override.yml` (l'aggancio a `matteo-shared`)
-non vengono toccati: non sono tracciati da git, e la rete è `external: true`
-quindi il compose di mailcow non può cancellarla.
+> mailcow non fa più parte di questo stack: non c'è nessuna rete condivisa da
+> creare e nessuno stack di posta da avviare o aggiornare.

@@ -1,0 +1,131 @@
+@page "/admin/users"
+@model MainSite.Pages.Admin.UsersModel
+@{
+    ViewData["Title"] = "Accounts";
+}
+
+<div class="page-head">
+    <div>
+        <p class="eyebrow"><a asp-page="/Admin/Index">Administration</a> / Accounts</p>
+        <h1>Accounts</h1>
+        <p class="lede">Local accounts that can sign in and write on the site.</p>
+    </div>
+</div>
+
+@if (TempData["Message"] is string message)
+{
+    <div class="alert success">@message</div>
+}
+@if (TempData["Error"] is string error)
+{
+    <div class="alert error">@error</div>
+}
+@if (Model.LoadFailed)
+{
+    <div class="alert error">
+        <strong>Could not read the accounts.</strong>
+        Check the site logs: the auth database may be unreachable.
+    </div>
+}
+@if (Model.BootstrapConfigured)
+{
+    <div class="alert warning">
+        Bootstrap credentials are still set in the environment. They are ignored now that
+        accounts exist: remove <code>AUTH_BOOTSTRAP_USERNAME</code> and
+        <code>AUTH_BOOTSTRAP_PASSWORD</code> from the server environment (locally
+        <code>Auth__Bootstrap*</code>).
+    </div>
+}
+
+<h2 class="section-title">New account</h2>
+<form method="post" asp-page-handler="Create" class="editor-form account-create">
+    <div class="field-row">
+        <div class="field">
+            <label for="new-username">Username</label>
+            <input id="new-username" name="username" class="input" autocomplete="off"
+                   autocapitalize="none" spellcheck="false" maxlength="64" required />
+        </div>
+        <div class="field">
+            <label for="new-display-name">Display name</label>
+            <input id="new-display-name" name="displayName" class="input" maxlength="100" required />
+        </div>
+    </div>
+    <div class="field-row">
+        <div class="field">
+            <label for="new-email">Email (optional)</label>
+            <input id="new-email" name="email" type="email" class="input" maxlength="200" />
+        </div>
+        <div class="field">
+            <label for="new-password">Password</label>
+            <input id="new-password" name="password" type="password" class="input"
+                   minlength="@Model.MinPasswordLength" autocomplete="new-password" required />
+            <span class="hint">At least @Model.MinPasswordLength characters.</span>
+        </div>
+    </div>
+    <div>
+        <button type="submit" class="button">Create account</button>
+    </div>
+</form>
+
+<h2 class="section-title">Existing accounts</h2>
+@if (Model.Accounts.Count == 0)
+{
+    <div class="empty">
+        <p>No accounts yet.</p>
+    </div>
+}
+else
+{
+    <div class="table-wrap">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>Username</th>
+                    <th>Name</th>
+                    <th>Status</th>
+                    <th>Last sign-in</th>
+                    <th class="cell-actions">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var account in Model.Accounts)
+                {
+                    <tr>
+                        <td>
+                            <strong>@account.Username</strong>
+                            @if (!string.IsNullOrEmpty(account.Email))
+                            {
+                                <span class="table-slug">@account.Email</span>
+                            }
+                        </td>
+                        <td>@account.DisplayName</td>
+                        <td>
+                            <span class="badge badge-@(account.IsEnabled ? "published" : "draft")">
+                                @(account.IsEnabled ? "enabled" : "disabled")
+                            </span>
+                        </td>
+                        <td class="cell-date">
+                            @(account.LastLoginUtc is null ? "never" : Model.FormatWhen(account.LastLoginUtc.Value))
+                        </td>
+                        <td class="cell-actions">
+                            <form method="post" asp-page-handler="Toggle"
+                                  onsubmit="return confirm('@(account.IsEnabled ? "Disable this account? Open sessions will be signed out." : "Enable this account?")');">
+                                <input type="hidden" name="id" value="@account.Id" />
+                                <button type="submit" class="link-button @(account.IsEnabled ? "danger" : "")">
+                                    @(account.IsEnabled ? "Disable" : "Enable")
+                                </button>
+                            </form>
+                            <form method="post" asp-page-handler="ResetPassword" class="inline-edit">
+                                <input type="hidden" name="id" value="@account.Id" />
+                                <input name="newPassword" type="password" class="input"
+                                       minlength="@Model.MinPasswordLength" placeholder="New password"
+                                       autocomplete="new-password" required />
+                                <button type="submit" class="button button-secondary">Set password</button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}

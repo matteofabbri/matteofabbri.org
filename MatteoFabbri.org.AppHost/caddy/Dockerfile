@@ -1,6 +1,6 @@
-# Caddy "su misura": immagine ufficiale + modulo layer4 (smistamento TCP/SNI).
-# Serve perche' la portineria deve guardare il nome nell'handshake TLS e
-# PASSARE la posta sigillata a mailcow, senza decifrarla.
+# Custom Caddy image: the official one plus the layer4 module (TCP/SNI
+# routing). The front door inspects the name in the TLS handshake so it can
+# forward the site traffic with the PROXY protocol.
 FROM caddy:2-builder AS build
 RUN xcaddy build \
     --with github.com/mholt/caddy-l4

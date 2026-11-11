@@ -5,8 +5,8 @@
 # Porta anche il contesto di build che sta nel repo (Caddy): il
 # `--build` del riavvio ricostruisce l'immagine solo se e' cambiato qualcosa.
 #
-# NON tocca: docker-compose/.env e mailcow — restano manuali (contengono
-# segreti e cambiano di rado). Se cambia l'AppHost/compose, deploy a mano.
+# NON tocca: docker-compose/.env — restano manuali (contengono segreti e
+# cambiano di rado). Se cambia l'AppHost/compose, deploy a mano.
 #
 # Segreti usati (impostati via `gh secret set`):
 #   DEPLOY_SSH_KEY   — chiave privata dedicata per ubuntu@server (la pubblica e'
@@ -122,11 +122,12 @@ jobs:
               "sudo mkdir -p /opt/matteofabbri/$ctx && sudo cp -r ~/$ctx-new/. /opt/matteofabbri/$ctx/ && rm -rf ~/$ctx-new"
           done
 
-      # Blog, log richieste e TheQult: i volumi devono esistere ed essere
-      # scrivibili dall'utente `app` (UID 1654) PRIMA che i siti partino.
-      # L'override aggiunge mount e variabili del blog, il volume Sperone dei
-      # log e il volume TheQult; se sul server ci sono già, li conserviamo.
-      - name: "Blog, log richieste e TheQult: volumi e override"
+      # Blog, log richieste, TheQult e account locali: i volumi devono esistere
+      # ed essere scrivibili dall'utente `app` (UID 1654) PRIMA che i siti
+      # partano. L'override aggiunge mount e variabili del blog, il volume
+      # Sperone dei log, il volume TheQult e il database SQLite degli account;
+      # se sul server ci sono già, li conserviamo.
+      - name: "Blog, log richieste, TheQult e account: volumi e override"
         run: |
           scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \
             deploy/docker-compose.override.yml "$SERVER:~/site-compose.override.yml"
@@ -138,7 +139,7 @@ jobs:
             fi
             sudo mv ~/site-compose.override.yml /opt/matteofabbri/docker-compose.override.yml
             sudo chown root:root /opt/matteofabbri/docker-compose.override.yml
-            for vol in blog-data request-log-data theqult-data; do
+            for vol in blog-data auth-data request-log-data theqult-data; do
               sudo docker volume create "matteofabbri_$vol" >/dev/null
               sudo docker run --rm -v "matteofabbri_$vol:/data" alpine chown -R 1654:1654 /data
             done
@@ -176,8 +177,7 @@ jobs:
       # I due cicli finali completano la pulizia in modo GENERICO — per label di
       # progetto, senza nomi di servizi: volumi e immagini dello stack che nessun
       # container usa più (il grafo di valhalla, i dati di postgres, ...) vengono
-      # rimossi a ogni deploy. Vale solo per lo stack matteofabbri: i volumi di
-      # mailcow non hanno quella label e non vengono toccati.
+      # rimossi a ogni deploy. Vale solo per lo stack matteofabbri.
       # OCCHIO: un volume orfano contiene i DATI del servizio tolto — se possono
       # ancora servire (un DB, ad esempio), salvali PRIMA di aggiornare il
       # compose sul server, perché dal deploy successivo spariscono.

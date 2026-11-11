@@ -1,5 +1,7 @@
 using System.Threading.RateLimiting;
 using BotDetection.Client;
+using MainSite.Analytics;
+using MainSite.Auth;
 using MainSite.Blog;
 using MainSite.Booking;
 using MainSite.InfoBots;
@@ -15,7 +17,7 @@ namespace MainSite;
 // (BookingController), domani il resto di quello che era su maddalena.me.
 public class Program
 {
-    public static void Main(string[] args)
+    public static async Task Main(string[] args)
     {
         var builder = WebApplication.CreateBuilder(args);
 
@@ -58,19 +60,18 @@ public class Program
             builder.Services.AddHostedService<RequestLogReindex>();
         }
 
-        // --- Blog: articoli su file, accesso delegato a mailcow ---------------
-        // I contenuti stanno in una cartella Markdown (in produzione un volume
-        // Docker, /data/blog), non in un database: sopravvivono ai deploy e si
-        // possono modificare anche a mano. L'accesso usa il server OAuth2 di
-        // mailcow: la password della casella non passa mai dal sito.
+        // --- Blog: Markdown files, author sign-in with local accounts ---------
+        // Content lives in a Markdown folder (a Docker volume in production,
+        // /data/blog), not in a database: it survives deploys and can be edited
+        // by hand. Authors are local accounts in SQLite (MainSite/Auth); no
+        // external identity provider is involved.
         builder.Services.Configure<BlogOptions>(builder.Configuration.GetSection(BlogOptions.Section));
+        builder.Services.Configure<LocalAuthOptions>(builder.Configuration.GetSection(LocalAuthOptions.Section));
+        builder.Services.AddSingleton<LocalUserStore>();
 
-        var blogOptions = builder.Configuration.GetSection(BlogOptions.Section).Get<BlogOptions>() ?? new();
-        var blogAuthState = new BlogAuthState(
-            blogOptions.Auth,
-            builder.Environment.IsDevelopment());
-
-        builder.Services.AddSingleton(blogAuthState);
+        // --- Analytics: the Umami tracker is enabled by configuration ----------
+        // Empty ScriptUrl/WebsiteId = no tracker. The layout skips /admin.
+        builder.Services.Configure<UmamiOptions>(builder.Configuration.GetSection(UmamiOptions.Section));
         builder.Services.AddSingleton<BlogClock>();
         builder.Services.AddSingleton<BlogStore>();
         builder.Services.AddSingleton<BlogMediaStore>();
@@ -84,12 +85,12 @@ public class Program
         builder.Services.AddSingleton<YtDlp>();
         builder.Services.AddSingleton<PostMediaDownloader>();
 
-        builder.AddBlogAuthentication(blogAuthState);
+        builder.AddBlogAuthentication();
 
         builder.Services.AddAuthorization(options =>
         {
-            // Non basta un cookie qualsiasi: serve il claim che BlogAuth mette
-            // solo dopo l'autenticazione su mailcow.
+            // A plain cookie is not enough: the claim is set by BlogAuth only
+            // after a local account signed in.
             options.AddPolicy(BlogAuth.Policy, policy => policy
                 .RequireAuthenticatedUser()
                 .RequireClaim(BlogAuth.AuthorClaim, "true"));
@@ -104,10 +105,11 @@ public class Program
             options.Conventions.AllowAnonymousToPage("/Admin/Logout");
         });
 
-        // --- Prenotazioni: il calendario CalDAV di SOGo (mailcow) -------------
-        // Le regole (orari, slot, buffer, orizzonte) stanno in appsettings.json
-        // sotto "Booking". L'account del calendario è fisso (matteo@matteofabbri.org);
-        // dall'AppHost arrivano solo Calendar__CalDavUrl e Calendar__Password.
+        // --- Booking: CalDAV calendar -----------------------------------------
+        // Rules (hours, duration, buffer, horizon) live in appsettings.json under
+        // "Booking". The calendar account is fixed (matteo@matteofabbri.org);
+        // Calendar__CalDavUrl and Calendar__Password configure the server. With
+        // no URL or password the API answers 503 and the site starts anyway.
         builder.Services.Configure<CalendarOptions>(builder.Configuration.GetSection(CalendarOptions.Section));
         builder.Services.PostConfigure<CalendarOptions>(options =>
             options.Username = CalendarOptions.FixedUsername);
@@ -148,8 +150,8 @@ public class Program
                     QueueLimit = 0,
                 }));
 
-            // Il login non verifica password (lo fa mailcow), ma la pagina e il
-            // via vai OAuth non devono diventare un modo per martellare il server.
+            // Sign-in checks a local password, but the page and the form must
+            // not become a way to hammer the server.
             options.AddPolicy("login", context => RateLimitPartition.GetFixedWindowLimiter(
                 context.Connection.RemoteIpAddress?.ToString() ?? "sconosciuto",
                 _ => new FixedWindowRateLimiterOptions
@@ -214,6 +216,19 @@ public class Program
         builder.Services.AddMemoryCache();
 
         var app = builder.Build();
+
+        // Create the users table and, on a brand-new install, the bootstrap
+        // account. A broken auth database must not take the public site down.
+        try
+        {
+            await app.Services.GetRequiredService<LocalUserStore>().InitializeAsync();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            app.Logger.LogError(
+                ex,
+                "Local accounts are unavailable: /admin cannot sign anyone in until the database is reachable.");
+        }
 
         app.UseForwardedHeaders();
 

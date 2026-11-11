@@ -1,37 +1,35 @@
 namespace MainSite.Booking;
 
-// Connessione al calendario CalDAV di SOGo (il groupware che mailcow include):
-// la casella di posta ha già un calendario, e questo è l'unico modo per
-// leggerlo e scriverci. Le credenziali NON sono la password della casella ma
-// un'APP PASSWORD creata da mailcow con il protocollo DAV (le password vere
-// cambiano e con 2FA non funzionano).
+// Connection to a CalDAV calendar: the booking API reads busy periods and
+// writes one event per appointment. Credentials are an app password with DAV
+// access, not the mailbox password (real passwords change, and 2FA does not
+// work for DAV clients at all).
 //
-// URL tipico: https://mail.maddalena.me/SOGo/dav/
-// Poi il percorso è <utente>/Calendar/personal/ e le due cose vengono unite.
+// Empty CalDavUrl (or an empty Password) means bookings are off and the API
+// answers 503; the site starts anyway.
 public sealed class CalendarOptions
 {
     public const string Section = "Calendar";
 
-    // L'account del calendario è fisso: non si configura da .env e non si può
-    // sbagliare. Program.cs forza questo valore con PostConfigure.
+    // The calendar account is fixed: it is not configured from .env and cannot
+    // be wrong. Program.cs forces this value with PostConfigure.
     public const string FixedUsername = "matteo@matteofabbri.org";
 
-    // Base DAV. Deve finire con una "/" (viene normalizzata).
-    public string CalDavUrl { get; set; } = "https://mail.maddalena.me/SOGo/dav/";
+    // DAV base. It must end with a "/" (it is normalized).
+    public string CalDavUrl { get; set; } = "";
 
-    // La casella: l'indirizzo email completo fa da nome utente.
+    // The mailbox: the full email address is the user name.
     public string Username { get; set; } = FixedUsername;
 
-    // App password con accesso DAV. Vuota = prenotazioni spente (503), il sito
-    // parte lo stesso: così un .env incompleto non butta giù i siti.
+    // App password with DAV access. Empty = bookings off (503), the site starts
+    // anyway: an incomplete .env must not take the sites down.
     public string Password { get; set; } = "";
 
-    // Il calendario da leggere e su cui scrivere, relativo al principal.
-    // "Calendar/personal/" è quello di default di SOGo; se un domani servisse
-    // un calendario dedicato ("Appuntamenti") si mette il suo percorso qui.
+    // The calendar to read and write, relative to the principal. "personal"
+    // is the usual default; a dedicated calendar would put its path here.
     public string CalendarPath { get; set; } = "Calendar/personal/";
 
-    // Calendario finto in memoria per lo sviluppo locale (nessuna credenziale).
-    // MAI in produzione: le prenotazioni non finirebbero da nessuna parte.
+    // In-memory fake calendar for local development (no credentials).
+    // NEVER in production: bookings would not go anywhere.
     public bool UseFake { get; set; }
 }

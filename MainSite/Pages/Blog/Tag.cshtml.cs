@@ -4,7 +4,7 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 
 namespace MainSite.Pages.Blog;
 
-public sealed class TagModel(BlogStore store, BlogClock clock, TimeProvider time, BlogAuthState auth) : PageModel
+public sealed class TagModel(BlogStore store, BlogClock clock, TimeProvider time) : PageModel
 {
     public string TagName { get; private set; } = "";
     public IReadOnlyList<BlogPost> Posts { get; private set; } = [];
@@ -14,7 +14,7 @@ public sealed class TagModel(BlogStore store, BlogClock clock, TimeProvider time
     public async Task<IActionResult> OnGetAsync(string tag, CancellationToken ct)
     {
         var now = time.GetUtcNow();
-        IsAuthor = auth.IsAuthor(User);
+        IsAuthor = BlogAuth.IsAuthor(User);
 
         var all = await store.GetAllAsync(ct);
         var visible = all.Where(post => IsAuthor || post.IsVisibleAt(now)).ToList();

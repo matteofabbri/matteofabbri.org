@@ -4,8 +4,8 @@ using Microsoft.Extensions.Options;
 
 namespace MainSite.Tests;
 
-// Il blog senza disco condiviso e senza mailcow: ogni test ha la sua cartella
-// temporanea, che viene cancellata alla fine.
+// The blog without a shared disk and without any external provider: every test
+// gets its own temporary folder, deleted at the end.
 public sealed class BlogStoreTests : IDisposable
 {
     private readonly string _root = Path.Combine(

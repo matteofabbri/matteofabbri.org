@@ -1,32 +1,39 @@
-# Override del compose del sito, applicato automaticamente da `docker compose`
-# nella cartella /opt/matteofabbri.
+# Override of the site compose, applied automatically by `docker compose`
+# in /opt/matteofabbri.
 #
-# Serve a MainSite:
-#  - gli articoli e le immagini del blog stanno nel volume blog-data, non
-#    nell'immagine; senza il mount ogni deploy cancellerebbe i post;
-#  - il database Sperone embedded dei log richieste sta nel volume
-#    request-log-data, montato in /data/sperone, per la stessa ragione;
-#  - il database GeoIP (DB-IP Lite, aggiornato dallo script
-#    deploy/update-geoip.sh) sta in /opt/matteofabbri/geoip, montato read-only
-#    in /data/geoip;
-#  - il container gira come utente `app` (UID 1654), quindi il workflow di
-#    deploy crea i volumi e li chowna a 1654 prima di avviare il sito;
-#  - le variabili Blog__Auth__* arrivano dal .env del server: finché ClientId
-#    e secret sono vuoti l'area di scrittura resta spenta, il blog è leggibile;
-#  - la password DAV del calendario arriva da CALDAV_PASSWORD; l'account
-#    (matteo@matteofabbri.org) è hardcodato nel sito;
-#  - TheQult (theqult.org) tiene profili, soggiorni e referenze nel volume
-#    theqult-data, montato in /data/theqult: un deploy non cancella la
-#    community. Nessun segreto da configurare.
+# It gives MainSite:
+#  - blog posts and images in the blog-data volume, not in the image; without
+#    the mount every deploy would delete the posts;
+#  - the embedded Sperone request-log database in the request-log-data volume,
+#    mounted at /data/sperone, for the same reason;
+#  - the GeoIP database (DB-IP Lite, refreshed by deploy/update-geoip.sh) in
+#    /opt/matteofabbri/geoip, mounted read-only at /data/geoip;
+#  - the container runs as user `app` (UID 1654), so the deploy workflow
+#    creates the volumes and chowns them to 1654 before starting the site;
+#  - TheQult (theqult.org) keeps profiles, stays and references in the
+#    theqult-data volume, mounted at /data/theqult: a deploy does not wipe the
+#    community. No secret to configure.
+#  - the local accounts (username/password) live in the auth-data volume,
+#    mounted at /data/auth. On a brand-new install the first account is created
+#    from AUTH_BOOTSTRAP_USERNAME/AUTH_BOOTSTRAP_PASSWORD; once one exists the
+#    bootstrap values are ignored and can be removed.
+#  - the Umami tracker is configured here: the script URL comes from
+#    UMAMI_DOMAIN, the website id from UMAMI_WEBSITE_ID (created in the Umami
+#    dashboard; empty = no tracker on the site).
+#
+# Booking is UNCONFIGURED: its backend was the mailcow stack (SOGo CalDAV) and
+# it is not part of this stack any more; the booking API answers 503. Blog
+# sign-in is LOCAL (auth-data), no external identity provider is involved.
 services:
   site:
     environment:
       Blog__ContentPath: /data/blog
-      Blog__Auth__BaseUrl: ${MAILCOW_OAUTH_URL:-https://mail.maddalena.me}
-      Blog__Auth__ClientId: ${MAILCOW_OAUTH_CLIENT_ID:-}
-      Blog__Auth__ClientSecret: ${MAILCOW_OAUTH_CLIENT_SECRET:-}
-      Calendar__CalDavUrl: ${CALDAV_URL:-https://mail.maddalena.me/SOGo/dav/}
-      Calendar__Password: ${CALDAV_PASSWORD:-}
+      Auth__DatabasePath: /data/auth/auth.db
+      Auth__BootstrapUsername: ${AUTH_BOOTSTRAP_USERNAME:-}
+      Auth__BootstrapPassword: ${AUTH_BOOTSTRAP_PASSWORD:-}
+      Auth__BootstrapDisplayName: ${AUTH_BOOTSTRAP_DISPLAY_NAME:-}
+      Umami__ScriptUrl: https://${UMAMI_DOMAIN:-analytics.matteofabbri.org}/script.js
+      Umami__WebsiteId: ${UMAMI_WEBSITE_ID:-}
       RequestLog__Path: /data/sperone
       RequestLog__GeoIpDatabasePath: /data/geoip/dbip-city-lite.mmdb
       # Il modello che etichetta le richieste. Se il container AI non è su, il
@@ -40,6 +47,7 @@ services:
       RequestLog__ReindexIndexes: "true"
     volumes:
       - blog-data:/data/blog
+      - auth-data:/data/auth
       - request-log-data:/data/sperone
       - /opt/matteofabbri/geoip:/data/geoip:ro
 
@@ -63,6 +71,7 @@ services:
 
 volumes:
   blog-data:
+  auth-data:
   request-log-data:
   theqult-data:
   botdetection-models:

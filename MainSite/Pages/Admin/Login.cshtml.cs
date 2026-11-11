@@ -1,4 +1,4 @@
-using System.Security.Claims;
+using MainSite.Auth;
 using MainSite.Blog;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -8,72 +8,100 @@ using Microsoft.AspNetCore.RateLimiting;
 
 namespace MainSite.Pages.Admin;
 
-// L'accesso al blog non chiede mai una password: porta su mailcow, che
-// autentica la casella (2FA compreso) e restituisce un profilo. Qui resta solo
-// il cookie del blog, con il claim che la policy BlogAuthor richiede.
+// Local-account sign-in: the password is verified against the SQLite user store
+// and the cookie claim is the only proof of an authenticated author. No external
+// identity provider is involved.
 [EnableRateLimiting("login")]
-public sealed class LoginModel(BlogAuthState auth) : PageModel
+public sealed class LoginModel(LocalUserStore users, ILogger<LoginModel> logger) : PageModel
 {
-    public bool Enabled => auth.Enabled;
-    public bool Fake => auth.UseFake;
-    public string FakeAuthor => auth.FakeAuthor;
     public string? Error { get; private set; }
     public string? ReturnUrl { get; private set; }
+    public bool HasAccounts { get; private set; } = true;
+    public bool DatabaseUnavailable { get; private set; }
 
-    public string MailcowHost =>
-        Uri.TryCreate(auth.Options.BaseUrl, UriKind.Absolute, out var uri)
-            ? uri.Host
-            : auth.Options.BaseUrl;
-
-    public IActionResult OnGet(string? returnUrl = null, string? error = null)
+    public async Task<IActionResult> OnGetAsync(string? returnUrl = null, CancellationToken ct = default)
     {
-        if (auth.IsAuthor(User))
+        if (BlogAuth.IsAuthor(User))
             return RedirectToPage("/Admin/Index");
 
-        ReturnUrl = Url.IsLocalUrl(returnUrl) ? returnUrl : null;
-        Error = error switch
-        {
-            "access_denied" => "Sign-in failed. Try again; if the problem persists, check that the mailbox is enabled.",
-            "not_configured" => "mailcow sign-in is not configured on this site.",
-            _ => null,
-        };
-
+        ReturnUrl = SafeReturnUrl(returnUrl);
+        await LoadStateAsync(ct);
         return Page();
     }
 
-    public async Task<IActionResult> OnPostAsync(string? returnUrl = null, CancellationToken ct = default)
+    public async Task<IActionResult> OnPostAsync(
+        string? username,
+        string? password,
+        string? returnUrl,
+        CancellationToken ct)
     {
-        string destination = Url.IsLocalUrl(returnUrl) && !returnUrl!.StartsWith("/admin/login", StringComparison.OrdinalIgnoreCase)
-            ? returnUrl
-            : "/admin";
+        ReturnUrl = SafeReturnUrl(returnUrl);
+        string destination = ReturnUrl ?? "/admin";
+        await LoadStateAsync(ct);
 
-        if (!auth.Enabled)
-            return RedirectToPage(new { error = "not_configured" });
-
-        // Solo sviluppo: nessun redirect e nessun cookie di mailcow.
-        if (auth.UseFake)
+        if (DatabaseUnavailable)
         {
-            var claims = new[]
-            {
-                new Claim(ClaimTypes.NameIdentifier, auth.FakeAuthor),
-                new Claim(ClaimTypes.Email, auth.FakeAuthor),
-                new Claim(ClaimTypes.Name, auth.FakeAuthor),
-                new Claim(BlogAuth.AuthorClaim, "true"),
-            };
-            var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
-
-            await HttpContext.SignInAsync(
-                CookieAuthenticationDefaults.AuthenticationScheme,
-                new ClaimsPrincipal(identity),
-                new AuthenticationProperties { IsPersistent = false });
-
-            return LocalRedirect(destination);
+            Error = "The account database is unavailable. Check the site logs.";
+            return Page();
         }
 
-        // Da qui in poi parla il middleware OAuth: authorize → mailcow →
-        // callback → token → profilo → cookie.
-        return new ChallengeResult(
-            BlogAuth.Scheme,
-            new AuthenticationProperties { RedirectUri = destination });
+        string name = (username ?? "").Trim();
+        if (name.Length == 0 || string.IsNullOrEmpty(password))
+        {
+            Error = "Username and password are required.";
+            return Page();
+        }
+
+        LocalUserCredentials? account;
+        try
+        {
+            account = await users.FindCredentialsAsync(name, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Could not read the local account.");
+            DatabaseUnavailable = true;
+            Error = "The account database is unavailable. Check the site logs.";
+            return Page();
+        }
+
+        // Always pay the PBKDF2 cost, so a missing username and a wrong password
+        // are indistinguishable by timing.
+        bool passwordOk = account is null
+            ? LocalPasswordHasher.Verify(password, LocalPasswordHasher.DummyHash)
+            : LocalPasswordHasher.Verify(password, account.PasswordHash);
+
+        if (account is null || !account.IsEnabled || !passwordOk)
+        {
+            Error = "Invalid username or password.";
+            return Page();
+        }
+
+        await users.TouchLoginAsync(account.Id, ct);
+        await HttpContext.SignInAsync(
+            CookieAuthenticationDefaults.AuthenticationScheme,
+            BlogAuth.CreatePrincipal(account),
+            new AuthenticationProperties { IsPersistent = false });
+
+        return LocalRedirect(destination);
     }
+
+    private async Task LoadStateAsync(CancellationToken ct)
+    {
+        try
+        {
+            HasAccounts = await users.AnyAsync(ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Could not read the local accounts.");
+            DatabaseUnavailable = true;
+        }
+    }
+
+    private string? SafeReturnUrl(string? returnUrl) =>
+        Url.IsLocalUrl(returnUrl)
+        && !returnUrl!.StartsWith("/admin/login", StringComparison.OrdinalIgnoreCase)
+            ? returnUrl
+            : null;
 }

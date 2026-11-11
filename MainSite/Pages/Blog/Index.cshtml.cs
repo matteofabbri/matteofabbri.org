@@ -8,7 +8,6 @@ public sealed class IndexModel(
     BlogStore store,
     BlogClock clock,
     TimeProvider time,
-    BlogAuthState auth,
     IWebHostEnvironment environment,
     RequestLogStore requestLogStore,
     JumbotronMediaStore jumbotronMedia,
@@ -53,7 +52,7 @@ public sealed class IndexModel(
         }
 
         var now = time.GetUtcNow();
-        IsAuthor = auth.IsAuthor(User);
+        IsAuthor = BlogAuth.IsAuthor(User);
 
         var all = await store.GetAllAsync(ct);
         Posts = all.Where(post => IsAuthor || post.IsVisibleAt(now)).ToList();

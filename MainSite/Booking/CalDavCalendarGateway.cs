@@ -10,7 +10,8 @@ using Microsoft.Extensions.Options;
 
 namespace MainSite.Booking;
 
-// Il calendario vero: CalDAV su SOGo, il groupware che mailcow include.
+// The real calendar: CalDAV on any compatible server (SOGo, Nextcloud,
+// Radicale, ...).
 //
 // Due sole operazioni, quelle che servono a prenotare:
 //  - REPORT calendar-query sulla finestra di interesse: il server manda gli

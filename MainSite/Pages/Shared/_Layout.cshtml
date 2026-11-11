@@ -1,10 +1,14 @@
-@inject MainSite.Blog.BlogAuthState BlogAuthState
+@inject Microsoft.Extensions.Options.IOptions<MainSite.Analytics.UmamiOptions> Umami
 @{
     string? pageTitle = ViewData["Title"] as string;
     string fullTitle = pageTitle is null ? "Matteo Fabbri" : $"{pageTitle} — Matteo Fabbri";
     string description = ViewData["Description"] as string
         ?? "Notes, projects and things worth telling.";
-    bool isAuthor = BlogAuthState.IsAuthor(User);
+    bool isAuthor = MainSite.Blog.BlogAuth.IsAuthor(User);
+    var umami = Umami.Value;
+    // The writing area is not tracked: the author's own visits are noise.
+    bool trackUmami = umami.IsConfigured
+        && !ViewContext.HttpContext.Request.Path.StartsWithSegments("/admin");
 }
 <!DOCTYPE html>
 <html lang="en">
@@ -15,6 +19,10 @@
     <meta name="description" content="@description" />
     <link rel="stylesheet" href="~/css/blog.css" asp-append-version="true" />
     <link rel="alternate" type="application/rss+xml" title="Matteo Fabbri — Blog" href="/blog/feed.xml" />
+    @if (trackUmami)
+    {
+        <script defer src="@umami.ScriptUrl" data-website-id="@umami.WebsiteId"></script>
+    }
     @await RenderSectionAsync("Head", required: false)
 </head>
 <body>

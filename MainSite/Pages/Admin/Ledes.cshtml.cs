@@ -5,8 +5,8 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 
 namespace MainSite.Pages.Admin;
 
-// Gestione delle frasi del jumbotron. La pagina sta sotto /Admin, quindi è
-// protetta dalla policy del blog: entra qualunque utente registrato su mailcow.
+// Jumbotron phrase management. The page sits under /Admin, so it is protected
+// by the blog policy: any authenticated author can enter.
 public sealed class LedesModel(RequestLogStore store, ILogger<LedesModel> logger) : PageModel
 {
     private const int MaxLength = 300;

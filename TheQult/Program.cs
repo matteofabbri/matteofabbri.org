@@ -8,10 +8,10 @@ using TheQult.Services;
 
 namespace TheQult;
 
-// Il sito di theqult.org: la community di ospitalità senza abbonamenti.
-// Caddy inoltra tutto il dominio qui (tranne /mail, che va alla webmail di
-// mailcow). L'endpoint d'esempio di una volta è diventato il sito; lo stato
-// macchina resta a /api/status per gli script di sorveglianza.
+// The theqult.org site: the hospitality community with no subscriptions.
+// Caddy forwards the whole domain here; there is no webmail prefix any more.
+// The old sample endpoint became this site; the health endpoint stays at
+// /api/status for the monitoring scripts.
 public class Program
 {
     public static void Main(string[] args)

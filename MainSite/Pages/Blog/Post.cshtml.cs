@@ -5,7 +5,7 @@ using Microsoft.Extensions.Options;
 
 namespace MainSite.Pages.Blog;
 
-public sealed class PostModel(BlogStore store, BlogClock clock, TimeProvider time, IOptions<BlogOptions> options, BlogAuthState auth) : PageModel
+public sealed class PostModel(BlogStore store, BlogClock clock, TimeProvider time, IOptions<BlogOptions> options) : PageModel
 {
     public BlogPost Post { get; private set; } = default!;
     public string Html { get; private set; } = "";
@@ -21,7 +21,7 @@ public sealed class PostModel(BlogStore store, BlogClock clock, TimeProvider tim
             return NotFound();
 
         var now = time.GetUtcNow();
-        IsAuthor = auth.IsAuthor(User);
+        IsAuthor = BlogAuth.IsAuthor(User);
         if (!post.IsVisibleAt(now) && !IsAuthor)
             return NotFound();
 

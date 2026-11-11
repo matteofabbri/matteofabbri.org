@@ -5,8 +5,7 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 
 namespace MainSite.Pages.Admin;
 
-// Cancella solo il cookie del blog: la sessione della webmail su mailcow resta
-// aperta (e viceversa), perché sono due cose diverse.
+// Clears only the site's author cookie; nothing else is affected.
 public sealed class LogoutModel : PageModel
 {
     public async Task<IActionResult> OnPostAsync()

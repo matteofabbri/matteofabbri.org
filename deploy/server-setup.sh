@@ -1,141 +1,98 @@
 #!/usr/bin/env bash
 # ============================================================================
-# Bootstrap del server (Debian/Ubuntu, es. VPS OVH)
-# Installa docker, crea la rete condivisa, tira su mailcow e lo stack del sito.
+# Server bootstrap (Debian/Ubuntu, e.g. an OVH VPS)
+# Installs docker and starts the site stack: site, TheQult, Maddalena, Caddy
+# and bot-ai. There is no mail stack on this machine.
 #
-# COSA SI ASPETTA DI TROVARE SUL SERVER (copiati da te via scp, vedi README):
-#   ~/deploy/server-setup.sh                            <- questo script
-#   ~/deploy/mailcow/docker-compose.override.yml        <- aggancio rete condivisa
-#   ~/out/                                              <- output di publish.ps1
-#       docker-compose.yaml, .env (COMPILATO!), caddy/,
-#       matteofabbri-site.tar (opzionale: l'immagine del sito via docker save)
+# WHAT IT EXPECTS ON THE SERVER (copied by you via scp, see README):
+#   ~/deploy/server-setup.sh                    <- this script
+#   ~/out/                                      <- output of publish.ps1
+#       docker-compose.yaml, .env (FILLED IN!), caddy/,
+#       matteofabbri-site.tar (optional: the site image via docker save)
 #
-# USO:  sudo bash ~/deploy/server-setup.sh [percorso-cartella-out]
-#       (default: la cartella 'out' accanto a 'deploy', non $HOME: con sudo
-#        $HOME diventerebbe quello di root)
+# USE:  sudo bash ~/deploy/server-setup.sh [path-to-out]
+#       (default: the 'out' folder next to 'deploy', not $HOME: with sudo
+#        $HOME becomes root's home)
 #
-# Rilanciabile: ogni passo controlla se e' gia' stato fatto.
+# Re-runnable: each step checks whether it was already done.
 # ============================================================================
 set -euo pipefail
-umask 0022   # richiesto da mailcow
 
-MAILCOW_DIR="/opt/mailcow-dockerized"
 STACK_DIR="/opt/matteofabbri"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# Non $HOME: con "sudo bash ~/deploy/server-setup.sh" sudo cambia $HOME in
-# quello di root (/root), mentre 'out' sta accanto a questo script (copiati
-# insieme via scp), non nella home di chi ha lanciato sudo.
+# Not $HOME: with "sudo bash ~/deploy/server-setup.sh" sudo changes $HOME to
+# root's (/root), while 'out' sits next to this script (copied together via
+# scp), not in the home of whoever launched sudo.
 OUT_SRC="${1:-$SCRIPT_DIR/../out}"
 
 step() { echo; echo "=== $* ==="; }
 
-[ "$(id -u)" -eq 0 ] || { echo "Esegui da root:  sudo bash $0"; exit 1; }
+[ "$(id -u)" -eq 0 ] || { echo "Run as root:  sudo bash $0"; exit 1; }
 
-# --- 1. Prerequisiti e docker ----------------------------------------------
-step "1/5 Docker"
+# --- 1. Prerequisites and docker -------------------------------------------
+step "1/3 Docker"
 if command -v apt-get >/dev/null 2>&1; then
     apt-get update -qq
-    apt-get install -y -qq curl git ca-certificates
+    apt-get install -y -qq curl ca-certificates
 fi
 if ! command -v docker >/dev/null 2>&1; then
-    # Installer ufficiale docker (engine + compose plugin)
+    # Official docker installer (engine + compose plugin)
     curl -fsSL https://get.docker.com | sh
 else
-    echo "docker gia' presente: $(docker --version)"
+    echo "docker already present: $(docker --version)"
 fi
 systemctl enable --now docker
-docker compose version >/dev/null   # verifica che il plugin compose ci sia
+docker compose version >/dev/null   # check that the compose plugin is there
 
-# --- 2. La rete condivisa "neutra" (il corridoio) ---------------------------
-step "2/5 Rete condivisa matteo-shared"
-if docker network inspect matteo-shared >/dev/null 2>&1; then
-    echo "rete gia' presente"
-else
-    docker network create matteo-shared
-fi
-
-# --- 3. mailcow (stack separato, suo ciclo di vita) --------------------------
-step "3/5 mailcow"
-if [ ! -d "$MAILCOW_DIR" ]; then
-    git clone https://github.com/mailcow/mailcow-dockerized "$MAILCOW_DIR"
-fi
-cd "$MAILCOW_DIR"
-
-if [ ! -f mailcow.conf ]; then
-    echo "Configurazione iniziale di mailcow (interattiva):"
-    echo "  - hostname: mail.maddalena.me"
-    # generate_config.sh (versioni recenti) rifiuta di partire senza questo
-    # symlink gia' presente: lo richiede per essere sicuro di essere lanciato
-    # dalla cartella giusta.
-    ln -sf mailcow.conf .env
-    ./generate_config.sh
-    # Caddy tiene 80/443 sull'host: mailcow ascolta su porte interne,
-    # solo su loopback. Caddy lo raggiunge via rete condivisa.
-    sed -i 's/^HTTP_PORT=.*/HTTP_PORT=8080/'      mailcow.conf
-    sed -i 's/^HTTP_BIND=.*/HTTP_BIND=127.0.0.1/' mailcow.conf
-    sed -i 's/^HTTPS_PORT=.*/HTTPS_PORT=8443/'    mailcow.conf
-    sed -i 's/^HTTPS_BIND=.*/HTTPS_BIND=127.0.0.1/' mailcow.conf
-    echo
-    echo "NOTA transizione: per usare anche il nome generico OVH aggiungi in"
-    echo "$MAILCOW_DIR/mailcow.conf la riga:  ADDITIONAL_SAN=vpsXXXX.ovh.net"
-else
-    echo "mailcow.conf gia' presente: non tocco la configurazione"
-fi
-
-cp "$SCRIPT_DIR/mailcow/docker-compose.override.yml" docker-compose.override.yml
-docker compose up -d
-echo "mailcow avviato (il suo certificato arrivera' appena Caddy e il DNS sono attivi)"
-
-# --- 4. Stack del sito (compose generato da Aspire) --------------------------
-step "4/5 Stack sito + Caddy"
-[ -d "$OUT_SRC" ] || { echo "Cartella '$OUT_SRC' non trovata: copia la 'out' di publish.ps1 e rilancia"; exit 1; }
+# --- 2. Site stack (compose generated by Aspire) ----------------------------
+step "2/3 Site stack + Caddy"
+[ -d "$OUT_SRC" ] || { echo "Folder '$OUT_SRC' not found: copy the 'out' of publish.ps1 and rerun"; exit 1; }
 mkdir -p "$STACK_DIR"
 cp -r "$OUT_SRC/." "$STACK_DIR/"
 cd "$STACK_DIR"
 
-# Immagini dei tre siti portate come tar (docker save)? Caricale tutte.
+# Site images shipped as tar (docker save)? Load all of them.
 for tarball in matteofabbri-*.tar; do
     [ -f "$tarball" ] || continue
     docker load -i "$tarball"
     rm -f "$tarball"
 done
 
-# Il .env deve essere compilato: blocco se le voci chiave sono vuote.
-if grep -qE '^(ACME_EMAIL|SITE_DOMAIN|WEBMAIL_HOST|SITE_IMAGE|SITE_PORT|THEQULT_IMAGE|THEQULT_PORT|MADDALENA_IMAGE|MADDALENA_PORT|MAILCOW_TLS_UPSTREAM|MAILCOW_HTTP_UPSTREAM)=\s*$' .env; then
+# The .env must be filled in: stop if the key entries are empty.
+if grep -qE '^(ACME_EMAIL|SITE_DOMAIN|SITE_IMAGE|SITE_PORT|THEQULT_IMAGE|THEQULT_PORT|MADDALENA_IMAGE|MADDALENA_PORT)=\s*$' .env; then
     echo
-    echo "FERMO QUI: $STACK_DIR/.env ha valori vuoti. Compilalo e poi:"
+    echo "STOP: $STACK_DIR/.env has empty values. Fill it in and then:"
     echo "  cd $STACK_DIR && docker compose up -d --build"
     exit 1
 fi
 
 docker compose up -d --build --remove-orphans
 
-# Pulizia GENERICA dei componenti rimasti orfani (servizi tolti dal compose,
-# es. valhalla o postgres): funziona per label di progetto, non per nome di
-# servizio. --remove-orphans ha gia' buttato i container; qui si tolgono i
-# volumi e le immagini del progetto che nessun container usa piu'.
-# OCCHIO: un volume orfano contiene i DATI del servizio tolto (per un DB:
-# tutto quello che cera dentro). Se possono ancora servire, salvali PRIMA di
-# rilanciare: da qui in poi spariscono.
-# La label e' di questo stack soltanto: i volumi di mailcow restano fuori.
-PROGETTO="$(basename "$STACK_DIR")"
-for v in $(docker volume ls --filter label=com.docker.compose.project="$PROGETTO" --format '{{.Name}}'); do
+# GENERIC cleanup of orphaned components (services removed from the compose,
+# e.g. valhalla or postgres): it works by compose project label, not by service
+# name. --remove-orphans already dropped the containers; here we remove the
+# volumes and images of the project that no container uses any more.
+# CAREFUL: an orphan volume holds the DATA of the removed service (for a DB:
+# everything in it). If it may still be needed, save it BEFORE rerunning: from
+# here on it is gone.
+PROJECT="$(basename "$STACK_DIR")"
+for v in $(docker volume ls --filter label=com.docker.compose.project="$PROJECT" --format '{{.Name}}'); do
     if [ -z "$(docker ps -aq --filter volume="$v")" ]; then
-        echo "volume orfano (nessun container lo usa): $v -> rimuovo"
+        echo "orphan volume (no container uses it): $v -> removing"
         docker volume rm "$v" || true
     fi
 done
-for img in $(docker images --filter label=com.docker.compose.project="$PROGETTO" --format '{{.ID}}'); do
+for img in $(docker images --filter label=com.docker.compose.project="$PROJECT" --format '{{.ID}}'); do
     if [ -z "$(docker ps -aq --filter ancestor="$img")" ]; then
-        echo "immagine orfana (nessun container la usa): $img -> rimuovo"
+        echo "orphan image (no container uses it): $img -> removing"
         docker rmi "$img" || true
     fi
 done
 
-# --- 5. Riepilogo -------------------------------------------------------------
-step "5/5 Stato"
+# --- 3. Summary -------------------------------------------------------------
+step "3/3 Status"
 docker compose ls
 echo
-echo "Fatto. Ricorda (vedi deploy/README.md):"
-echo "  - DNS: A/MX/PTR + SPF/DKIM/DMARC dal pannello mailcow"
-echo "  - admin mailcow: https://<MAILCOW_HOSTNAME>  (user: admin, pass: moohoo -> CAMBIALA)"
+echo "Done. Remember (see deploy/README.md):"
+echo "  - DNS: A records for the three site domains -> this server"
+echo "  - Caddy obtains and renews the TLS certificates on its own"

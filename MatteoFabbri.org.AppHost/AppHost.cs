@@ -3,26 +3,11 @@ using Aspire.Hosting.Docker.Resources.ServiceNodes;
 
 var builder = DistributedApplication.CreateBuilder(args);
 
-// --- Ambiente di pubblicazione: docker compose ------------------------------
-// Definisce il progetto compose generato da `aspire publish`.
-// Qui dichiariamo anche la rete condivisa "neutra" (il "corridoio"):
-// External = true => NON la possiede questo stack. La crei a mano una volta
-//   docker network create matteo-shared
-// e la dichiari uguale anche nel compose di mailcow. Cosi' gli aggiornamenti
-// di mailcow non disturbano il collegamento.
-// La chiave del dizionario diventa il nome della rete nel compose, quindi e'
-// anche il nome da usare in `docker network create matteo-shared`.
-const string SharedNetworkKey = "matteo-shared";
-
+// --- Publication environment: docker compose --------------------------------
+// Defines the compose project that `aspire publish` generates.
 builder.AddDockerComposeEnvironment("matteofabbri")
     .ConfigureComposeFile(file =>
     {
-        file.Networks[SharedNetworkKey] = new Network
-        {
-            Name = SharedNetworkKey,
-            External = true,
-        };
-
         // Volume degli articoli del blog: dichiararlo qui (e non solo sul
         // servizio) evita il compose "undefined volume". Docker lo crea al
         // primo avvio e lo conserva tra un deploy e l'altro: i post non
@@ -46,6 +31,21 @@ builder.AddDockerComposeEnvironment("matteofabbri")
         file.Volumes["theqult-data"] = new Volume
         {
             Name = "theqult-data",
+            Driver = "local",
+        };
+
+        // Local accounts: the SQLite file must survive deploys like the blog
+        // and the request log.
+        file.Volumes["auth-data"] = new Volume
+        {
+            Name = "auth-data",
+            Driver = "local",
+        };
+
+        // Umami analytics database (PostgreSQL). Umami itself is stateless.
+        file.Volumes["umami-db-data"] = new Volume
+        {
+            Name = "umami-db-data",
             Driver = "local",
         };
 
@@ -80,58 +80,24 @@ builder.AddDockerComposeEnvironment("matteofabbri")
 // Mail dell'account Let's Encrypt usata da Caddy per i certificati.
 var acmeEmail = builder.AddParameter("acme-email");
 
-// I nomi pubblici. Caddy termina solo i SITI; ogni altro nome (posta, nome
-// OVH di transizione, ...) passa sigillato a mailcow senza toccare nulla qui.
-// Oggi i siti sono TRE:
-//   - site-domain      -> sito personale (es. matteofabbri.org)
-//   - theqult-domain   -> theqult.org   (default impostato qui, override da .env)
-//   - maddalena-domain -> maddalena.me  (default impostato qui, override da .env)
-//   - webmail-host     -> dove vive la webmail, bersaglio del redirect /mail
-//                         (es. mail.matteofabbri.org; in transizione il nome OVH)
+// Public site names. Caddy terminates TLS only for the SITES; every other
+// name is not this machine's business (mail lives on OVH, not here).
+// The sites are THREE, plus the analytics dashboard:
+//   - site-domain      -> personal site (e.g. matteofabbri.org)
+//   - theqult-domain   -> theqult.org   (default here, override from .env)
+//   - maddalena-domain -> maddalena.me  (default here, override from .env)
+//   - umami-domain     -> analytics dashboard (e.g. analytics.matteofabbri.org)
 var siteDomain = builder.AddParameter("site-domain");
 var thequltDomain = builder.AddParameter("theqult-domain", () => builder.Configuration["Parameters:theqult-domain"] ?? "theqult.org");
 var maddalenaDomain = builder.AddParameter("maddalena-domain", () => builder.Configuration["Parameters:maddalena-domain"] ?? "maddalena.me");
-var webmailHost = builder.AddParameter("webmail-host");
-
-// Dove Caddy raggiunge mailcow, per nome sulla rete condivisa.
-//   - mailcow-tls-upstream  -> nginx di mailcow, porta HTTPS (es. nginx-mailcow:8443)
-//   - mailcow-http-upstream -> nginx di mailcow, porta HTTP  (es. nginx-mailcow:8080)
-var mailcowTlsUpstream = builder.AddParameter("mailcow-tls-upstream");
-var mailcowHttpUpstream = builder.AddParameter("mailcow-http-upstream");
+var umamiDomain = builder.AddParameter("umami-domain");
 
 // --- Il sito personale -------------------------------------------------------
-// Ospita anche le prenotazioni degli appuntamenti, che leggono e scrivono il
-// calendario della casella: è il calendario CalDAV di SOGo, il groupware dentro
-// mailcow. L'URL è pubblico (SOGo lo serve sotto /SOGo/dav/ sullo stesso nome
-// della webmail) così vale sia dal container sia dal PC in sviluppo.
-var caldavUrl = builder.AddParameter("caldav-url",
-    () => builder.Configuration["Parameters:caldav-url"] ?? "https://mail.maddalena.me/SOGo/dav/");
-
-// La casella è fissa nel codice (matteo@matteofabbri.org); qui serve solo la
-// password, che NON è quella vera della casella ma un'APP PASSWORD creata in
-// mailcow con accesso DAV (le password vere cambiano, e con 2FA i client DAV
-// non funzionano affatto). Vuota = prenotazioni spente (503), il sito parte.
-//   dotnet user-secrets set "Parameters:caldav-password" "<app password DAV>" --project <questo AppHost>
-var caldavPassword = builder.AddParameter("caldav-password",
-    () => builder.Configuration["Parameters:caldav-password"] ?? "", secret: true);
-
-// --- Blog: accesso con mailcow (OAuth2) --------------------------------------
-// mailcow espone un server OAuth2: il blog manda l'autore sulla webmail, riceve
-// un codice e lo scambia con il profilo della casella. La password non passa
-// mai dal sito e il 2FA di mailcow continua a funzionare.
-//
-// Il client si crea in mailcow (Configurazione → Access → OAuth2 Apps) e il suo
-// redirect URI deve essere esattamente:
-//   https://<SITE_DOMAIN>/admin/login/callback
-// Client ID e secret NON stanno nel repo: arrivano dal .env (o dai user-secrets).
-// Qualunque casella autenticata da mailcow può scrivere: non c'è un elenco di
-// autori da configurare; senza client l'area di scrittura resta spenta.
-var mailcowOauthUrl = builder.AddParameter("mailcow-oauth-url",
-    () => builder.Configuration["Parameters:mailcow-oauth-url"] ?? "https://mail.maddalena.me");
-var mailcowOauthClientId = builder.AddParameter("mailcow-oauth-client-id",
-    () => builder.Configuration["Parameters:mailcow-oauth-client-id"] ?? "");
-var mailcowOauthClientSecret = builder.AddParameter("mailcow-oauth-client-secret",
-    () => builder.Configuration["Parameters:mailcow-oauth-client-secret"] ?? "", secret: true);
+// The booking API is UNCONFIGURED here: its backend was the mailcow stack
+// (SOGo CalDAV) and it is not part of this stack any more. With no credentials
+// the booking API answers 503. The blog author sign-in uses LOCAL accounts in
+// the auth-data volume (Auth__DatabasePath); the first one is bootstrapped from
+// Auth__BootstrapUsername/Password in the environment.
 
 // --- Log delle richieste (Sperone embedded) ----------------------------------
 // Il database è la libreria Sperone in-process, non un server: in produzione
@@ -146,17 +112,19 @@ string geoIpPath = builder.ExecutionContext.IsPublishMode
 // dell'AppHost) restano accanto al progetto, come con `dotnet run`.
 string blogContentPath = builder.ExecutionContext.IsPublishMode ? "/data/blog" : "App_Data/blog";
 
+// Local accounts: the SQLite database follows the same rule (volume in publish
+// mode, project folder in local run).
+string authPath = builder.ExecutionContext.IsPublishMode
+    ? "/data/auth/auth.db"
+    : "App_Data/auth/auth.db";
+
 var site = builder.AddProject<Projects.MainSite>("site")
-    .WithEnvironment("Calendar__CalDavUrl", caldavUrl)
-    .WithEnvironment("Calendar__Password", caldavPassword)
-    .WithEnvironment("Blog__Auth__BaseUrl", mailcowOauthUrl)
-    .WithEnvironment("Blog__Auth__ClientId", mailcowOauthClientId)
-    .WithEnvironment("Blog__Auth__ClientSecret", mailcowOauthClientSecret)
     .WithEnvironment("RequestLog__Path", requestLogPath)
     .WithEnvironment("RequestLog__GeoIpDatabasePath", geoIpPath)
     // Gli articoli stanno fuori dall'immagine: un deploy che ricostruisce il
     // container non deve portarsi via quello che è stato scritto.
     .WithEnvironment("Blog__ContentPath", blogContentPath)
+    .WithEnvironment("Auth__DatabasePath", authPath)
     .PublishAsDockerComposeService((_, service) =>
     {
         service.AddVolume(new Volume
@@ -165,6 +133,15 @@ var site = builder.AddProject<Projects.MainSite>("site")
             Type = "volume",
             Source = "blog-data",
             Target = "/data/blog",
+        });
+
+        // The local-account database survives every deploy for the same reason.
+        service.AddVolume(new Volume
+        {
+            Name = "auth-data",
+            Type = "volume",
+            Source = "auth-data",
+            Target = "/data/auth",
         });
 
         // Il database Sperone dei log vive fuori dall'immagine allo stesso modo.
@@ -205,6 +182,63 @@ var theqult = builder.AddProject<Projects.TheQult>("theqult")
 // Caddy e DNS già configurati) finché non arriverà il nuovo contenuto.
 var maddalena = builder.AddProject<Projects.Maddalena>("maddalena");
 
+// --- Umami analytics ---------------------------------------------------------
+// Cookieless analytics on its own subdomain. Umami needs PostgreSQL: both
+// containers run only on the compose network and Caddy publishes the dashboard.
+// Secrets come from the server .env; the website id is read by the site from
+// the compose override, after the website is created in the dashboard.
+var umamiDbPassword = builder.AddParameter("umami-db-password",
+    () => builder.Configuration["Parameters:umami-db-password"] ?? "", secret: true);
+var umamiAppSecret = builder.AddParameter("umami-app-secret",
+    () => builder.Configuration["Parameters:umami-app-secret"] ?? "", secret: true);
+var umamiTwoFactorKey = builder.AddParameter("umami-two-factor-key",
+    () => builder.Configuration["Parameters:umami-two-factor-key"] ?? "", secret: true);
+
+var umamiDb = builder.AddContainer("umami-db", "postgres", "15-alpine")
+    .WithEnvironment("POSTGRES_DB", "umami")
+    .WithEnvironment("POSTGRES_USER", "umami")
+    .WithEnvironment("POSTGRES_PASSWORD", umamiDbPassword)
+    .WithVolume("umami-db-data", "/var/lib/postgresql/data")
+    .PublishAsDockerComposeService((_, service) =>
+    {
+        service.Healthcheck = new Healthcheck
+        {
+            Test = ["CMD-SHELL", "pg_isready -U umami -d umami"],
+            Interval = "5s",
+            Timeout = "5s",
+            Retries = 5,
+            StartPeriod = "10s",
+        };
+    });
+
+var umami = builder.AddContainer("umami", "docker.umami.is/umami-software/umami", "latest")
+    // The password is part of the connection string: Aspire writes the ${...}
+    // placeholder and compose substitutes it from the server .env.
+    .WithEnvironment("DATABASE_URL",
+        ReferenceExpression.Create($"postgresql://umami:{umamiDbPassword}@umami-db:5432/umami"))
+    .WithEnvironment("APP_SECRET", umamiAppSecret)
+    .WithEnvironment("TWO_FACTOR_ENCRYPTION_KEY", umamiTwoFactorKey)
+    .WithEnvironment("DISABLE_TELEMETRY", "1")
+    .WithEnvironment("DISABLE_UPDATES", "1")
+    // Caddy is the proxy in front of Umami: trust its X-Forwarded-For.
+    .WithEnvironment("CLIENT_IP_HEADER", "X-Forwarded-For")
+    .WithEnvironment("TRUSTED_PROXIES", "private")
+    .WithHttpEndpoint(targetPort: 3000, name: "http")
+    .WaitFor(umamiDb)
+    .PublishAsDockerComposeService((_, service) =>
+    {
+        service.Init = true;
+        service.DependsOn["umami-db"] = new ServiceDependency { Condition = "service_healthy" };
+        service.Healthcheck = new Healthcheck
+        {
+            Test = ["CMD-SHELL", "curl -fsS http://localhost:3000/api/heartbeat || exit 1"],
+            Interval = "5s",
+            Timeout = "5s",
+            Retries = 5,
+            StartPeriod = "30s",
+        };
+    });
+
 // L'indirizzo interno (host:porta) a cui Caddy inoltra il traffico del sito:
 // deriva dall'endpoint del progetto. HostAndPort restituisce "host:porta" gia'
 // risolti e si adatta da solo alla modalita': in pubblicazione diventa "site:8080",
@@ -216,11 +250,14 @@ var thequltUpstream = ReferenceExpression.Create(
     $"{theqult.GetEndpoint("http").Property(EndpointProperty.HostAndPort)}");
 var maddalenaUpstream = ReferenceExpression.Create(
     $"{maddalena.GetEndpoint("http").Property(EndpointProperty.HostAndPort)}");
+var umamiUpstream = ReferenceExpression.Create(
+    $"{umami.GetEndpoint("http").Property(EndpointProperty.HostAndPort)}");
 
-// --- Caddy: la "portineria" sulle porte 80/443 ------------------------------
-// Immagine su misura (Caddy ufficiale + modulo layer4), costruita dal
-// Dockerfile in ./caddy. Serve per passare il TLS della posta sigillato a
-// mailcow senza decifrarlo.
+// --- Caddy: the front door on ports 80/443 ----------------------------------
+// Custom image (official Caddy + the layer4 module) built from the Dockerfile
+// in ./caddy. The plugin reads the SNI and forwards the site TLS to the
+// internal HTTP server with the PROXY protocol, so the real client IP survives
+// (GeoIP, per-IP rate limits and /requests all depend on it).
 var caddy = builder.AddDockerfile("caddy", "caddy")
     // /data conserva i certificati Let's Encrypt (solo dei nomi che Caddy
     // termina) tra un riavvio e l'altro.
@@ -234,18 +271,15 @@ var caddy = builder.AddDockerfile("caddy", "caddy")
     .WithEnvironment("SITE_DOMAIN", siteDomain)
     .WithEnvironment("THEQULT_DOMAIN", thequltDomain)
     .WithEnvironment("MADDALENA_DOMAIN", maddalenaDomain)
-    .WithEnvironment("WEBMAIL_HOST", webmailHost)
+    .WithEnvironment("UMAMI_DOMAIN", umamiDomain)
     .WithEnvironment("SITE_UPSTREAM", siteUpstream)
     .WithEnvironment("THEQULT_UPSTREAM", thequltUpstream)
     .WithEnvironment("MADDALENA_UPSTREAM", maddalenaUpstream)
-    .WithEnvironment("MAILCOW_TLS_UPSTREAM", mailcowTlsUpstream)
-    .WithEnvironment("MAILCOW_HTTP_UPSTREAM", mailcowHttpUpstream)
-    // Aggancia Caddy alla rete condivisa (per raggiungere mailcow per nome) e
-    // rende il compose autosufficiente: lo costruisce dal Dockerfile in ./caddy
-    // invece di pretendere un'immagine gia' pronta.
+    .WithEnvironment("UMAMI_UPSTREAM", umamiUpstream)
+    // Build from the Dockerfile in ./caddy instead of expecting a ready image:
+    // the compose stays self-contained.
     .PublishAsDockerComposeService((_, service) =>
     {
-        service.Networks.Add(SharedNetworkKey);
         service.Image = null;
         service.Build = new Build
         {
