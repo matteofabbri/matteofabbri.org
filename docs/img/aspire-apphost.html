@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Aspire AppHost</title>
+<style>
+  html, body { margin: 0; padding: 0; background: #fbfaf7; }
+  svg { display: block; }
+  text { font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif; fill: #1c1b19; }
+  .title { font-size: 38px; font-weight: 700; letter-spacing: -0.6px; }
+  .subtitle { font-size: 16px; fill: #6b6862; }
+  .node-title { font-size: 21px; font-weight: 600; }
+  .node-title-sm { font-size: 18px; font-weight: 600; }
+  .body { font-size: 14px; fill: #4a4742; }
+  .mono { font-family: "Cascadia Mono", Consolas, monospace; font-size: 12.5px; fill: #6b6862; }
+  .label { font-size: 13px; fill: #6b6862; }
+  .chip-text { font-size: 12.5px; fill: #4a4742; }
+  .eyebrow { font-size: 12px; fill: #206f68; letter-spacing: 1.2px; font-weight: 700; }
+  .node { fill: #ffffff; stroke: #e5e1d8; stroke-width: 1.5; }
+  .node-accent { fill: #eef5f3; stroke: #206f68; stroke-width: 1.7; }
+  .node-store { fill: #f4f1ea; stroke: #ddd7ca; stroke-width: 1.4; }
+  .chip { fill: #ffffff; stroke: #e5e1d8; stroke-width: 1.2; }
+  .pill { fill: #ffffff; stroke: #e5e1d8; stroke-width: 1.4; }
+  .edge { fill: none; stroke: #8c8880; stroke-width: 1.6; }
+  .edge-accent { fill: none; stroke: #206f68; stroke-width: 1.8; stroke-dasharray: 7 6; }
+  .rule { stroke: #e5e1d8; stroke-width: 1; }
+</style>
+</head>
+<body>
+<svg width="1400" height="980" viewBox="0 0 1400 980" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#8c8880"/>
+    </marker>
+    <marker id="arrow-accent" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#206f68"/>
+    </marker>
+  </defs>
+
+  <!-- Header -->
+  <text x="70" y="58" class="eyebrow">MATTEOFABBRI.ORG / ARCHITECTURE</text>
+  <text x="70" y="102" class="title">Aspire AppHost: one file, the whole stack</text>
+  <text x="70" y="132" class="subtitle">The AppHost runs every resource locally and publishes the docker compose file used on the server.</text>
+
+  <!-- Domains -->
+  <g>
+    <rect class="pill" x="392" y="168" width="226" height="40" rx="20"/>
+    <text x="505" y="193" text-anchor="middle" class="body">matteofabbri.org</text>
+
+    <rect class="pill" x="642" y="168" width="170" height="40" rx="20"/>
+    <text x="727" y="193" text-anchor="middle" class="body">theqult.org</text>
+
+    <rect class="pill" x="836" y="168" width="164" height="40" rx="20"/>
+    <text x="918" y="193" text-anchor="middle" class="body">maddalena.me</text>
+  </g>
+
+  <!-- Domain to Caddy arrows -->
+  <path class="edge" d="M505 208 V238" marker-end="url(#arrow)"/>
+  <path class="edge" d="M727 208 V238" marker-end="url(#arrow)"/>
+  <path class="edge" d="M918 208 V238" marker-end="url(#arrow)"/>
+
+  <!-- Caddy -->
+  <rect class="node-accent" x="330" y="238" width="740" height="88" rx="12"/>
+  <text x="360" y="272" class="node-title">Caddy</text>
+  <text x="360" y="298" class="body">:80 / :443 · TLS termination · layer4 + PROXY protocol</text>
+  <text x="1035" y="272" text-anchor="end" class="mono">caddy-data · caddy-config</text>
+  <text x="1035" y="296" text-anchor="end" class="label">custom image: official Caddy + layer4</text>
+
+  <!-- Caddy to services -->
+  <path class="edge" d="M470 326 V360 H285 V392" marker-end="url(#arrow)"/>
+  <text x="272" y="378" text-anchor="end" class="label">matteofabbri.org</text>
+
+  <path class="edge" d="M646 326 V392" marker-end="url(#arrow)"/>
+  <text x="658" y="378" class="label">theqult.org</text>
+
+  <path class="edge" d="M918 326 V392" marker-end="url(#arrow)"/>
+  <text x="930" y="378" class="label">maddalena.me</text>
+
+  <path class="edge-accent" d="M1040 326 V340 H1230 V392" marker-end="url(#arrow-accent)"/>
+  <text x="1242" y="368" class="label" fill="#206f68">/analytics</text>
+
+  <!-- site -->
+  <rect class="node" x="70" y="392" width="430" height="264" rx="12"/>
+  <text x="98" y="428" class="node-title">site</text>
+  <text x="98" y="450" class="mono">MainSite · ASP.NET Core 10</text>
+  <text x="98" y="482" class="body">Razor Pages · minimal APIs</text>
+  <text x="98" y="504" class="body">/blog · /requests · /admin · /info-bot</text>
+  <text x="98" y="526" class="body">/visualmcp · /predictive-coding</text>
+  <text x="98" y="558" class="body">Markdown content, local accounts,</text>
+  <text x="98" y="580" class="body">request log written in-process.</text>
+  <text x="98" y="612" class="mono">volumes: blog-data · auth-data</text>
+  <text x="98" y="634" class="mono">request-log-data</text>
+
+  <!-- theqult -->
+  <rect class="node" x="540" y="392" width="290" height="170" rx="12"/>
+  <text x="568" y="428" class="node-title">theqult</text>
+  <text x="568" y="450" class="mono">TheQult · Razor Pages</text>
+  <text x="568" y="482" class="body">Members, stay requests,</text>
+  <text x="568" y="504" class="body">references. Sperone embedded.</text>
+  <rect class="chip" x="568" y="522" width="132" height="30" rx="8"/>
+  <text x="634" y="542" text-anchor="middle" class="chip-text">theqult-data</text>
+
+  <!-- maddalena -->
+  <rect class="node" x="870" y="392" width="190" height="170" rx="12"/>
+  <text x="898" y="428" class="node-title">maddalena</text>
+  <text x="898" y="450" class="mono">Maddalena</text>
+  <text x="898" y="482" class="body">Placeholder service.</text>
+  <text x="898" y="504" class="body">Domain and TLS are</text>
+  <text x="898" y="526" class="body">already wired.</text>
+
+  <!-- umami -->
+  <rect class="node" x="1100" y="392" width="230" height="110" rx="12"/>
+  <text x="1126" y="426" class="node-title-sm">umami</text>
+  <text x="1126" y="448" class="mono">matteofabbri-umami</text>
+  <text x="1126" y="474" class="body">BASE_PATH=/analytics</text>
+
+  <path class="edge" d="M1215 502 V536" marker-end="url(#arrow)"/>
+  <text x="1228" y="524" class="label">postgres</text>
+
+  <rect class="node-store" x="1100" y="536" width="230" height="92" rx="12"/>
+  <text x="1126" y="566" class="node-title-sm">umami-db</text>
+  <text x="1126" y="588" class="mono">postgres:15-alpine</text>
+  <rect class="chip" x="1126" y="596" width="150" height="24" rx="7"/>
+  <text x="1201" y="612" text-anchor="middle" class="chip-text">umami-db-data</text>
+
+  <!-- bot-ai -->
+  <rect class="node" x="540" y="700" width="480" height="168" rx="12"/>
+  <text x="568" y="736" class="node-title">bot-ai</text>
+  <text x="568" y="758" class="mono">Python · gRPC :50051 · HTTP :8081</text>
+  <text x="568" y="790" class="body">Labels each batch: IsBot, IsMaliciousURL,</text>
+  <text x="568" y="812" class="body">probability, model version.</text>
+  <text x="568" y="840" class="mono">/models/bot_model.joblib · /data/observations.sqlite3</text>
+  <rect class="chip" x="946" y="722" width="52" height="26" rx="7"/>
+  <text x="972" y="740" text-anchor="middle" class="chip-text">models</text>
+  <rect class="chip" x="946" y="754" width="52" height="26" rx="7"/>
+  <text x="972" y="772" text-anchor="middle" class="chip-text">data</text>
+
+  <!-- site to bot-ai -->
+  <path class="edge-accent" d="M430 656 V688 H560 V700" marker-end="url(#arrow-accent)"/>
+  <text x="445" y="676" class="label" fill="#206f68">batches over gRPC, off the HTTP path</text>
+
+  <!-- runtime note -->
+  <rect class="node" x="70" y="740" width="430" height="128" rx="12"/>
+  <text x="98" y="774" class="node-title-sm">Runtime</text>
+  <text x="98" y="800" class="body">One OVH VPS · docker compose</text>
+  <text x="98" y="822" class="body">restart: unless-stopped</text>
+  <text x="98" y="844" class="body">Caddy is the only published port (80/443)</text>
+
+  <!-- footer legend -->
+  <line class="rule" x1="70" y1="912" x2="1330" y2="912"/>
+  <text x="70" y="942" class="label">Solid: HTTP through Caddy.</text>
+  <text x="280" y="942" class="label" fill="#206f68">Dashed: gRPC between site and bot-ai.</text>
+  <text x="680" y="942" class="label">Every volume is declared in the AppHost, outside the images.</text>
+  <text x="1330" y="942" text-anchor="end" class="mono">aspire publish → docker-compose.yaml</text>
+</svg>
+</body>
+</html>
