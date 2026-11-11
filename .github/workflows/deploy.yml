@@ -77,7 +77,7 @@ jobs:
           echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           # Host key del server fissata qui (e' pubblica): niente "trust on first use".
-          echo 'ns347806.ip-5-196-91.eu ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDj21IMc/CsStOgBOQY5nsfHbc130zAtzaUBZhVEtVWO' >> ~/.ssh/known_hosts
+          echo 'ns347806.ip-5-196-91.eu ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDuZzJIL5MhTHUvcXfceUGU2OzYWxyhfy7aq+wDdvs4Y' >> ~/.ssh/known_hosts
 
       - name: Trasferimento immagini
         run: |
