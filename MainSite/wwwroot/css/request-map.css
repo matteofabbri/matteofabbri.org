@@ -176,7 +176,7 @@
 }
 
 .leaflet-container {
-    font-family: var(--sans);
+    font-family: var(--serif);
 }
 
 .cell-number {
