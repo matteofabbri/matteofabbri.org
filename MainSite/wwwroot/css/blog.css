@@ -171,6 +171,17 @@ main.wrap {
     gap: 1rem;
 }
 
+.footer-brand {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+}
+
+.footer-note {
+    color: var(--muted);
+    opacity: 0.85;
+}
+
 .footer-links {
     display: flex;
     flex-wrap: wrap;
@@ -253,10 +264,6 @@ main.wrap {
     max-width: 70ch;
     padding: clamp(1.4rem, 4vw, 2.6rem);
     color: #fff;
-}
-
-.jumbotron-inner .eyebrow {
-    color: rgba(255, 255, 255, 0.82);
 }
 
 .jumbotron-inner h1 {
@@ -527,7 +534,7 @@ main.wrap {
 
 .manifesto-title {
     display: block;
-    margin: 0.35rem 0 0.75rem;
+    margin: 0 0 0.75rem;
     font-family: var(--serif);
     font-size: clamp(1.8rem, 4vw, 2.8rem);
     line-height: 1.05;
@@ -536,7 +543,6 @@ main.wrap {
 
 .manifesto-text {
     display: block;
-    max-width: 70ch;
     color: var(--muted);
     font-size: 1.05rem;
 }

@@ -101,7 +101,10 @@
 
     <footer class="site-footer">
         <div class="wrap footer-inner">
-            <span>© @DateTime.UtcNow.Year Matteo Fabbri</span>
+            <div class="footer-brand">
+                <span>© @DateTime.UtcNow.Year Matteo Fabbri</span>
+                <span class="footer-note">No cookie policy needed: no tracking cookies, cookieless analytics, and the only cookie is the one that keeps the editor signed in.</span>
+            </div>
             <nav class="footer-links" aria-label="Footer">
                 <a asp-page="/Sitemap">Sitemap</a>
                 <a asp-page="/Requests">Requests</a>
